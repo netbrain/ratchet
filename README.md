@@ -12,18 +12,26 @@ Ratchet improves code quality through **paired generative and adversarial agents
 
 ## Installation
 
-### Global (all projects)
+### With Nix (recommended)
 
 ```bash
-git clone <repo> && cd ratchet
-./install.sh --global
+# Global (all projects)
+nix run github:netbrain/ratchet -- --global
+
+# Project-local
+cd /your/project
+nix run github:netbrain/ratchet -- --local
+
+# Uninstall
+nix run github:netbrain/ratchet -- --uninstall --global
+nix run github:netbrain/ratchet -- --uninstall --local
 ```
 
-### Project-local
+### Manual
 
 ```bash
-cd /your/project
-/path/to/ratchet/install.sh --local
+git clone git@github.com:netbrain/ratchet.git && cd ratchet
+./install.sh --global    # or --local from your project dir
 ```
 
 ### Uninstall
