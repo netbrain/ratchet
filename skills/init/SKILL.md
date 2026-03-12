@@ -23,22 +23,29 @@ Spawn the **analyst** agent with the following task:
 ```
 Generate a Ratchet configuration for this project. Follow this protocol:
 
-1. HUMAN INTERVIEW FIRST — Always start by talking to the human. Ask:
-   - "What kind of project is this? (or will be?)" — language, framework, purpose
-   - "What are your biggest quality concerns?"
-   - "What breaks most often or worries you most?"
-   - "What testing setup do you have or plan to have?"
-   - "Any compliance or regulatory requirements?"
-   - "Any areas where code review consistently catches issues?"
-   Ask these conversationally, one or two at a time. Adapt follow-up questions based on answers.
+1. CODEBASE SCAN FIRST — Before asking the human anything, silently scan the project:
+   - Read: README.md, CLAUDE.md, go.mod, package.json, Cargo.toml, pyproject.toml, Makefile,
+     flake.nix, docker-compose.yml, .github/workflows/*, any project plan files
+   - Scan directory structure (ls key directories)
+   - Identify: languages, frameworks, database, architecture patterns
+   - Determine: existing test infrastructure, CI setup, exact test/lint/build commands
+   - Look for: project plans, roadmaps, ADRs, design docs in the repo
+   - DO NOT ask the human for information you can read from the codebase.
 
-2. CODEBASE SCAN (if code exists) — After the interview, scan for:
-   - Project manifests, configs, CI, tests, directory structure
-   - Identify languages, frameworks, database, architecture
-   - Determine existing test infrastructure and exact commands
-   - If the project is empty or has no code yet, skip this step entirely — the interview answers are sufficient.
+2. TARGETED INTERVIEW — Only ask about things you CANNOT infer from the code:
+   - Skip questions about language, framework, stack, test commands — you already know these.
+   - DO ask about:
+     - "What are your biggest quality concerns?" (subjective, can't be inferred)
+     - "What breaks most often or worries you most?" (experience-based)
+     - "Any compliance or regulatory requirements?" (external constraints)
+     - "Any areas where code review consistently catches issues?" (team knowledge)
+   - If the codebase is empty/new with no manifests, THEN ask about intended stack and purpose.
+   - Present what you learned from the scan as context: "I see this is a Go project using
+     gorilla/mux with PostgreSQL. Your CI runs golangci-lint and Playwright E2E tests..."
+   - Ask at most 2-3 focused questions, not a generic questionnaire.
+   - Adapt follow-ups based on answers.
 
-3. SYNTHESIZE — Combine interview answers + codebase scan (if any) to identify quality dimensions.
+3. SYNTHESIZE — Combine codebase scan + interview answers to identify quality dimensions.
 
 4. PROPOSE PAIRS — Present each proposed pair to the human with rationale. Wait for approval.
 
@@ -103,9 +110,10 @@ Create the .ratchet/ directory structure:
   └── scores/
 
 IMPORTANT:
-- The interview is MANDATORY and comes FIRST — even for empty projects
+- The codebase scan is MANDATORY and comes FIRST — never ask what you can read
+- The interview is for subjective/experience-based questions only
+- For new/empty projects with no code or manifests, the interview covers stack and purpose too
 - Generated agent pair definitions must contain PROJECT-SPECIFIC knowledge (not generic templates)
-- For new/empty projects, base everything on the human's stated intentions
 - Generative agents get tools: Read, Grep, Glob, Bash, Write, Edit
 - Adversarial agents get tools: Read, Grep, Glob, Bash with disallowedTools: Write, Edit
 - Adversarial agents must know the exact test/lint/benchmark commands from the testing spec
