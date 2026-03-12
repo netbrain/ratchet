@@ -91,9 +91,10 @@ do_install() {
     echo "Installing ratchet to $target ..."
 
     # Clean previous install (both old plugin-style and new commands-style)
-    rm -rf "$target/plugins/ratchet"
-    rm -rf "$commands_dir"
-    rm -rf "$scripts_dir"
+    # chmod first in case files came from nix store (read-only)
+    [ -d "$target/plugins/ratchet" ] && chmod -R u+w "$target/plugins/ratchet" 2>/dev/null; rm -rf "$target/plugins/ratchet"
+    [ -d "$commands_dir" ] && chmod -R u+w "$commands_dir" 2>/dev/null; rm -rf "$commands_dir"
+    [ -d "$scripts_dir" ] && chmod -R u+w "$scripts_dir" 2>/dev/null; rm -rf "$scripts_dir"
 
     # Copy commands (skills -> commands)
     mkdir -p "$commands_dir"
@@ -140,19 +141,19 @@ do_uninstall() {
 
     # Remove commands
     if [ -d "$commands_dir" ]; then
-        rm -rf "$commands_dir"
+        chmod -R u+w "$commands_dir" 2>/dev/null; rm -rf "$commands_dir"
         echo "  Removed commands"
     fi
 
     # Remove scripts
     if [ -d "$scripts_dir" ]; then
-        rm -rf "$scripts_dir"
+        chmod -R u+w "$scripts_dir" 2>/dev/null; rm -rf "$scripts_dir"
         echo "  Removed scripts"
     fi
 
     # Remove old plugin-style install if present
     if [ -d "$target/plugins/ratchet" ]; then
-        rm -rf "$target/plugins/ratchet"
+        chmod -R u+w "$target/plugins/ratchet" 2>/dev/null; rm -rf "$target/plugins/ratchet"
         echo "  Removed legacy plugin files"
     fi
 
