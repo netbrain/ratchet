@@ -1,2 +1,5 @@
 result
 result-*
+.claude/commands/ratchet/
+.claude/ratchet-scripts/
+.ratchet/
