@@ -254,10 +254,6 @@ case "$MODE" in
         mkdir -p "$TARGET"
         ;;
     local)
-        # Validate we're in a project (has .git, package.json, or similar)
-        if [ ! -d ".git" ] && [ ! -f "package.json" ] && [ ! -f "Makefile" ] && [ ! -f "go.mod" ] && [ ! -f "pyproject.toml" ] && [ ! -f "Cargo.toml" ]; then
-            die "Current directory doesn't look like a project root. Run from your project directory."
-        fi
         TARGET=".claude"
         mkdir -p "$TARGET"
         ;;
