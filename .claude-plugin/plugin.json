@@ -1,0 +1,5 @@
+{
+  "name": "ratchet",
+  "version": "0.1.0",
+  "description": "Debate-driven quality plugin — paired generative and adversarial agents argue about code readiness until consensus"
+}

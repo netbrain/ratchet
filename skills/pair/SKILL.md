@@ -1,0 +1,72 @@
+---
+name: pair
+description: Add a new agent pair to an existing Ratchet configuration
+user-invocable: true
+---
+
+# /ratchet:pair — Add a New Agent Pair
+
+Add a new generative-adversarial agent pair to an existing Ratchet configuration.
+
+## Usage
+```
+/ratchet:pair [name]
+```
+
+If `[name]` is provided, use it as the pair name. Otherwise, the analyst will suggest a name based on the discussion.
+
+## Prerequisites
+- `.ratchet/` must exist (run `/ratchet:init` first)
+- `.ratchet/project.yaml` and `.ratchet/config.yaml` must exist
+
+If prerequisites are not met, inform the user and suggest `/ratchet:init`.
+
+## Execution Steps
+
+### Step 1: Load Project Context
+
+Read `.ratchet/project.yaml` and `.ratchet/config.yaml` to understand:
+- Current tech stack and architecture
+- Existing pairs (to avoid overlap)
+- Testing capabilities
+
+### Step 2: Launch Analyst Agent
+
+Spawn the **analyst** agent with the following task:
+
+```
+A new agent pair is being added to this Ratchet-configured project.
+
+Project profile: [contents of .ratchet/project.yaml]
+Existing pairs: [list from config.yaml]
+Requested pair name: [name if provided, otherwise "to be determined"]
+
+Your task:
+1. If no name was provided, ask the human what quality dimension they want to cover
+2. Discuss the scope and focus with the human
+3. Review the codebase areas relevant to this concern
+4. Generate the pair:
+   - .ratchet/pairs/<name>/generative.md — builder agent with project-specific knowledge
+   - .ratchet/pairs/<name>/adversarial.md — critic agent with testing commands baked in
+5. Present the pair definition to the human for approval
+6. On approval, write the agent files and update .ratchet/config.yaml to register the new pair
+
+Follow the same agent generation conventions as init:
+- Generative: tools: Read, Grep, Glob, Bash, Write, Edit
+- Adversarial: tools: Read, Grep, Glob, Bash, disallowedTools: Write, Edit
+- Include project-specific knowledge in prompts
+- Define tight file scope globs
+```
+
+### Step 3: Verify & Report
+
+Verify the new pair was created and registered, then report:
+```
+New pair added: [name]
+  Scope: [file glob]
+  Quality dimension: [what it checks]
+  Generative: .ratchet/pairs/[name]/generative.md
+  Adversarial: .ratchet/pairs/[name]/adversarial.md
+
+Run /ratchet:run [name] to test the new pair.
+```
