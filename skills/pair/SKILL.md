@@ -1,7 +1,6 @@
 ---
-name: pair
+name: ratchet:pair
 description: Add a new agent pair to an existing Ratchet configuration
-user-invocable: true
 ---
 
 # /ratchet:pair — Add a New Agent Pair

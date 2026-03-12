@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Ratchet installer — copies plugin files into Claude Code's discovery directories
+# Ratchet installer — copies commands and scripts into Claude Code's discovery directories
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_NAME="ratchet"
 
 # --- Helpers ---
 
@@ -22,52 +21,10 @@ EOF
 
 die() { echo "Error: $*" >&2; exit 1; }
 
-json_merge_enabled_plugin() {
-    local settings_file="$1"
-    python3 -c "
-import json, os, sys
-
-path = sys.argv[1]
-data = {}
-if os.path.isfile(path):
-    with open(path) as f:
-        data = json.load(f)
-
-plugins = data.setdefault('enabledPlugins', {})
-plugins['${PLUGIN_NAME}@local'] = True
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-" "$settings_file"
-}
-
-json_remove_enabled_plugin() {
-    local settings_file="$1"
-    [ -f "$settings_file" ] || return 0
-    python3 -c "
-import json, sys
-
-path = sys.argv[1]
-with open(path) as f:
-    data = json.load(f)
-
-plugins = data.get('enabledPlugins', {})
-plugins.pop('${PLUGIN_NAME}@local', None)
-if not plugins:
-    data.pop('enabledPlugins', None)
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-" "$settings_file"
-}
-
 install_git_hook() {
     local target_dir="$1"
-    local plugin_dir="$2"
+    local scripts_dir="$2"
 
-    # Only for local installs in a git repo
     local git_dir
     git_dir="$(git -C "$target_dir" rev-parse --git-dir 2>/dev/null)" || return 0
 
@@ -79,13 +36,11 @@ install_git_hook() {
     # Remove existing ratchet block if present
     remove_git_hook "$target_dir"
 
-    local hook_script_path="$plugin_dir/scripts/check-consensus.sh"
-
     local block
     block=$(cat <<HOOKEOF
 # BEGIN RATCHET
 if [ -n "\${CLAUDE_CODE:-}" ]; then
-  bash "$hook_script_path"
+  bash "$scripts_dir/check-consensus.sh"
 fi
 # END RATCHET
 HOOKEOF
@@ -113,12 +68,10 @@ remove_git_hook() {
     local hook_file="$git_dir/hooks/pre-commit"
     [ -f "$hook_file" ] || return 0
 
-    # Remove the RATCHET block
     local tmp_file
     tmp_file="$(mktemp)"
     sed '/^# BEGIN RATCHET$/,/^# END RATCHET$/d' "$hook_file" > "$tmp_file"
 
-    # If the file is now empty (just a shebang or whitespace), remove it
     local content
     content=$(grep -v '^#!/' "$tmp_file" | grep -v '^[[:space:]]*$' || true)
     if [ -z "$content" ]; then
@@ -132,75 +85,94 @@ remove_git_hook() {
 do_install() {
     local target="$1"
     local skip_hooks="$2"
-    local plugin_dir="$target/plugins/$PLUGIN_NAME"
+    local commands_dir="$target/commands/ratchet"
+    local scripts_dir="$target/ratchet-scripts"
 
-    echo "Installing ratchet to $plugin_dir ..."
+    echo "Installing ratchet to $target ..."
 
-    # Clean previous install
-    rm -rf "$plugin_dir"
-    mkdir -p "$plugin_dir"
+    # Clean previous install (both old plugin-style and new commands-style)
+    rm -rf "$target/plugins/ratchet"
+    rm -rf "$commands_dir"
+    rm -rf "$scripts_dir"
 
-    # Copy plugin manifest
-    mkdir -p "$plugin_dir/.claude-plugin"
-    cp "$SCRIPT_DIR/.claude-plugin/plugin.json" "$plugin_dir/.claude-plugin/"
+    # Copy commands (skills -> commands)
+    mkdir -p "$commands_dir"
+    for skill_dir in "$SCRIPT_DIR"/skills/*/; do
+        local skill_name
+        skill_name="$(basename "$skill_dir")"
+        local skill_file="$skill_dir/SKILL.md"
+        [ -f "$skill_file" ] || continue
+        cp "$skill_file" "$commands_dir/$skill_name.md"
+    done
+    echo "  Installed commands to $commands_dir/"
 
-    # Copy agents
+    # Copy agents alongside commands
     if [ -d "$SCRIPT_DIR/agents" ]; then
-        mkdir -p "$plugin_dir/agents"
-        cp "$SCRIPT_DIR"/agents/*.md "$plugin_dir/agents/"
-    fi
-
-    # Copy skills
-    if [ -d "$SCRIPT_DIR/skills" ]; then
-        cp -r "$SCRIPT_DIR/skills" "$plugin_dir/skills"
-    fi
-
-    # Copy hooks
-    if [ -d "$SCRIPT_DIR/hooks" ]; then
-        mkdir -p "$plugin_dir/hooks"
-        cp "$SCRIPT_DIR"/hooks/hooks.json "$plugin_dir/hooks/"
+        mkdir -p "$commands_dir/agents"
+        cp "$SCRIPT_DIR"/agents/*.md "$commands_dir/agents/"
+        echo "  Installed agents"
     fi
 
     # Copy scripts
     if [ -d "$SCRIPT_DIR/scripts" ]; then
-        mkdir -p "$plugin_dir/scripts"
-        cp "$SCRIPT_DIR"/scripts/*.sh "$plugin_dir/scripts/"
-        chmod +x "$plugin_dir"/scripts/*.sh
+        mkdir -p "$scripts_dir"
+        cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/"
+        chmod +x "$scripts_dir"/*.sh
+        echo "  Installed scripts to $scripts_dir/"
     fi
-
-    # Register in settings.json
-    local settings_file="$target/settings.json"
-    json_merge_enabled_plugin "$settings_file"
-    echo "  Registered in $settings_file"
 
     # Git pre-commit hook (local installs only)
     if [ "$skip_hooks" = "false" ] && [ "$target" != "$HOME/.claude" ]; then
-        install_git_hook "$(pwd)" "$plugin_dir"
+        install_git_hook "$(pwd)" "$scripts_dir"
     fi
 
     echo ""
     echo "Done! Ratchet installed."
-    echo "  Start claude (no --plugin-dir needed) and verify with /help"
+    echo "  Start claude and verify with /help — look for /ratchet:init"
 }
 
 do_uninstall() {
     local target="$1"
-    local plugin_dir="$target/plugins/$PLUGIN_NAME"
+    local commands_dir="$target/commands/ratchet"
+    local scripts_dir="$target/ratchet-scripts"
 
-    echo "Uninstalling ratchet from $plugin_dir ..."
+    echo "Uninstalling ratchet from $target ..."
 
-    if [ -d "$plugin_dir" ]; then
-        rm -rf "$plugin_dir"
-        echo "  Removed plugin files"
-    else
-        echo "  No plugin files found (already clean)"
+    # Remove commands
+    if [ -d "$commands_dir" ]; then
+        rm -rf "$commands_dir"
+        echo "  Removed commands"
     fi
 
-    # Remove from settings.json
+    # Remove scripts
+    if [ -d "$scripts_dir" ]; then
+        rm -rf "$scripts_dir"
+        echo "  Removed scripts"
+    fi
+
+    # Remove old plugin-style install if present
+    if [ -d "$target/plugins/ratchet" ]; then
+        rm -rf "$target/plugins/ratchet"
+        echo "  Removed legacy plugin files"
+    fi
+
+    # Clean enabledPlugins from settings.json if present (legacy cleanup)
     local settings_file="$target/settings.json"
-    if [ -f "$settings_file" ]; then
-        json_remove_enabled_plugin "$settings_file"
-        echo "  Removed from $settings_file"
+    if [ -f "$settings_file" ] && grep -q "ratchet@local" "$settings_file" 2>/dev/null; then
+        python3 -c "
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+plugins = data.get('enabledPlugins', {})
+plugins.pop('ratchet@local', None)
+if not plugins:
+    data.pop('enabledPlugins', None)
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+" "$settings_file"
+        echo "  Cleaned settings.json"
     fi
 
     # Remove git hook block

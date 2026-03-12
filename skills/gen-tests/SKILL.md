@@ -1,7 +1,6 @@
 ---
-name: gen-tests
+name: ratchet:gen-tests
 description: Generate tests from adversarial findings in debates
-user-invocable: true
 ---
 
 # /ratchet:gen-tests — Generate Tests from Debate Findings

@@ -1,7 +1,6 @@
 ---
-name: debate
+name: ratchet:debate
 description: View or continue an ongoing debate
-user-invocable: true
 ---
 
 # /ratchet:debate — View or Continue a Debate

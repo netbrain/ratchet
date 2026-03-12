@@ -1,7 +1,6 @@
 ---
-name: score
+name: ratchet:score
 description: View quality metrics and trends per pair
-user-invocable: true
 ---
 
 # /ratchet:score — Quality Metrics

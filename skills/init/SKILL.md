@@ -1,7 +1,6 @@
 ---
-name: init
+name: ratchet:init
 description: Analyze project and generate tailored agent pairs through codebase analysis and human interview
-user-invocable: true
 ---
 
 # /ratchet:init — Project Onboarding

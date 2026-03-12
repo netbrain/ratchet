@@ -1,7 +1,6 @@
 ---
-name: verdict
+name: ratchet:verdict
 description: Human-in-the-loop — cast the deciding vote on an escalated debate
-user-invocable: true
 ---
 
 # /ratchet:verdict — Human Decides

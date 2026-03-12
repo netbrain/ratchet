@@ -1,7 +1,6 @@
 ---
-name: tighten
+name: ratchet:tighten
 description: Tighten the ratchet — analyst reviews agent performance and sharpens pair definitions
-user-invocable: true
 ---
 
 # /ratchet:tighten — Tighten the Ratchet

@@ -1,7 +1,6 @@
 ---
-name: run
+name: ratchet:run
 description: Run agent pairs against code — guided by epic roadmap and current focus
-user-invocable: true
 ---
 
 # /ratchet:run — Execute Debate
