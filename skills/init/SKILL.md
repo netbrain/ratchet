@@ -36,13 +36,15 @@ Present what you learned from the scan as context first:
 > HTMX + Alpine.js. CI runs golangci-lint, unit/integration/E2E tests via Playwright.
 > Test coverage target is 70%."
 
-Then ask ONLY about things you CANNOT infer from the code:
-- "What are your biggest quality concerns?"
-- "What breaks most often or worries you most?"
-- "Any compliance or regulatory requirements?"
-- "Any areas where code review consistently catches issues?"
+Then ask ONLY about things you CANNOT infer from the code, using `AskUserQuestion` for every question. Structure questions with concrete options using multi-choice format (the user can always pick "Other" for custom input):
+
+Example questions (adapt based on what the scan could NOT determine):
+- "What are your biggest quality concerns?" — `multiSelect: true`, options: `"Correctness"`, `"Performance"`, `"Security"`, `"Maintainability"`, `"Other"`
+- "What breaks most often or worries you most?" — freeform via `AskUserQuestion`
+- "Any compliance or regulatory requirements?" — options: `"None"`, `"SOC2"`, `"HIPAA"`, `"PCI-DSS"`, `"GDPR"`, `"Other"`
 
 Rules:
+- **Always use `AskUserQuestion`** for every question — never present choices as plain text.
 - If the codebase is empty/new with no manifests, THEN ask about intended stack and purpose.
 - Ask at most 2-3 focused questions. Do NOT ask a generic questionnaire.
 - Never ask about language, framework, stack, or test commands if you already found them.
@@ -55,14 +57,21 @@ Combine codebase scan + interview answers to identify quality dimensions.
 
 ### Step 5: Propose Pairs
 
-Present each proposed pair to the human with rationale. Wait for approval before proceeding.
+Present each proposed pair to the human using `AskUserQuestion` for approval:
+- Question: "Here are the proposed quality pairs: [formatted pair list with rationale]. Approve these pairs?"
+- Options: `"Approve all"`, `"Modify pairs"`, `"Start over"`
+- If "Modify pairs": use follow-up `AskUserQuestion` calls to refine
+
+Wait for approval before proceeding.
 
 ### Step 6: Build Epic
 
 Based on everything learned, propose a development roadmap:
 - Break the project into milestones (ordered by dependency and priority)
 - Each milestone has: name, description, which pairs are relevant, what "done" looks like
-- Present the epic to the human for approval
+- Present the epic to the human using `AskUserQuestion` for approval:
+  - Question: "Proposed roadmap: [formatted milestone list]. Approve this epic?"
+  - Options: `"Approve"`, `"Modify milestones"`, `"Start over"`
 - The epic is a living document — it evolves as the project develops
 
 Example plan.yaml:
@@ -161,10 +170,13 @@ Stack: [language] / [framework] / [database]
 Architecture: [pattern]
 
 Pairs created:
-  ✓ [pair-name] — [scope] — [quality dimension]
-  ✓ [pair-name] — [scope] — [quality dimension]
+  [pair-name] — [scope] — [quality dimension]
+  [pair-name] — [scope] — [quality dimension]
   ...
-
-Run /ratchet:run to start a debate on your current changes.
-Run /ratchet:pair [name] to add more pairs.
 ```
+
+Then use `AskUserQuestion` to guide the user on what to do next:
+- Options:
+  - "Start first debate (/ratchet:run)" — begin the epic workflow
+  - "Add more pairs (/ratchet:pair)"
+  - "Done for now"

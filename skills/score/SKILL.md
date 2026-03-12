@@ -17,12 +17,18 @@ View quality metrics and trends across all pairs or a specific pair.
 
 ### Step 1: Load Data
 
-Read `.ratchet/scores/scores.jsonl` — each line is a JSON object with:
+Read `.ratchet/scores/scores.jsonl`. If the file does not exist or is empty, inform the user:
+> "No quality scores recorded yet. Scores are generated after debates complete. Run /ratchet:run to start your first debate."
+
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+
+If data exists, each line is a JSON object with:
 ```json
 {
   "timestamp": "ISO date",
   "debate_id": "id",
   "pair": "pair-name",
+  "milestone": "milestone id or null",
   "rounds_to_consensus": N,
   "escalated": bool,
   "issues_found": N,
@@ -63,3 +69,12 @@ Overall:
 ```
 
 If a specific pair is requested, show more detail including recent debate summaries.
+
+### Step 4: Next Steps
+
+After presenting metrics, use `AskUserQuestion` to guide the user:
+- Options (adapt based on context):
+  - "Run next debate (/ratchet:run)" — if milestones remain
+  - "Tighten agents (/ratchet:tighten)" — if enough review data exists
+  - "View a specific debate" — for drill-down
+  - "Done for now"

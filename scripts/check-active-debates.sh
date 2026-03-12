@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+
 RATCHET_DIR=".ratchet"
 DEBATES_DIR="$RATCHET_DIR/debates"
 

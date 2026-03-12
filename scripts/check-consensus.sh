@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Pre-commit gate: verify all active debates have reached consensus or verdict.
-# Blocks commit if any debate is in 'escalated' state without a verdict.
+# Pre-commit gate: verify all active debates have reached a terminal state.
+# Terminal states: "consensus" (pair agreement) or "resolved" (human/orchestrator verdict).
+# Blocks commit if any debate is "escalated" (no verdict) or "initiated" (in progress).
 # Non-invasive: allows commit if no .ratchet/ directory or no debates exist.
 
 set -euo pipefail
+
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
 
 RATCHET_DIR=".ratchet"
 DEBATES_DIR="$RATCHET_DIR/debates"

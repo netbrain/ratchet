@@ -41,13 +41,16 @@ Existing pairs: [list from config.yaml]
 Requested pair name: [name if provided, otherwise "to be determined"]
 
 Your task:
-1. If no name was provided, ask the human what quality dimension they want to cover
-2. Discuss the scope and focus with the human
+1. If no name was provided, use `AskUserQuestion` to ask the human what quality dimension they want to cover
+   - Options: suggest 3-4 dimensions based on project profile, plus "Other" for custom input
+2. Use `AskUserQuestion` to discuss the scope and focus with the human
+   - Options: suggest file glob patterns based on project structure
 3. Review the codebase areas relevant to this concern
 4. Generate the pair:
    - .ratchet/pairs/<name>/generative.md — builder agent with project-specific knowledge
    - .ratchet/pairs/<name>/adversarial.md — critic agent with testing commands baked in
-5. Present the pair definition to the human for approval
+5. Present the pair definition to the human for approval using `AskUserQuestion`
+   - Options: "Approve", "Modify scope", "Modify agents", "Start over"
 6. On approval, write the agent files and update .ratchet/config.yaml to register the new pair
 
 Follow the same agent generation conventions as init:
@@ -69,3 +72,9 @@ New pair added: [name]
 
 Run /ratchet:run [name] to test the new pair.
 ```
+
+After reporting, use `AskUserQuestion` to guide the user:
+- Options:
+  - "Run debate for [name] (/ratchet:run [name])" — test the new pair immediately
+  - "Add another pair (/ratchet:pair)"
+  - "Done for now"

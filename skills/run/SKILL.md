@@ -22,6 +22,16 @@ The core Ratchet workflow. Operates at two levels of scope:
 - `.ratchet/` must exist with valid config
 - At least one pair must be registered and enabled
 
+If `.ratchet/` does not exist, inform the user:
+> "Ratchet is not initialized for this project. Run /ratchet:init to set up."
+
+Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init)"`, `"Cancel"`.
+
+If no enabled pairs exist in `config.yaml`, inform the user:
+> "No active pairs found. Add a pair with /ratchet:pair."
+
+Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair)"`, `"Cancel"`.
+
 ## Execution Steps
 
 ### Step 1: Read Epic Context
@@ -44,27 +54,19 @@ There are four modes, checked in order:
 If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip epic negotiation.
 
 #### Mode B: Epic-guided (plan.yaml exists)
-Present the epic status and propose the next focus using `AskUserQuestion`:
+Use `AskUserQuestion` to let the user pick the focus. Put the epic status summary directly in the question text so the user sees it in context:
 
-```
-Epic: [project name]
-  ✓ Milestone 1: [name] — done
-  ✓ Milestone 2: [name] — done
-  → Milestone 3: [name] — in progress (or next up)
-  ○ Milestone 4: [name] — pending
-  ○ Milestone 5: [name] — pending
+Question text (build from plan.yaml):
+`"Epic: [project name] — [completed]/[total] milestones done. Next up: [next milestone name] — [description]. What should we focus on?"`
 
-[If there are unresolved conditions from previous debates:]
-  Unresolved from last run:
-    - [condition from CONDITIONAL_ACCEPT]
-    - [condition from CONDITIONAL_ACCEPT]
-```
+If there are unresolved conditions from previous CONDITIONAL_ACCEPTs, append:
+`"(Unresolved from last run: [condition1], [condition2])"`
 
-Ask: "What should we focus on?" with options:
-- "[Next milestone name] (Recommended)" — the natural next step
-- "Address unresolved conditions from last run" — if any exist
-- "Review all existing code" — run all pairs against everything
-- (Other — user can type their own focus)
+Options:
+- "[Next milestone name] (Recommended)"
+- "Address unresolved conditions from last run" — only if conditions exist
+- "Review all existing code"
+- (Include an "Other" option so the user can type a custom focus)
 
 #### Mode C: Changed files (no plan.yaml, git repo exists)
 ```bash
@@ -81,6 +83,11 @@ Use `AskUserQuestion` to ask what to build first.
 If using epic mode, update `plan.yaml`:
 - Set the chosen milestone to `status: in_progress`
 - Record `current_focus` with milestone id and timestamp
+
+**MILESTONE RE-OPENING GUARD**: If the chosen milestone has `status: done`, do NOT silently re-open it. Instead, use `AskUserQuestion`:
+- Question: "Milestone '[name]' is already marked done (completed [timestamp]). Re-opening it will reset its status. Are you sure?"
+- Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
+- Only set `status: in_progress` if the user explicitly confirms re-opening.
 
 ### Step 4: Match Pairs to Focus
 
@@ -111,7 +118,7 @@ After a debate reaches consensus (Step 7), update the cache:
 bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
 ```
 
-### Step 6: Create Debate(s)
+### Step 6a: Create Debate(s)
 
 For each matched pair, create a debate directory:
 
@@ -139,15 +146,17 @@ Write initial `meta.json`:
 }
 ```
 
-### Step 6: Static Analysis Pre-Gate
+### Step 6b: Static Analysis Pre-Gate
 
 Before starting debates, run the project's static analysis layer (layer 1 from the testing spec in project.yaml). This catches mechanical issues so adversarial agents can focus on semantic problems.
 
 Read `.ratchet/project.yaml` for the static analysis commands (lint, type-check, format-check).
 
 Run each configured command. If any fail:
-1. Present the failures to the user
-2. Ask: "Fix these before debating, or proceed anyway?"
+1. Present the failures in the question text
+2. Use `AskUserQuestion` to let the user decide:
+   - Question: "Static analysis failed with [N] errors: [summary]. How should we proceed?"
+   - Options: `"Fix these before debating"`, `"Proceed to debates anyway"`
    - If fix: stop here, let the user (or agent) fix lint/type errors, then re-run `/ratchet:run`
    - If proceed: continue to debates, but note in the debate context that static analysis had failures
 
@@ -186,6 +195,15 @@ Focus: [what we're building/reviewing this iteration]
 [If round > 1: Address the adversarial's critique — fix issues or explain why they're not valid.]
 
 Write your assessment. If you made code changes, describe them.
+
+CRITICAL CONSTRAINT — DEBATE BOUNDARY:
+You may ONLY create, modify, or delete code during this debate round.
+All code you produce MUST be reviewed by the adversarial agent before it is
+considered accepted. Do NOT propose or make code changes outside the debate
+loop (e.g., in response to user conversation, post-debate discussion, or
+between runs). If the user asks you to make changes outside a debate round,
+respond: "Code changes must go through a debate round. Please run
+/ratchet:run to start a new debate."
 ```
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.
@@ -214,8 +232,13 @@ Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 **c) Check Verdict**
 
 Parse the adversarial's output for verdict:
-- **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `consensus`, write verdict, update file-hash cache, break loop
+- **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `"consensus"`, write verdict, update file-hash cache, break loop
 - **REJECT** → Continue to next round (or escalate if at max_rounds)
+
+When the orchestrator renders a verdict after escalation, map its output:
+- Orchestrator **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`
+- Orchestrator **MODIFY** → Treat as **CONDITIONAL_ACCEPT** — set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, log `required_changes` as unresolved conditions
+- Orchestrator **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, mark milestone as needing re-run
 
 On consensus, update the cache so this pair is skipped next run (if files don't change):
 ```bash
@@ -225,6 +248,8 @@ bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-
 Update `meta.json` after each round — increment `rounds`, update `status`.
 
 **IMPORTANT**: The debate loop MUST execute fully. After the generative agent produces code (especially in greenfield mode), the adversarial agent MUST review it. Do not stop after the generative round.
+
+**IMPORTANT**: Code changes are ONLY permitted inside this debate loop (Steps 7a-7c). The generative agent must NOT create, modify, or delete code outside of an active debate round — not in response to user chat, not between runs, not after a verdict. If a user requests code changes outside a debate, redirect them to `/ratchet:run`.
 
 #### Escalation
 
@@ -238,11 +263,11 @@ If max_rounds reached without consensus:
 ### Step 8: Update Epic
 
 After all debates for this focus resolve:
-- If all pairs reached consensus (ACCEPT or CONDITIONAL_ACCEPT):
+- If all pairs reached a terminal state (`"consensus"` or `"resolved"`) with an ACCEPT, CONDITIONAL_ACCEPT, or MODIFY verdict:
   - Mark the milestone as `status: done` in plan.yaml
   - Record completion timestamp
-  - Log any unresolved conditions from CONDITIONAL_ACCEPTs
-- If any pair was REJECTED or ESCALATED without resolution:
+  - Log any unresolved conditions from CONDITIONAL_ACCEPT or MODIFY verdicts
+- If any pair was REJECTED (by orchestrator/human verdict) or remains `"escalated"` without resolution:
   - Keep milestone as `status: in_progress`
   - Note which pairs need re-running
 
@@ -273,42 +298,30 @@ Save to `.ratchet/reviews/<pair-name>/review-<timestamp>.json`.
 
 ### Step 10: Update Scores
 
-Append to `.ratchet/scores/scores.jsonl`:
-```json
-{
-  "timestamp": "<ISO timestamp>",
-  "debate_id": "<id>",
-  "pair": "<pair-name>",
-  "milestone": "<milestone id or null>",
-  "rounds_to_consensus": <N>,
-  "escalated": <true|false>,
-  "issues_found": <count>,
-  "issues_resolved": <count>
-}
+For each resolved debate, run the score update script:
+```bash
+bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 ```
+
+This appends a score entry to `.ratchet/scores/scores.jsonl` with fields: timestamp, debate_id, pair, milestone, rounds_to_consensus, escalated, issues_found, issues_resolved.
 
 ### Step 11: Propose Next Focus
 
-After reporting results, guide the user to the next iteration:
+After reporting results, use `AskUserQuestion` to let the user choose what to do next.
 
-```
-Focus complete: [milestone name]
-  [N] pairs debated, [N] consensus, [N] escalated
-  [If conditions: Logged [N] conditions for future review]
+**If more milestones remain**, present a summary line then ask with options:
+- Summary: `"Focus complete: [milestone name] — [N] pairs debated, [N] consensus, [N] escalated. Epic progress: [completed]/[total] milestones."`
+- Options (adapt based on context):
+  - "Continue to [next milestone name]" — the natural next step
+  - "Review debate: [debate-id]" — one option per debate that just ran (so the user can inspect transcripts)
+  - "View quality metrics" — runs /ratchet:score
+  - "Address unresolved conditions" — only if CONDITIONAL_ACCEPTs logged conditions
+- Use `multiSelect: false` — the user picks one action.
 
-Epic progress: [completed]/[total] milestones
-  → Next up: [next milestone name] — [description]
-
-Run /ratchet:run to continue, or /ratchet:debate [id] to review transcripts.
-```
-
-If ALL milestones are done:
-```
-Epic complete! All [N] milestones finished.
-
-Quality summary:
-  Total debates: [N] | Consensus rate: [%] | Avg rounds: [N]
-
-Run /ratchet:score for detailed metrics.
-Run /ratchet:tighten to sharpen agents from accumulated lessons.
-```
+**If ALL milestones are done**, present a summary then ask:
+- Summary: `"Epic complete! All [N] milestones finished. Total debates: [N] | Consensus rate: [%] | Avg rounds: [N]"`
+- Options:
+  - "View detailed quality metrics"
+  - "Tighten agents from debate lessons"
+  - "Review a specific debate"
+  - "Done for now"

@@ -47,6 +47,8 @@ HOOKEOF
 )
 
     if [ -f "$hook_file" ]; then
+        # Ensure trailing newline so BEGIN marker starts on its own line
+        echo "" >> "$hook_file"
         echo "$block" >> "$hook_file"
     else
         cat > "$hook_file" <<SHEBANG
@@ -67,6 +69,15 @@ remove_git_hook() {
 
     local hook_file="$git_dir/hooks/pre-commit"
     [ -f "$hook_file" ] || return 0
+
+    # Verify both markers exist before attempting removal
+    if ! grep -q '^# BEGIN RATCHET$' "$hook_file" 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q '^# END RATCHET$' "$hook_file" 2>/dev/null; then
+        echo "Warning: Found BEGIN RATCHET marker but no END RATCHET in $hook_file — skipping removal to avoid data loss" >&2
+        return 0
+    fi
 
     local tmp_file
     tmp_file="$(mktemp)"
@@ -92,9 +103,19 @@ do_install() {
 
     # Clean previous install (both old plugin-style and new commands-style)
     # chmod first in case files came from nix store (read-only)
-    [ -d "$target/plugins/ratchet" ] && chmod -R u+w "$target/plugins/ratchet" 2>/dev/null; rm -rf "$target/plugins/ratchet"
-    [ -d "$commands_dir" ] && chmod -R u+w "$commands_dir" 2>/dev/null; rm -rf "$commands_dir"
-    [ -d "$scripts_dir" ] && chmod -R u+w "$scripts_dir" 2>/dev/null; rm -rf "$scripts_dir"
+    if [ -d "$target/plugins/ratchet" ]; then
+        chmod -R u+w "$target/plugins/ratchet" 2>/dev/null || true
+        rm -rf "$target/plugins/ratchet"
+        rmdir "$target/plugins" 2>/dev/null || true
+    fi
+    if [ -d "$commands_dir" ]; then
+        chmod -R u+w "$commands_dir" 2>/dev/null || true
+        rm -rf "$commands_dir"
+    fi
+    if [ -d "$scripts_dir" ]; then
+        chmod -R u+w "$scripts_dir" 2>/dev/null || true
+        rm -rf "$scripts_dir"
+    fi
 
     # Copy commands (skills -> commands)
     mkdir -p "$commands_dir"
@@ -108,14 +129,14 @@ do_install() {
     echo "  Installed commands to $commands_dir/"
 
     # Copy agents alongside commands
-    if [ -d "$SCRIPT_DIR/agents" ]; then
+    if [ -d "$SCRIPT_DIR/agents" ] && ls "$SCRIPT_DIR"/agents/*.md >/dev/null 2>&1; then
         mkdir -p "$commands_dir/agents"
         cp "$SCRIPT_DIR"/agents/*.md "$commands_dir/agents/"
         echo "  Installed agents"
     fi
 
     # Copy scripts
-    if [ -d "$SCRIPT_DIR/scripts" ]; then
+    if [ -d "$SCRIPT_DIR/scripts" ] && ls "$SCRIPT_DIR"/scripts/*.sh >/dev/null 2>&1; then
         mkdir -p "$scripts_dir"
         cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/"
         chmod +x "$scripts_dir"/*.sh
@@ -141,30 +162,42 @@ do_uninstall() {
 
     # Remove commands
     if [ -d "$commands_dir" ]; then
-        chmod -R u+w "$commands_dir" 2>/dev/null; rm -rf "$commands_dir"
+        chmod -R u+w "$commands_dir" 2>/dev/null || true
+        rm -rf "$commands_dir"
+        rmdir "$target/commands" 2>/dev/null || true
         echo "  Removed commands"
     fi
 
     # Remove scripts
     if [ -d "$scripts_dir" ]; then
-        chmod -R u+w "$scripts_dir" 2>/dev/null; rm -rf "$scripts_dir"
+        chmod -R u+w "$scripts_dir" 2>/dev/null || true
+        rm -rf "$scripts_dir"
         echo "  Removed scripts"
     fi
 
     # Remove old plugin-style install if present
     if [ -d "$target/plugins/ratchet" ]; then
-        chmod -R u+w "$target/plugins/ratchet" 2>/dev/null; rm -rf "$target/plugins/ratchet"
+        chmod -R u+w "$target/plugins/ratchet" 2>/dev/null || true
+        rm -rf "$target/plugins/ratchet"
+        rmdir "$target/plugins" 2>/dev/null || true
         echo "  Removed legacy plugin files"
     fi
 
     # Clean enabledPlugins from settings.json if present (legacy cleanup)
     local settings_file="$target/settings.json"
     if [ -f "$settings_file" ] && grep -q "ratchet@local" "$settings_file" 2>/dev/null; then
+        if ! command -v python3 >/dev/null 2>&1; then
+            echo "  Warning: python3 not found, skipping settings.json cleanup" >&2
+        else
         python3 -c "
 import json, sys
 path = sys.argv[1]
-with open(path) as f:
-    data = json.load(f)
+try:
+    with open(path) as f:
+        data = json.load(f)
+except json.JSONDecodeError:
+    print(f'  Warning: {path} contains malformed JSON, skipping cleanup', file=sys.stderr)
+    sys.exit(0)
 plugins = data.get('enabledPlugins', {})
 plugins.pop('ratchet@local', None)
 if not plugins:
@@ -174,6 +207,7 @@ with open(path, 'w') as f:
     f.write('\n')
 " "$settings_file"
         echo "  Cleaned settings.json"
+        fi
     fi
 
     # Remove git hook block

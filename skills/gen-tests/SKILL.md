@@ -20,6 +20,11 @@ Turn adversarial critique into permanent test coverage — both example-based an
 
 Read debate round files and extract adversarial findings with severity `critical` or `major`.
 
+If no debates exist, or the specified debate/pair has no adversarial rounds, inform the user:
+> "No debate findings to generate tests from. Run /ratchet:run first to produce adversarial findings."
+
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+
 For each finding, extract:
 - The issue description
 - The evidence (test output, reproduction steps)
@@ -59,7 +64,7 @@ Property-based tests are higher value than example-based tests — they catch re
 
 ### Step 4: Generate Tests
 
-For each unresolved finding, spawn a generative agent to write a test:
+For each unresolved finding, spawn a generative agent (tools: Read, Grep, Glob, Bash, Write, Edit) to write a test. The agent operates outside the debate loop — it generates tests only, not production code:
 
 ```
 Based on this adversarial finding from a Ratchet debate:
@@ -105,3 +110,10 @@ Generated tests from debate findings:
 
 Run your test suite to verify: [test command from project.yaml]
 ```
+
+After reporting, use `AskUserQuestion` to guide the user:
+- Options:
+  - "Run test suite now" — execute the test command from project.yaml
+  - "Continue to next milestone (/ratchet:run)"
+  - "View quality metrics (/ratchet:score)"
+  - "Done for now"

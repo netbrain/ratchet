@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+
 RATCHET_DIR=".ratchet"
 SCORES_FILE="$RATCHET_DIR/scores/scores.jsonl"
 
@@ -28,11 +30,22 @@ python3 -c "
 import json, sys
 from datetime import datetime, timezone
 
-meta = json.load(open(sys.argv[1]))
+try:
+    with open(sys.argv[1]) as f:
+        meta = json.load(f)
+except json.JSONDecodeError as e:
+    print(f'Error: Malformed JSON in {sys.argv[1]}: {e}', file=sys.stderr)
+    sys.exit(1)
+
+# Validate required fields
+for key in ('id', 'pair', 'rounds'):
+    if key not in meta:
+        print(f'Error: Missing required field \"{key}\" in {sys.argv[1]}', file=sys.stderr)
+        sys.exit(1)
 
 # Count issues from adversarial round files
-import glob, re
-rounds_dir = sys.argv[1].replace('meta.json', 'rounds')
+import glob, os, re
+rounds_dir = os.path.join(os.path.dirname(sys.argv[1]), 'rounds')
 issues_found = 0
 issues_resolved = 0
 
@@ -42,11 +55,11 @@ for f in sorted(glob.glob(f'{rounds_dir}/round-*-adversarial.md')):
     issues_found += len(re.findall(r'\"severity\":', content))
 
 # If consensus or accept verdict, assume all issues resolved
-verdict = meta.get('verdict', {})
-decision = verdict.get('decision', '') if verdict else ''
-if decision in ('accept', '') and meta.get('status') == 'consensus':
+verdict = meta.get('verdict') or {}
+decision = verdict.get('decision', '')
+if decision in ('accept', '') and meta.get('status') in ('consensus', 'resolved'):
     issues_resolved = issues_found
-elif decision == 'modify':
+elif decision in ('modify', 'conditional_accept'):
     # Partial resolution
     issues_resolved = max(0, issues_found - len(verdict.get('required_changes', [])))
 else:
@@ -56,8 +69,9 @@ score = {
     'timestamp': datetime.now(timezone.utc).isoformat(),
     'debate_id': meta['id'],
     'pair': meta['pair'],
+    'milestone': meta.get('milestone', None),
     'rounds_to_consensus': meta['rounds'],
-    'escalated': meta['status'] == 'escalated' or (verdict and verdict.get('decided_by') != 'consensus'),
+    'escalated': meta.get('status') not in ('consensus',),
     'issues_found': issues_found,
     'issues_resolved': issues_resolved
 }

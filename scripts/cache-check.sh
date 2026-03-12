@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # Check if scoped files have changed since last consensus.
 # Usage: cache-check.sh <pair-name> <scope-glob>
+# Scope-glob supports comma-separated patterns (e.g., "scripts/*.sh,install.sh")
 # Exit 0 = unchanged (skip debate), Exit 1 = changed (debate needed)
 set -euo pipefail
+
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+
+# Cross-platform sha256: macOS uses shasum, Linux uses sha256sum
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256() { sha256sum | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+    sha256() { shasum -a 256 | awk '{print $1}'; }
+else
+    echo "Error: neither sha256sum nor shasum found" >&2; exit 1
+fi
 
 PAIR_NAME="${1:?Usage: cache-check.sh <pair-name> <scope-glob>}"
 SCOPE_GLOB="${2:?Usage: cache-check.sh <pair-name> <scope-glob>}"
@@ -13,13 +25,25 @@ if [ ! -f "$CACHE_FILE" ]; then
     exit 1
 fi
 
-# Compute current hash of scoped files
-current_hash=$(find . -path "./$SCOPE_GLOB" -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | awk '{print $1}')
+# Collect files matching comma-separated scope globs
+matched_files=""
+IFS=',' read -ra globs <<< "$SCOPE_GLOB"
+for glob in "${globs[@]}"; do
+    glob="$(echo "$glob" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    matches=$(find . -path "./$glob" -type f 2>/dev/null || true)
+    if [ -n "$matches" ]; then
+        matched_files="${matched_files:+${matched_files}
+}${matches}"
+    fi
+done
+matched_files=$(echo "$matched_files" | sort -u)
 
-# Empty hash = no files matched = debate (greenfield)
-if [ -z "$current_hash" ] || [ "$current_hash" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+# No files matched = debate (greenfield)
+if [ -z "$matched_files" ]; then
     exit 1
 fi
+
+current_hash=$(echo "$matched_files" | while IFS= read -r f; do cat "$f"; done 2>/dev/null | sha256)
 
 # Compare against cached hash
 cached_hash=$(python3 -c "

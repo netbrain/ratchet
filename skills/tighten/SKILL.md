@@ -17,7 +17,15 @@ Tighten agent pairs based on accumulated debate performance. The analyst reviews
 
 ### Step 1: Check Review Data
 
-Read `.ratchet/reviews/<pair-name>/` for each target pair. If fewer than 3 reviews exist, inform the user that more debate data is needed before meaningful tightening can occur.
+Read `.ratchet/reviews/<pair-name>/` for each target pair. Look for `review-*.json` files (produced by `/ratchet:run` Step 9).
+
+If the reviews directory doesn't exist or has no review files, inform the user:
+> "No review data found for [pair-name]. Reviews are generated after debates complete. Run /ratchet:run to produce debate data first."
+
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+
+If fewer than 3 reviews exist, inform the user that more debate data is needed before meaningful tightening can occur, but offer to proceed anyway:
+- Use `AskUserQuestion` with options: `"Proceed with limited data"`, `"Run more debates first (/ratchet:run)"`, `"Done for now"`
 
 ### Step 2: Launch Analyst
 
@@ -47,12 +55,13 @@ Your task:
    - Sharpen the adversarial's test strategy
    - Improve the generative's fix patterns
 
-3. Present proposed changes as a diff:
-   - Show what would change in each agent's definition
+3. Present proposed changes using `AskUserQuestion` for approval:
+   - Show what would change in each agent's definition in the question text
    - Explain the rationale for each change
    - Flag whether this is incremental tuning or a significant rework
+   - Options: "Approve all changes", "Approve with modifications", "Reject changes"
 
-4. Wait for human approval before writing any changes
+4. If "Approve with modifications", use follow-up `AskUserQuestion` calls to refine. Wait for explicit human approval before writing any changes.
 
 5. If approved, update the agent definitions and write an analyst summary:
    .ratchet/reviews/<pair-name>/analyst-summary.md
@@ -75,3 +84,10 @@ Ratchet tightened for [pair-name]:
 Pair [pair-name] is already sharp — no changes recommended.
 Review data shows consistent effectiveness with no new patterns.
 ```
+
+After reporting, use `AskUserQuestion` to guide the user:
+- Options:
+  - "Tighten another pair" — if other pairs have review data
+  - "Run next debate (/ratchet:run)"
+  - "View quality metrics (/ratchet:score)"
+  - "Done for now"
