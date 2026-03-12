@@ -15,6 +15,7 @@ The core Ratchet workflow. Operates at two levels of scope:
 /ratchet:run              # Resume from epic — propose next focus or run against changes
 /ratchet:run [pair-name]  # Run a specific pair against its scoped files
 /ratchet:run --all-files  # Run all pairs against all files in scope
+/ratchet:run --no-cache   # Force re-debate even if files haven't changed
 ```
 
 ## Prerequisites
@@ -91,7 +92,26 @@ Determine which pairs are relevant:
 
 Skip disabled pairs (`enabled: false`).
 
-### Step 5: Create Debate(s)
+### Step 5: File-Hash Cache Check
+
+For each matched pair, run the cache check script to see if scoped files changed since last consensus:
+
+```bash
+bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
+```
+
+- Exit 0 → files unchanged, **skip this pair**: `Skipping [pair-name] — no changes since last consensus`
+- Exit 1 → files changed or no cache, proceed to debate
+
+Use `--no-cache` flag to skip this check and force re-debate of all pairs.
+
+After a debate reaches consensus (Step 7), update the cache:
+
+```bash
+bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
+```
+
+### Step 6: Create Debate(s)
 
 For each matched pair, create a debate directory:
 
@@ -194,8 +214,13 @@ Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 **c) Check Verdict**
 
 Parse the adversarial's output for verdict:
-- **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `consensus`, write verdict, break loop
+- **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `consensus`, write verdict, update file-hash cache, break loop
 - **REJECT** → Continue to next round (or escalate if at max_rounds)
+
+On consensus, update the cache so this pair is skipped next run (if files don't change):
+```bash
+bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
+```
 
 Update `meta.json` after each round — increment `rounds`, update `status`.
 

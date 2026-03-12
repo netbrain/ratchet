@@ -105,7 +105,17 @@ For each approved pair, write:
 - `.ratchet/plan.yaml` — development roadmap with milestones
 - `.ratchet/pairs/<name>/generative.md` — builder agent
 - `.ratchet/pairs/<name>/adversarial.md` — critic agent
-- `.ratchet/config.yaml` — registers all approved pairs
+- `.ratchet/config.yaml` — registers all approved pairs with defaults:
+
+```yaml
+max_rounds: 3
+escalation: human  # human | orchestrator | both
+pairs:
+  - name: <pair-name>
+    scope: "internal/<dir>/**/*.go"
+    enabled: true
+  # ... more pairs
+```
 
 Create the `.ratchet/` directory structure:
 ```
