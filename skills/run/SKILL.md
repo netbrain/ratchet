@@ -119,7 +119,23 @@ Write initial `meta.json`:
 }
 ```
 
-### Step 6: Execute Debates
+### Step 6: Static Analysis Pre-Gate
+
+Before starting debates, run the project's static analysis layer (layer 1 from the testing spec in project.yaml). This catches mechanical issues so adversarial agents can focus on semantic problems.
+
+Read `.ratchet/project.yaml` for the static analysis commands (lint, type-check, format-check).
+
+Run each configured command. If any fail:
+1. Present the failures to the user
+2. Ask: "Fix these before debating, or proceed anyway?"
+   - If fix: stop here, let the user (or agent) fix lint/type errors, then re-run `/ratchet:run`
+   - If proceed: continue to debates, but note in the debate context that static analysis had failures
+
+If all pass (or none configured), proceed silently — no output needed.
+
+This gate ensures adversarial agents spend their rounds on real quality issues (architecture, logic, edge cases, security) rather than catching lint violations or type errors that a formatter could fix.
+
+### Step 7: Execute Debates
 
 Run matched pairs. When multiple pairs match, run them **in parallel** using separate agents.
 
@@ -194,7 +210,7 @@ If max_rounds reached without consensus:
   - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
   - `both`: Spawn orchestrator first, then present recommendation to human via `/ratchet:verdict`
 
-### Step 7: Update Epic
+### Step 8: Update Epic
 
 After all debates for this focus resolve:
 - If all pairs reached consensus (ACCEPT or CONDITIONAL_ACCEPT):
@@ -205,7 +221,7 @@ After all debates for this focus resolve:
   - Keep milestone as `status: in_progress`
   - Note which pairs need re-running
 
-### Step 8: Post-Debate Reviews
+### Step 9: Post-Debate Reviews
 
 After each debate resolves (consensus or verdict), trigger performance reviews:
 
@@ -230,7 +246,7 @@ For both agents in the pair, generate a review:
 
 Save to `.ratchet/reviews/<pair-name>/review-<timestamp>.json`.
 
-### Step 9: Update Scores
+### Step 10: Update Scores
 
 Append to `.ratchet/scores/scores.jsonl`:
 ```json
@@ -246,7 +262,7 @@ Append to `.ratchet/scores/scores.jsonl`:
 }
 ```
 
-### Step 10: Propose Next Focus
+### Step 11: Propose Next Focus
 
 After reporting results, guide the user to the next iteration:
 

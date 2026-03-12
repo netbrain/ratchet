@@ -73,15 +73,29 @@ Based on the stack (stated or discovered), identify likely quality dimensions:
 **Database-heavy projects**: query performance, migration safety, connection pooling, transaction isolation
 **API projects**: contract stability, versioning, rate limiting, authentication, input validation
 
-### 5. Testing Capability Assessment
-Determine what testing infrastructure exists (or is planned):
-- Unit tests: framework, command, directory pattern
-- Integration tests: framework, command, dependencies (DB, services)
-- E2E tests: framework, command, setup requirements
-- Benchmarks: available or not
-- Lint/type-check commands
+### 5. Testing Capability Assessment (Seven-Layer Model)
 
-For new projects, record the human's intended testing setup.
+Map the project's testing infrastructure to these seven layers. For each layer, determine what exists (or is planned) and the exact commands to run:
+
+| Layer | Purpose | Example Tools |
+|-------|---------|---------------|
+| 1. Static analysis | Instant lint + type check | golangci-lint, Biome, Ruff, ESLint, mypy, tsc --noEmit |
+| 2. Unit/property tests | Logic invariants | go test -short, Hypothesis, fast-check, pytest |
+| 3. Fuzz testing | Edge cases agents miss | go test -fuzz, AFL++, Jazzer.js, jsfuzz |
+| 4. E2E tests | User journey validation | Playwright, Cypress, Selenium |
+| 5. Visual regression | UI appearance | Playwright screenshots, Percy, Chromatic |
+| 6. UAT validation | Acceptance criteria | Agent reads spec, verifies each criterion |
+| 7. Security gate | Vulnerability scanning | Semgrep, CodeQL, Snyk, gosec, npm audit |
+
+For each layer, record in project.yaml:
+- Whether it exists, is planned, or is not applicable
+- The exact command to run it
+- The tool/framework used
+- Any CI integration
+
+Adversarial agents will use this mapping to systematically validate across all available layers, not just run `go test`.
+
+For new projects, record the human's intended testing setup mapped to these layers.
 
 ## Epic / Roadmap Generation
 
@@ -185,8 +199,18 @@ You are the **critic** in the {pair-name} quality pair for a {stack description}
 - You CANNOT modify source code — articulate problems clearly so the generative agent can fix them
 - Be rigorous but fair — don't nitpick style when there are real issues
 
-## Testing Spec
-{From project.yaml — exact commands to run for unit, integration, e2e, lint, type-check}
+## Testing Spec (Seven-Layer Model)
+Run validation across all available layers from the project's testing spec:
+
+1. **Static analysis**: {command} — run FIRST, catch lint/type errors before deeper analysis
+2. **Unit/property tests**: {command} — verify logic invariants
+3. **Fuzz testing**: {command or "not configured"} — probe edge cases
+4. **E2E tests**: {command or "not configured"} — validate user journeys
+5. **Visual regression**: {command or "not configured"} — check UI appearance
+6. **UAT validation**: read acceptance criteria from milestone, verify each is met
+7. **Security gate**: {command or "not configured"} — scan for vulnerabilities
+
+Always run layers 1-2 at minimum. Run higher layers when they exist and are relevant to the scope.
 
 ## Project Context
 {Relevant project-specific details}
