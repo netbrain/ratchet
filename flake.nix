@@ -20,7 +20,7 @@
 
           installPhase = ''
             mkdir -p $out/share/ratchet
-            cp -r .claude-plugin agents hooks scripts skills $out/share/ratchet/
+            cp -r agents scripts skills $out/share/ratchet/
             cp install.sh $out/share/ratchet/
 
             mkdir -p $out/bin
