@@ -1,14 +1,15 @@
-# Ratchet — Debate-Driven Quality Plugin for Claude Code
+# Ratchet — Debate-Driven Development Workflow Engine for Claude Code
 
-Ratchet improves code quality through **paired generative and adversarial agents that debate** until they reach consensus on code readiness.
+Ratchet turns AI code generation into a structured development process. Every phase of development — planning, testing, building, reviewing, hardening — is driven by **paired agents that debate** until they reach consensus.
 
 ## How It Works
 
-1. **You define quality dimensions** — API contracts, DB performance, test coverage, etc.
-2. **Ratchet generates agent pairs** — a builder (generative) and critic (adversarial) per dimension
-3. **Agents debate** — the builder defends the code, the critic attacks it with evidence (running tests, benchmarks, linters)
-4. **Consensus = ready** — when both agree, code passes. Disagreement escalates to an orchestrator or human.
-5. **Ratchet tightens** — performance reviews after each debate feed into sharper agent prompts over time
+1. **Initialize** — Ratchet scans your project (or interviews you for greenfield), debates the approach internally, and presents 2-3 strategy options with tradeoffs
+2. **Phase-gated debates** — work proceeds through ordered phases: `plan → test → build → review → harden`. Each phase must pass before the next begins
+3. **Agent pairs debate** — a builder (generative) and critic (adversarial) argue each phase. The critic runs real validation commands as evidence
+4. **Guards gate advancement** — deterministic checks (lint, tests, security scans) run at phase boundaries. Blocking guards must pass to advance
+5. **Commit or PR** — when a milestone completes, Ratchet packages the work as a local commit or pull request
+6. **Learn from feedback** — CI failures and PR review comments feed back into the system via retrospectives, improving agents and guards over time
 
 ## Installation
 
@@ -34,13 +35,6 @@ git clone git@github.com:netbrain/ratchet.git && cd ratchet
 ./install.sh --global    # or --local from your project dir
 ```
 
-### Uninstall
-
-```bash
-./install.sh --uninstall --global   # remove global install
-./install.sh --uninstall --local    # remove project-local install
-```
-
 ### Options
 
 | Flag | Description |
@@ -52,105 +46,229 @@ git clone git@github.com:netbrain/ratchet.git && cd ratchet
 
 ## Quick Start
 
-```bash
-# Initialize for your project (analyzes codebase, interviews you, generates pairs)
-/ratchet:init
+### New project (greenfield)
 
-# Run debates on your current changes
-/ratchet:run
-
-# View a debate transcript
-/ratchet:debate [id]
-
-# Cast a human verdict on an escalated debate
-/ratchet:verdict [id] accept|reject|modify
-
-# View quality metrics
-/ratchet:score
-
-# Generate tests from debate findings
-/ratchet:gen-tests
-
-# Tighten agent pairs based on debate performance
-/ratchet:tighten
 ```
+/ratchet:init
+```
+
+Ratchet will:
+1. Ask what you're building
+2. Suggest a stack and methodology with rationale
+3. Debate the approach internally (angel vs devil)
+4. Present 2-3 options with pros/cons — you pick or mix-and-match
+5. Generate workflow config, components, agent pairs, guards, and a milestone roadmap
+
+Then start building:
+
+```
+/ratchet:run
+```
+
+Ratchet walks you through each phase of the first milestone. The generative agent does the work, the adversarial agent verifies it, guards run at phase boundaries.
+
+### Existing project
+
+```
+/ratchet:init
+```
+
+Same flow, but Ratchet scans your codebase first — it reads your manifests, tests, CI config, and directory structure before asking you anything. The interview focuses on what you want to *improve*, not what already exists.
+
+### Upgrading from v1
+
+If you have an existing `.ratchet/config.yaml` from v1:
+
+```
+/ratchet:migrate
+```
+
+This converts your v1 config to v2 `workflow.yaml` with components, phases, and guards inferred from your existing setup.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/ratchet:init` | Analyze project + interview human → generate tailored agent pairs |
-| `/ratchet:pair [name]` | Add a new pair post-init |
-| `/ratchet:run [pair\|all]` | Run pairs against code changes — the core debate workflow |
-| `/ratchet:debate [id]` | View/continue an ongoing debate |
-| `/ratchet:verdict [id] [decision]` | Human-in-the-loop: cast deciding vote |
+| `/ratchet:init` | Analyze project, interview human, generate workflow config and agent pairs |
+| `/ratchet:run` | Execute phase-gated debates — the core workflow |
+| `/ratchet:status` | Milestone and phase progress snapshot |
+| `/ratchet:pair [name]` | Add a new agent pair |
+| `/ratchet:guard` | Manage deterministic checks (list, add, run, override) |
+| `/ratchet:debate [id]` | View or continue an ongoing debate |
+| `/ratchet:verdict [id]` | Human-in-the-loop: cast deciding vote on escalated debate |
 | `/ratchet:score [pair]` | Quality metrics and trends |
-| `/ratchet:gen-tests [id\|pair]` | Generate tests from debate findings |
-| `/ratchet:tighten [pair\|all]` | Tighten the ratchet — sharpen agents from debate lessons |
+| `/ratchet:retro [pr]` | Retrospective — learn from CI failures and PR feedback |
+| `/ratchet:gen-tests` | Generate tests from debate findings |
+| `/ratchet:tighten [pair]` | Sharpen agents from debate lessons and retro findings |
+| `/ratchet:migrate` | Upgrade v1 config.yaml to v2 workflow.yaml |
+
+## Workflow
+
+### Phases
+
+Every milestone progresses through ordered phases. Phase N must complete before phase N+1 begins:
+
+| Phase | What happens | Generative agent's job | Adversarial agent's job |
+|-------|-------------|----------------------|----------------------|
+| **plan** | Produce a spec | Write acceptance criteria, design decisions, risks | Challenge gaps, untestable criteria, missing edge cases |
+| **test** | Write failing tests | Create tests encoding the spec | Verify tests are correct and cover the spec |
+| **build** | Implement | Write code that makes tests pass | Run tests, lint, review implementation |
+| **review** | Quality review | Fix issues, improve code | Find bugs, logic errors, convention violations |
+| **harden** | Edge cases & security | Add validation, fix vulnerabilities | Run security scans, test edge cases |
+
+Workflow presets control which phases apply:
+- **tdd**: all 5 phases (plan → test → build → review → harden)
+- **traditional**: skip test phase (plan → build → review → harden)
+- **review-only**: review phase only
+
+### Guards
+
+Deterministic shell commands that run at phase boundaries:
+
+```yaml
+guards:
+  - name: lint
+    command: "eslint src/"
+    phase: build
+    blocking: true
+
+  - name: security
+    command: "semgrep --config=auto src/"
+    phase: harden
+    blocking: true
+
+  - name: coverage
+    command: "pytest --cov=src --cov-fail-under=80"
+    phase: build
+    blocking: false    # advisory — logs but doesn't block
+```
+
+### Feedback Loop
+
+```
+debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tighten
+    ↑                                                            │
+    └────────────────────────────────────────────────────────────┘
+```
+
+`/ratchet:retro` analyzes CI failures and PR review comments, identifies what Ratchet's debates missed, and proposes fixes (new guards, updated agent prompts, new pairs). `/ratchet:tighten` consumes retro findings to sharpen agents over time.
 
 ## Architecture
 
 ```
-┌──────────┐     produces      ┌──────────────┐
-│Generative├────────────────►  │   Artifact    │
-│  Agent   │                   │ (code/tests)  │
-└────┬─────┘                   └───────┬───────┘
-     │                                 │
-     │         ┌─────────────┐         │
-     │◄────────┤ Adversarial │◄────────┘
-     │ critique│   Agent     │ reviews
-     │         └─────────────┘
-     │
-     ▼
-┌─────────┐  agree?  ┌────────┐  yes  ┌────────┐
-│  Round  ├─────────►│Consensus├──────►│ Accept │
-│  N+1    │          └────┬───┘        └────────┘
-└─────────┘               │ no (max rounds)
-                          ▼
-                   ┌─────────────┐
-                   │ Orchestrator│──► Final verdict
-                   │  or Human   │
-                   └─────────────┘
+                        ┌─────────────────────────────┐
+                        │         Epic Roadmap         │
+                        │   milestone → milestone →    │
+                        └──────────┬──────────────────┘
+                                   │
+                        ┌──────────▼──────────────────┐
+                        │     Phase Gate Loop          │
+                        │  plan → test → build →       │
+                        │  review → harden             │
+                        └──────────┬──────────────────┘
+                                   │ (per phase)
+              ┌────────────────────▼───────────────────┐
+              │              Debate Protocol            │
+              │                                        │
+              │  ┌───────────┐       ┌──────────────┐  │
+              │  │Generative │◄─────►│ Adversarial  │  │
+              │  │  (builds) │debate │  (critiques)  │  │
+              │  └───────────┘       └──────────────┘  │
+              │                                        │
+              │  Round N → ACCEPT / REJECT → Round N+1 │
+              │  Max rounds → Escalate to orchestrator  │
+              └────────────────────┬───────────────────┘
+                                   │ (consensus reached)
+                        ┌──────────▼──────────────────┐
+                        │     Guards (deterministic)   │
+                        │  lint ✓  tests ✓  security ✓ │
+                        └──────────┬──────────────────┘
+                                   │ (all blocking guards pass)
+                        ┌──────────▼──────────────────┐
+                        │    Advance to next phase     │
+                        │    or complete milestone     │
+                        └─────────────────────────────┘
 ```
 
 ### Key Agents
 
-- **Analyst** — reads codebase, interviews human, generates tailored pairs, reviews agent performance
-- **Orchestrator** — impartial tiebreaker, reads full debate transcripts, renders verdicts
-- **Generative** (per pair) — builds/reviews code, full tool access
-- **Adversarial** (per pair) — critiques code, can run tests but cannot edit source
+- **Analyst** — scans codebase, interviews human, debates approach internally, generates tailored pairs and workflow config
+- **Orchestrator** — impartial tiebreaker for escalated debates
+- **Generative** (per pair) — builds/reviews code, has full tool access
+- **Adversarial** (per pair) — critiques code, runs validation commands, cannot edit source
 
-### Debate Protocol
+## Configuration
 
-Each round:
-1. Generative agent reviews/proposes changes
-2. Adversarial agent critiques with evidence (test output, benchmarks)
-3. Adversarial renders verdict: ACCEPT, CONDITIONAL_ACCEPT, or REJECT
-4. If REJECT → next round (up to max_rounds) → escalate if no consensus
+### workflow.yaml (v2)
 
-### Quality Ratchet
+```yaml
+version: 2
+max_rounds: 3
+escalation: human       # human | orchestrator | both
 
-Once a standard is met, it can't regress:
-- Pre-commit hooks block commits during unresolved escalations
-- Score tracking shows quality trends over time
-- `/ratchet:tighten` sharpens agents from accumulated debate lessons
+progress:
+  adapter: none          # none | markdown | github-issues
 
-## Project Runtime (`.ratchet/`)
+components:
+  - name: backend
+    scope: "src/api/**"
+    workflow: tdd
 
-Created per-project by `/ratchet:init`:
+  - name: frontend
+    scope: "src/ui/**"
+    workflow: traditional
+
+pairs:
+  - name: api-quality
+    component: backend
+    phase: review
+    scope: "src/api/**"
+    enabled: true
+
+guards:
+  - name: lint
+    command: "npm run lint"
+    phase: build
+    blocking: true
+    components: [backend, frontend]
+```
+
+### Project Runtime (`.ratchet/`)
 
 ```
 .ratchet/
-├── project.yaml          # Project profile (stack, architecture, testing spec)
-├── config.yaml           # Pairs definition, max rounds, escalation policy
-├── pairs/                # Generated agent pair definitions
-├── debates/              # Active and completed debate transcripts
-├── reviews/              # Agent performance reviews
-└── scores/               # Historical quality metrics
+├── workflow.yaml        # Workflow config (v2) — components, phases, pairs, guards
+├── project.yaml         # Project profile (stack, architecture, validation commands)
+├── plan.yaml            # Epic roadmap with milestone/phase tracking
+├── pairs/               # Generated agent pair definitions
+│   └── <pair-name>/
+│       ├── generative.md
+│       └── adversarial.md
+├── debates/             # Debate transcripts
+├── guards/              # Guard execution results
+├── reviews/             # Agent performance reviews
+├── retros/              # Retrospective findings (CI/PR feedback)
+├── progress/            # Local progress tracking (markdown adapter)
+└── scores/              # Historical quality metrics
 ```
 
-## Compatibility
+## Progress Tracking
 
-- **Standalone**: Full functionality without other plugins
-- **With PAUL**: Run pairs during Apply phase, feed results into Unify
-- **With GSD**: TaskCompleted hook enforces consensus before task closure
+Ratchet can track milestones in external systems:
+
+| Adapter | Description |
+|---------|-------------|
+| `none` | No external tracking (default) |
+| `markdown` | Local markdown files in `.ratchet/progress/` |
+| `github-issues` | GitHub Issues via `gh` CLI |
+
+Adapter failures never block debates. Auth is handled via environment (e.g., `gh auth`), never stored in config.
+
+## Ecosystem
+
+Ratchet is technology-agnostic, but during project setup the analyst may suggest complementary tools when they fit:
+
+- [PromptFoo](https://github.com/promptfoo/promptfoo) — eval and regression testing for agent quality
+- [OpenViking](https://github.com/volcengine/OpenViking) — persistent context management for complex projects
+- [Agency Agents](https://github.com/msitarzewski/agency-agents) — specialist agent personas (security, QA, design)
+- [Impeccable](https://github.com/pbakaus/impeccable) — design language skills for frontend quality
