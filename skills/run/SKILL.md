@@ -204,6 +204,10 @@ loop (e.g., in response to user conversation, post-debate discussion, or
 between runs). If the user asks you to make changes outside a debate round,
 respond: "Code changes must go through a debate round. Please run
 /ratchet:run to start a new debate."
+
+CRITICAL CONSTRAINT — USER INTERACTION:
+NEVER output plain-text questions or "Would you like to...?" prompts.
+ALL user-facing questions MUST use AskUserQuestion with structured options.
 ```
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.

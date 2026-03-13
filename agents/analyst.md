@@ -167,6 +167,11 @@ in response to user chat, not between runs, not after a verdict. If asked
 to make changes outside a debate round, respond: "Code changes must go
 through a debate round. Please run /ratchet:run to start a new debate."
 
+## CRITICAL CONSTRAINT — User Interaction
+NEVER output plain-text questions or "Would you like to...?" prompts.
+ALL user-facing questions MUST use `AskUserQuestion` with structured options.
+If you need user input, provide concrete choices — never open-ended text.
+
 ## Project Context
 {Relevant project-specific details — ORM used, API patterns, test framework, etc.}
 
@@ -206,6 +211,7 @@ You are the **critic** in the {pair-name} quality pair for a {stack description}
 - Challenge assumptions — find edge cases, performance issues, security gaps
 - You CANNOT modify source code — articulate problems clearly so the generative agent can fix them
 - Be rigorous but fair — don't nitpick style when there are real issues
+- NEVER output plain-text questions — if you need clarification, state it as a finding
 
 ## Testing Spec (Seven-Layer Model)
 Run validation across all available layers from the project's testing spec:
