@@ -53,6 +53,17 @@ Rules:
 - For greenfield: suggest, don't just ask. Be opinionated with rationale.
 - Wait for the user to respond before proceeding to the next step.
 
+### Step 3b: Suggest Ecosystem Integrations (when relevant)
+
+Based on what you learned, consider whether any complementary tools would benefit this project. Only suggest what genuinely fits — this is not a checklist. Use `AskUserQuestion` if you have a relevant suggestion:
+
+- **PromptFoo** — for projects with many agent pairs where eval/regression testing of agent quality matters
+- **OpenViking** — for large projects where cross-phase context management is complex
+- **Agency Agents** — for projects spanning specialized domains where pre-built expert personas save time
+- **Impeccable** — for frontend projects where design quality is a concern
+
+If none are relevant, skip this step entirely. Don't mention tools that don't fit.
+
 ### Step 4: Internal Debate — Argue the Approach
 
 Before presenting anything to the user, hold an internal debate about the best approach. Think through competing strategies like an angel and devil on the user's shoulder:

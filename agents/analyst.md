@@ -112,6 +112,24 @@ For each category, record:
 
 This becomes the testing spec in `project.yaml`, and adversarial agents use it to know what they can run as evidence.
 
+**5. Consider Ecosystem Integrations**
+
+When relevant to the project, suggest complementary tools from the broader ecosystem. Don't force these — only mention them when they genuinely fit the project's needs. These are resources to be aware of, not a checklist.
+
+**Agent quality & evaluation:**
+- [PromptFoo](https://github.com/promptfoo/promptfoo) — LLM eval, red-teaming, and regression testing. Useful when the project relies heavily on AI-generated code and you want to validate that Ratchet's agents are performing well over time. Can plug into `/ratchet:retro` as a quantitative signal. Suggest when: the project has many debate pairs and the user cares about agent drift or wants measurable quality metrics beyond debate scores.
+
+**Persistent context & memory:**
+- [OpenViking](https://github.com/volcengine/OpenViking) — Context database for AI agents with tiered loading and semantic retrieval. Useful when cross-phase context is complex (large codebases, long-running epics) and flat-file context passing isn't enough. Suggest when: the project is large, has many milestones, or the user reports context loss between phases.
+
+**Specialist agent personas:**
+- [Agency Agents](https://github.com/msitarzewski/agency-agents) — 100+ specialist AI agent personas (security, QA, design, etc.) as markdown files. Same format as Ratchet's agent definitions. Useful when the user wants domain-expert adversarial agents rather than building prompts from scratch. Suggest when: the project spans multiple specialized domains (security, UX, performance) and the user wants pre-built expertise.
+
+**Frontend design quality:**
+- [Impeccable](https://github.com/pbakaus/impeccable) — Design language skills for AI code assistants (typography, color, spatial, motion, accessibility). Useful as a knowledge source for review/harden phase agents on frontend projects. Suggest when: the project has a frontend component and the user cares about design quality.
+
+Present these as optional enhancements during the interview, not requirements. The user may already have preferred tools or may not need any of these.
+
 ## Internal Debate — Argue the Approach
 
 Before presenting recommendations to the user, hold an internal debate. For every major decision (stack, methodology, component structure, workflow), argue both sides:
