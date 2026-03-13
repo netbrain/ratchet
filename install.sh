@@ -143,6 +143,30 @@ do_install() {
         echo "  Installed scripts to $scripts_dir/"
     fi
 
+    # Copy progress adapter scripts
+    if [ -d "$SCRIPT_DIR/scripts/progress" ]; then
+        for adapter_dir in "$SCRIPT_DIR"/scripts/progress/*/; do
+            local adapter_name
+            adapter_name="$(basename "$adapter_dir")"
+            mkdir -p "$scripts_dir/progress/$adapter_name"
+            cp "$adapter_dir"/*.sh "$scripts_dir/progress/$adapter_name/"
+            chmod +x "$scripts_dir/progress/$adapter_name"/*.sh
+        done
+        echo "  Installed progress adapters"
+    fi
+
+    # Copy schemas
+    local schemas_dir="$target/ratchet-schemas"
+    if [ -d "$SCRIPT_DIR/schemas" ] && ls "$SCRIPT_DIR"/schemas/*.json >/dev/null 2>&1; then
+        if [ -d "$schemas_dir" ]; then
+            chmod -R u+w "$schemas_dir" 2>/dev/null || true
+            rm -rf "$schemas_dir"
+        fi
+        mkdir -p "$schemas_dir"
+        cp "$SCRIPT_DIR"/schemas/*.json "$schemas_dir/"
+        echo "  Installed schemas to $schemas_dir/"
+    fi
+
     # Git pre-commit hook (local installs only)
     if [ "$skip_hooks" = "false" ] && [ "$target" != "$HOME/.claude" ]; then
         install_git_hook "$(pwd)" "$scripts_dir"
@@ -173,6 +197,14 @@ do_uninstall() {
         chmod -R u+w "$scripts_dir" 2>/dev/null || true
         rm -rf "$scripts_dir"
         echo "  Removed scripts"
+    fi
+
+    # Remove schemas
+    local schemas_dir="$target/ratchet-schemas"
+    if [ -d "$schemas_dir" ]; then
+        chmod -R u+w "$schemas_dir" 2>/dev/null || true
+        rm -rf "$schemas_dir"
+        echo "  Removed schemas"
     fi
 
     # Remove old plugin-style install if present

@@ -18,53 +18,105 @@ Check if `.ratchet/` already exists. If so, inform the user and suggest `/ratche
 
 ### Step 2: Codebase Scan (silent — no user interaction)
 
-Before asking the human anything, scan the project:
+Before asking the human anything, scan whatever exists in the project:
 
-- Read any that exist: README.md, CLAUDE.md, go.mod, package.json, Cargo.toml, pyproject.toml,
-  Makefile, flake.nix, docker-compose.yml, .github/workflows/*, project plan files, design docs
-- Scan directory structure (ls key directories)
-- Identify: languages, frameworks, database, architecture patterns
-- Determine: existing test infrastructure, CI setup, exact test/lint/build commands
-- Look for: project plans, roadmaps, ADRs, design docs in the repo
+- Package manifests, lock files, build configs
+- CI/CD pipelines
+- Documentation (README, ADRs, design docs, CONTRIBUTING)
+- Directory structure (top 3 levels)
+- Test infrastructure — test directories, config files, coverage setup
+- Linters, formatters, type checkers, security scanners
+- Infrastructure files (Docker, Terraform, Helm, etc.)
 
-DO NOT ask the human for information you can read from the codebase.
+Adapt your scan to what's actually in the repo. DO NOT ask the human for information you can read from the codebase.
 
-### Step 3: Targeted Interview (inline — talk directly to the user)
+If the project is empty or has no code yet, skip this step — the interview IS the discovery phase.
 
-Present what you learned from the scan as context first:
-> "I scanned the project. This is a Go project using gorilla/mux with PostgreSQL, templ for SSR,
-> HTMX + Alpine.js. CI runs golangci-lint, unit/integration/E2E tests via Playwright.
-> Test coverage target is 70%."
+### Step 3: Interview (inline — talk directly to the user)
 
-Then ask ONLY about things you CANNOT infer from the code, using `AskUserQuestion` for every question. Structure questions with concrete options using multi-choice format (the user can always pick "Other" for custom input):
+Use `AskUserQuestion` for every question. The interview adapts based on whether code exists.
 
-Example questions (adapt based on what the scan could NOT determine):
-- "What are your biggest quality concerns?" — `multiSelect: true`, options: `"Correctness"`, `"Performance"`, `"Security"`, `"Maintainability"`, `"Other"`
-- "What breaks most often or worries you most?" — freeform via `AskUserQuestion`
-- "Any compliance or regulatory requirements?" — options: `"None"`, `"SOC2"`, `"HIPAA"`, `"PCI-DSS"`, `"GDPR"`, `"Other"`
+**If code exists**: Present what you learned from the scan, then ask about things you CANNOT infer:
+- What the human wants to improve or is concerned about
+- Pain points, compliance requirements, priorities
+- Derive your options from what you actually found — not from a template
+
+**If greenfield (no code)**:
+- "What are you building?" — let them describe it in their own words
+- Based on their answer, ask follow-ups about scope, constraints, audience, deployment
+- **Suggest a stack and methodology** with rationale — don't just ask "what language?"
+- Let them accept, modify, or override your suggestion
 
 Rules:
-- **Always use `AskUserQuestion`** for every question — never present choices as plain text.
-- If the codebase is empty/new with no manifests, THEN ask about intended stack and purpose.
-- Ask at most 2-3 focused questions. Do NOT ask a generic questionnaire.
-- Never ask about language, framework, stack, or test commands if you already found them.
-- Adapt follow-ups based on answers. Keep it conversational.
+- **Always use `AskUserQuestion`** — never present choices as plain text
+- Ask at most **3-5 focused questions**. Listen and adapt, don't run a questionnaire.
+- For greenfield: suggest, don't just ask. Be opinionated with rationale.
 - Wait for the user to respond before proceeding to the next step.
 
-### Step 4: Synthesize
+### Step 4: Internal Debate — Argue the Approach
 
-Combine codebase scan + interview answers to identify quality dimensions.
+Before presenting anything to the user, hold an internal debate about the best approach. Think through competing strategies like an angel and devil on the user's shoulder:
 
-### Step 5: Propose Pairs
+**For each major decision** (stack choice, methodology, component structure, workflow preset), argue both sides:
+- **Advocate**: Why this approach fits the user's stated goals, constraints, and context
+- **Challenger**: What could go wrong, what's being over-engineered, what simpler alternative exists
 
-Present each proposed pair to the human using `AskUserQuestion` for approval:
-- Question: "Here are the proposed quality pairs: [formatted pair list with rationale]. Approve these pairs?"
-- Options: `"Approve all"`, `"Modify pairs"`, `"Start over"`
-- If "Modify pairs": use follow-up `AskUserQuestion` calls to refine
+Produce **2-3 distinct approach options** that represent meaningfully different tradeoffs. Not minor variations — real strategic choices. Examples of the kind of tradeoffs to surface:
+- Rigorous TDD everywhere vs. TDD for core logic + traditional for glue code
+- Many focused pairs vs. fewer broad pairs
+- Full phase pipeline vs. lightweight review-only to start
+- Strict guards that block vs. advisory-only to avoid friction early
+
+Each option should have: a name, a brief description, the tradeoffs (pros/cons), and who it's best for.
+
+### Step 5: Present Options to the User
+
+Use `AskUserQuestion` to present the approach options. Put the full comparison in the question text:
+
+```
+Based on what I learned, here are three approaches:
+
+**Option A: [Name]**
+[Description]. Phases: [which]. Pairs: [how many, what kind].
++ [pro]
++ [pro]
+- [con]
+
+**Option B: [Name]**
+[Description]. Phases: [which]. Pairs: [how many, what kind].
++ [pro]
++ [pro]
+- [con]
+
+**Option C: [Name]**
+...
+
+Which approach fits best?
+```
+
+Options: `"Option A: [Name]"`, `"Option B: [Name]"`, `"Option C: [Name]"`, `"Let's discuss / mix and match"`
+
+If "Let's discuss": use follow-up `AskUserQuestion` calls to refine. The user may want pieces from different options.
+
+### Step 6: Finalize Configuration
+
+Based on the chosen approach, finalize:
+1. **Components** — logical groupings with scope globs and workflow presets
+2. **Pairs** — quality dimensions with scope, component assignment, and phase
+3. **Guards** — validation commands inferred from the project's tooling
+4. **Progress tracking** — ask how the user wants to track work
+
+Use `AskUserQuestion` for progress tracking:
+- Question: "How do you want to track progress for milestones?"
+- Options: `"None (just local)"`, `"Markdown files in .ratchet/progress/"`, `"GitHub Issues (requires gh CLI)"`, `"Other / configure later"`
+
+Present the final configuration using `AskUserQuestion` for approval:
+- Question: "[formatted component list, pair list, guards, and progress adapter]. Approve this configuration?"
+- Options: `"Approve"`, `"Modify"`, `"Start over"`
 
 Wait for approval before proceeding.
 
-### Step 6: Build Epic
+### Step 7: Build Epic
 
 Based on everything learned, propose a development roadmap:
 - Break the project into milestones (ordered by dependency and priority)
@@ -74,63 +126,66 @@ Based on everything learned, propose a development roadmap:
   - Options: `"Approve"`, `"Modify milestones"`, `"Start over"`
 - The epic is a living document — it evolves as the project develops
 
-Example plan.yaml:
+plan.yaml format:
 ```yaml
 epic:
-  name: "todoapp"
-  description: "Go + htmx + templ todo application with SQLite"
+  name: "<project name>"
+  description: "<one-line description>"
   milestones:
     - id: 1
-      name: "Project scaffold"
-      description: "Go module, main entry point, basic server startup"
-      pairs: [handler-quality]
-      status: pending
-      done_when: "Server starts, responds to health check"
-    - id: 2
-      name: "Data layer"
-      description: "SQLite schema, models, repository with CRUD"
-      pairs: [data-integrity]
-      status: pending
-      done_when: "All CRUD operations work with integration tests"
-    - id: 3
-      name: "Handlers + templates"
-      description: "HTTP handlers wired to repo, templ views with htmx"
-      pairs: [handler-quality, template-htmx]
-      status: pending
-      done_when: "Full UI flow: list, create, toggle, delete"
-    - id: 4
-      name: "Input hardening"
-      description: "Validation, fuzz targets, edge case coverage"
-      pairs: [fuzz-resilience]
-      status: pending
-      done_when: "All inputs validated, fuzz targets pass 30s runs"
+      name: "<milestone name>"
+      description: "<what this milestone delivers>"
+      pairs: [<relevant-pair-names>]
+      status: pending        # pending | in_progress | done
+      phase_status:           # tracks progress through phases
+        plan: pending         # pending | in_progress | done
+        test: pending
+        build: pending
+        review: pending
+        harden: pending
+      done_when: "<concrete acceptance criteria>"
+      progress_ref: null     # set by progress adapter when milestone starts
   current_focus: null
 ```
 
-### Step 7: Generate
+### Step 8: Generate
 
 For each approved pair, write:
 - `.ratchet/project.yaml` — project profile with stack, architecture, testing spec
 - `.ratchet/plan.yaml` — development roadmap with milestones
 - `.ratchet/pairs/<name>/generative.md` — builder agent
 - `.ratchet/pairs/<name>/adversarial.md` — critic agent
-- `.ratchet/config.yaml` — registers all approved pairs with defaults:
+- `.ratchet/workflow.yaml` — v2 workflow configuration with pairs, components, guards:
 
 ```yaml
+version: 2
 max_rounds: 3
 escalation: human  # human | orchestrator | both
+
+progress:
+  adapter: none  # none | markdown | github-issues | linear | jira
+
+components:
+  - name: <component-name>
+    scope: "<file-glob>"
+    workflow: tdd  # tdd | traditional | review-only
+
 pairs:
   - name: <pair-name>
-    scope: "internal/<dir>/**/*.go"
+    component: <component-name>
+    phase: review  # plan | test | build | review | harden
+    scope: "<file-glob>"
     enabled: true
   # ... more pairs
+
+guards: []  # populated based on testing spec
 ```
 
 Create the `.ratchet/` directory structure:
 ```
 .ratchet/
 ├── project.yaml
-├── config.yaml
+├── workflow.yaml
 ├── plan.yaml
 ├── pairs/
 │   └── <pair-name>/
@@ -142,25 +197,24 @@ Create the `.ratchet/` directory structure:
 ```
 
 IMPORTANT:
-- The codebase scan is MANDATORY and comes FIRST — never ask what you can read
-- The interview is for subjective/experience-based questions only
-- For new/empty projects with no code or manifests, the interview covers stack and purpose too
+- If code exists, scan it FIRST — never ask what you can read
+- For existing projects, the interview focuses on what the human wants to improve
+- For greenfield projects, the interview discovers intent, then you suggest stack and methodology
 - Generated agent pair definitions must contain PROJECT-SPECIFIC knowledge (not generic templates)
 - Generative agents get tools: Read, Grep, Glob, Bash, Write, Edit
 - Adversarial agents get tools: Read, Grep, Glob, Bash with disallowedTools: Write, Edit
-- Adversarial agents must know the exact test/lint/benchmark commands from the testing spec
+- Adversarial agents must know the exact validation commands available in this project
 - Scope each pair to specific file globs — tight scope leads to deep analysis
-- Include the project's architecture patterns, ORM, framework conventions in agent prompts
 
-### Step 8: Verify Output
+### Step 9: Verify Output
 
 After generation, verify:
 - `.ratchet/project.yaml` exists and contains valid stack/testing info
-- `.ratchet/config.yaml` exists with at least one pair registered
+- `.ratchet/workflow.yaml` exists with `version: 2` and at least one pair registered
 - Each registered pair has both `generative.md` and `adversarial.md` in `.ratchet/pairs/`
 - All directories created: `debates/`, `reviews/`, `scores/`
 
-### Step 9: Report
+### Step 10: Report
 
 Present a summary:
 ```

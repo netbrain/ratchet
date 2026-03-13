@@ -1,14 +1,17 @@
 ---
 name: ratchet:run
-description: Run agent pairs against code — guided by epic roadmap and current focus
+description: Run agent pairs through phase-gated debates — guided by epic roadmap and current focus
 ---
 
 # /ratchet:run — Execute Debate
 
-The core Ratchet workflow. Operates at two levels of scope:
+The core Ratchet workflow. Operates at three levels:
 
-- **Epic** — the full project roadmap (from `.ratchet/plan.yaml`). Where we've been, where we're going.
-- **Focus** — the current iteration. What we're building or reviewing right now.
+- **Epic** — the full project roadmap (from `.ratchet/plan.yaml`)
+- **Milestone** — the current unit of work
+- **Phase** — the current stage within a milestone (`plan → test → build → review → harden`)
+
+Phases are ordered and gated: phase N must complete (all pairs reach consensus + all blocking guards pass) before phase N+1 begins. Pairs within a phase run in parallel.
 
 ## Usage
 ```
@@ -27,24 +30,28 @@ If `.ratchet/` does not exist, inform the user:
 
 Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init)"`, `"Cancel"`.
 
-If no enabled pairs exist in `config.yaml`, inform the user:
+If no enabled pairs exist in the workflow config (`workflow.yaml` or `config.yaml`), inform the user:
 > "No active pairs found. Add a pair with /ratchet:pair."
 
 Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair)"`, `"Cancel"`.
 
 ## Execution Steps
 
-### Step 1: Read Epic Context
+### Step 1: Read Context
 
-Read `.ratchet/plan.yaml` (if it exists), `.ratchet/config.yaml`, and `.ratchet/project.yaml`.
+Read `.ratchet/plan.yaml` (if it exists), `.ratchet/project.yaml`, and the workflow config:
+- Read `.ratchet/workflow.yaml` if it exists (v2 format)
+- Otherwise fall back to `.ratchet/config.yaml` (v1 format)
+- When reading v1 config, treat all pairs as having `phase: review` and no components/guards
 
 Build a picture of:
 - Which milestones are **completed** (status: done)
-- Which milestone is **current** (status: in_progress)
+- Which milestone is **current** (status: in_progress) and its **phase_status**
 - Which milestones are **pending**
 - Any unresolved conditions from previous CONDITIONAL_ACCEPT verdicts
+- Which **phases** apply to the current milestone's component workflows
 
-If no `plan.yaml` exists (e.g., added to existing project without init), skip epic tracking and fall through to file-based detection.
+If no `plan.yaml` exists, skip epic tracking and fall through to file-based detection.
 
 ### Step 2: Determine Focus
 
@@ -54,17 +61,26 @@ There are four modes, checked in order:
 If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip epic negotiation.
 
 #### Mode B: Epic-guided (plan.yaml exists)
-Use `AskUserQuestion` to let the user pick the focus. Put the epic status summary directly in the question text so the user sees it in context:
+Use `AskUserQuestion` to let the user pick the focus. Include epic status AND phase progress:
 
 Question text (build from plan.yaml):
-`"Epic: [project name] — [completed]/[total] milestones done. Next up: [next milestone name] — [description]. What should we focus on?"`
+```
+Epic: [project name] — [completed]/[total] milestones done.
+
+Current milestone: [name] — [description]
+Phase progress: plan ✓ → test ✓ → build ● → review ○ → harden ○
+(✓ = done, ● = current, ○ = pending)
+
+What should we focus on?
+```
 
 If there are unresolved conditions from previous CONDITIONAL_ACCEPTs, append:
 `"(Unresolved from last run: [condition1], [condition2])"`
 
 Options:
-- "[Next milestone name] (Recommended)"
+- "Continue [current phase] phase for [milestone name] (Recommended)"
 - "Address unresolved conditions from last run" — only if conditions exist
+- "[Next milestone name]" — skip ahead
 - "Review all existing code"
 - (Include an "Other" option so the user can type a custom focus)
 
@@ -83,25 +99,41 @@ Use `AskUserQuestion` to ask what to build first.
 If using epic mode, update `plan.yaml`:
 - Set the chosen milestone to `status: in_progress`
 - Record `current_focus` with milestone id and timestamp
+- Determine the **current phase** — the first phase in `phase_status` that is not `done`
+
+**Progress tracking**: If a progress adapter is configured (`.ratchet/workflow.yaml` → `progress.adapter`), and this milestone doesn't have a `progress_ref` yet, create a work item:
+```bash
+bash .claude/ratchet-scripts/progress/<adapter>/create-item.sh "<milestone name>" "<milestone description>" "ratchet" "milestone"
+```
+Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. If the adapter fails, log a warning and continue — adapter failures never block debates.
 
 **MILESTONE RE-OPENING GUARD**: If the chosen milestone has `status: done`, do NOT silently re-open it. Instead, use `AskUserQuestion`:
 - Question: "Milestone '[name]' is already marked done (completed [timestamp]). Re-opening it will reset its status. Are you sure?"
 - Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
 - Only set `status: in_progress` if the user explicitly confirms re-opening.
 
-### Step 4: Match Pairs to Focus
+### Step 4: Determine Active Phase and Match Pairs
 
-Determine which pairs are relevant:
-- **Epic mode**: use the pairs listed in the milestone's `pairs` field
-- **Changed files mode**: match files to pairs by `scope` globs
-- **All-files mode**: all enabled pairs
-- **Greenfield mode**: all enabled pairs
+**For v2 (workflow.yaml with phases):**
 
-Skip disabled pairs (`enabled: false`).
+1. Identify the current phase from `phase_status` — the first phase that is `pending` or `in_progress`
+2. Determine which phases apply based on the component workflows:
+   - `tdd`: plan → test → build → review → harden
+   - `traditional`: plan → build → review → harden (skip test)
+   - `review-only`: review only (skip plan, test, build, harden)
+3. Match pairs assigned to the current phase (from the pair's `phase` field)
+4. Skip disabled pairs (`enabled: false`)
+
+**For v1 (config.yaml, no phases):**
+- All pairs are treated as `phase: review`
+- No phase gating — run all matched pairs
+
+**For explicit pair / changed files / all-files modes:**
+- Run the specified pairs regardless of phase assignment
 
 ### Step 5: File-Hash Cache Check
 
-For each matched pair, run the cache check script to see if scoped files changed since last consensus:
+For each matched pair, run the cache check script:
 
 ```bash
 bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
@@ -110,10 +142,9 @@ bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
 - Exit 0 → files unchanged, **skip this pair**: `Skipping [pair-name] — no changes since last consensus`
 - Exit 1 → files changed or no cache, proceed to debate
 
-Use `--no-cache` flag to skip this check and force re-debate of all pairs.
+Use `--no-cache` flag to skip this check and force re-debate.
 
-After a debate reaches consensus (Step 7), update the cache:
-
+After a debate reaches consensus, update the cache:
 ```bash
 bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
 ```
@@ -135,11 +166,12 @@ Write initial `meta.json`:
 {
   "id": "<debate-id>",
   "pair": "<pair-name>",
+  "phase": "<current phase>",
   "milestone": "<milestone id if epic mode, null otherwise>",
   "files": ["list", "of", "matched", "files"],
   "status": "initiated",
   "rounds": 0,
-  "max_rounds": <from config.yaml>,
+  "max_rounds": "<from workflow config>",
   "started": "<ISO timestamp>",
   "resolved": null,
   "verdict": null
@@ -148,60 +180,132 @@ Write initial `meta.json`:
 
 ### Step 6b: Static Analysis Pre-Gate
 
-Before starting debates, run the project's static analysis layer (layer 1 from the testing spec in project.yaml). This catches mechanical issues so adversarial agents can focus on semantic problems.
-
-Read `.ratchet/project.yaml` for the static analysis commands (lint, type-check, format-check).
+Before starting debates, run any configured static analysis commands from `project.yaml`.
 
 Run each configured command. If any fail:
 1. Present the failures in the question text
 2. Use `AskUserQuestion` to let the user decide:
    - Question: "Static analysis failed with [N] errors: [summary]. How should we proceed?"
    - Options: `"Fix these before debating"`, `"Proceed to debates anyway"`
-   - If fix: stop here, let the user (or agent) fix lint/type errors, then re-run `/ratchet:run`
-   - If proceed: continue to debates, but note in the debate context that static analysis had failures
+   - If fix: stop here, let the user fix, then re-run `/ratchet:run`
+   - If proceed: note failures in debate context
 
-If all pass (or none configured), proceed silently — no output needed.
-
-This gate ensures adversarial agents spend their rounds on real quality issues (architecture, logic, edge cases, security) rather than catching lint violations or type errors that a formatter could fix.
+If all pass (or none configured), proceed silently.
 
 ### Step 7: Execute Debates
 
 Run matched pairs. When multiple pairs match, run them **in parallel** using separate agents.
 
-For each pair, execute the debate protocol:
+For each pair, execute the debate protocol with **phase-specific prompts**:
 
-#### Round Loop (up to max_rounds)
+#### Phase-Specific Generative Prompts
 
-**a) Generative Round**
+The generative agent's task varies by phase. Spawn from `.ratchet/pairs/<name>/generative.md` with:
 
-Spawn the pair's generative agent (from `.ratchet/pairs/<name>/generative.md`) with task:
+**Phase: plan**
 ```
-You are in round [N] of a debate about code quality.
+You are in the PLAN phase (round [N]).
 
-Epic context: [milestone name and description from plan.yaml]
-Focus: [what we're building/reviewing this iteration]
+Epic context: [milestone name and description]
+Focus: [what we're planning]
 
-[If greenfield/build mode:]
-  No source code exists yet for your scope.
-  Project profile: [from .ratchet/project.yaml]
-  Your job: CREATE the code for this milestone's scope.
-  Build it right from the start — the adversarial agent will review everything you produce.
+Your job: Produce a SPECIFICATION for this milestone's scope.
+- Define acceptance criteria (concrete, testable)
+- Describe the approach and key design decisions
+- Identify risks and unknowns
+- List the interfaces/contracts other code will depend on
 
-[If review mode:]
-  Files under review: [file list]
-  Review the files in your scope. Assess quality along your dimension.
+DO NOT write implementation code. DO NOT write tests.
+Output a spec document that the test and build phases will use.
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
-[If round > 1: Address the adversarial's critique — fix issues or explain why they're not valid.]
+[If round > 1: Previous adversarial critique: [content]]
+[If round > 1: Address the critique — refine the spec or explain why the concern is invalid.]
+```
 
-Write your assessment. If you made code changes, describe them.
+**Phase: test**
+```
+You are in the TEST phase (round [N]).
 
+Epic context: [milestone name and description]
+Spec from plan phase: [content of plan phase output or acceptance criteria from plan.yaml]
+Focus: [what we're testing]
+
+Your job: Write FAILING TESTS that encode the acceptance criteria.
+- Tests should fail because the implementation doesn't exist yet
+- Cover the contracts and invariants defined in the spec
+- Include edge cases the spec identified as risks
+- Use the project's test framework and conventions
+
+DO NOT write implementation code. Only tests.
+
+[If round > 1: Previous adversarial critique: [content]]
+[If round > 1: Address the critique — fix tests or explain why they're correct.]
+```
+
+**Phase: build**
+```
+You are in the BUILD phase (round [N]).
+
+Epic context: [milestone name and description]
+Spec from plan phase: [content]
+Tests from test phase: [test file locations and what they test]
+Focus: [what we're building]
+
+Your job: Write IMPLEMENTATION code that makes the tests pass.
+- Follow the spec from the plan phase
+- Make the failing tests from the test phase pass
+- Follow the project's conventions and patterns
+
+[If greenfield: No source code exists yet. Create the implementation from scratch.]
+[If existing code: Files under review: [file list]]
+
+[If round > 1: Previous adversarial critique: [content]]
+[If round > 1: Address the critique — fix issues or explain why they're not valid.]
+```
+
+**Phase: review**
+```
+You are in the REVIEW phase (round [N]).
+
+Epic context: [milestone name and description]
+Focus: [what we're reviewing]
+Files under review: [file list]
+
+Your job: Review the code for quality along your dimension.
+- Assess correctness, maintainability, and adherence to project conventions
+- Look for bugs, logic errors, and design issues
+- Propose concrete improvements where issues are found
+- Implement fixes for issues you identify
+
+[If round > 1: Previous adversarial critique: [content]]
+[If round > 1: Address the critique — fix issues or explain why they're not valid.]
+```
+
+**Phase: harden**
+```
+You are in the HARDEN phase (round [N]).
+
+Epic context: [milestone name and description]
+Focus: [what we're hardening]
+Files under review: [file list]
+
+Your job: Harden the code against edge cases, security issues, and performance problems.
+- Add input validation and error handling where missing
+- Identify and fix security vulnerabilities
+- Add performance-sensitive paths if applicable
+- Write additional tests for edge cases discovered during review
+
+[If round > 1: Previous adversarial critique: [content]]
+[If round > 1: Address the critique — fix issues or explain why they're not valid.]
+```
+
+**All phases include these constraints:**
+```
 CRITICAL CONSTRAINT — DEBATE BOUNDARY:
 You may ONLY create, modify, or delete code during this debate round.
 All code you produce MUST be reviewed by the adversarial agent before it is
 considered accepted. Do NOT propose or make code changes outside the debate
-loop (e.g., in response to user conversation, post-debate discussion, or
-between runs). If the user asks you to make changes outside a debate round,
+loop. If the user asks you to make changes outside a debate round,
 respond: "Code changes must go through a debate round. Please run
 /ratchet:run to start a new debate."
 
@@ -212,28 +316,35 @@ ALL user-facing questions MUST use AskUserQuestion with structured options.
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.
 
-**b) Adversarial Round**
+#### Adversarial Round
 
 Spawn the pair's adversarial agent (from `.ratchet/pairs/<name>/adversarial.md`) with task:
 ```
-You are in round [N] of a debate about code quality.
+You are in the [PHASE] phase (round [N]) of a debate.
 
-Epic context: [milestone name and description from plan.yaml]
-Focus: [what we're building/reviewing this iteration]
+Epic context: [milestone name and description]
+Focus: [what we're working on]
+
+[Phase-specific adversarial focus:]
+- plan: Does the spec have gaps? Are acceptance criteria testable? Are risks identified?
+- test: Do tests actually encode the spec? Are they correct? Do they cover edge cases?
+- build: Does the implementation make tests pass? Does it follow the spec? Are there bugs?
+- review: Are there quality issues? Logic errors? Convention violations?
+- harden: Are there security holes? Missing validation? Performance issues? Untested edges?
 
 Files under review: [file list]
 Generative agent's assessment: [content of round-N-generative.md]
 [If round > 1: Your previous critique: [content of round-N-1-adversarial.md]]
 [If round > 1: Generative's response: [content of round-N-generative.md]]
 
-Review the code and the generative agent's assessment.
-Run tests, linters, benchmarks as evidence (use commands from the project's testing spec).
+Review the output and the generative agent's assessment.
+Run validation commands as evidence where applicable.
 Produce your findings and verdict: ACCEPT, CONDITIONAL_ACCEPT, or REJECT.
 ```
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 
-**c) Check Verdict**
+#### Check Verdict
 
 Parse the adversarial's output for verdict:
 - **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `"consensus"`, write verdict, update file-hash cache, break loop
@@ -242,38 +353,125 @@ Parse the adversarial's output for verdict:
 When the orchestrator renders a verdict after escalation, map its output:
 - Orchestrator **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`
 - Orchestrator **MODIFY** → Treat as **CONDITIONAL_ACCEPT** — set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, log `required_changes` as unresolved conditions
-- Orchestrator **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, mark milestone as needing re-run
+- Orchestrator **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, mark phase as needing re-run
 
-On consensus, update the cache so this pair is skipped next run (if files don't change):
+On consensus, update the cache:
 ```bash
 bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
 ```
 
 Update `meta.json` after each round — increment `rounds`, update `status`.
 
-**IMPORTANT**: The debate loop MUST execute fully. After the generative agent produces code (especially in greenfield mode), the adversarial agent MUST review it. Do not stop after the generative round.
+**IMPORTANT**: The debate loop MUST execute fully. After the generative agent produces output, the adversarial agent MUST review it. Do not stop after the generative round.
 
-**IMPORTANT**: Code changes are ONLY permitted inside this debate loop (Steps 7a-7c). The generative agent must NOT create, modify, or delete code outside of an active debate round — not in response to user chat, not between runs, not after a verdict. If a user requests code changes outside a debate, redirect them to `/ratchet:run`.
+**IMPORTANT**: Code changes are ONLY permitted inside this debate loop. The generative agent must NOT create, modify, or delete code outside of an active debate round.
 
 #### Escalation
 
 If max_rounds reached without consensus:
 - Set status to `escalated`
-- Read `escalation` policy from config.yaml:
+- Read `escalation` policy from the workflow config (`workflow.yaml` or `config.yaml`):
   - `orchestrator`: Spawn orchestrator agent with full debate transcript → write verdict
   - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
   - `both`: Spawn orchestrator first, then present recommendation to human via `/ratchet:verdict`
 
-### Step 8: Update Epic
+### Step 8: Phase Gate — Run Guards and Advance
 
-After all debates for this focus resolve:
-- If all pairs reached a terminal state (`"consensus"` or `"resolved"`) with an ACCEPT, CONDITIONAL_ACCEPT, or MODIFY verdict:
-  - Mark the milestone as `status: done` in plan.yaml
-  - Record completion timestamp
-  - Log any unresolved conditions from CONDITIONAL_ACCEPT or MODIFY verdicts
-- If any pair was REJECTED (by orchestrator/human verdict) or remains `"escalated"` without resolution:
-  - Keep milestone as `status: in_progress`
-  - Note which pairs need re-running
+After all debates for the current phase resolve:
+
+**8a. Check debate outcomes:**
+- If all pairs reached consensus (ACCEPT or CONDITIONAL_ACCEPT) → proceed to guards
+- If any pair was REJECTED or remains escalated → phase stays `in_progress`, report which pairs need re-running
+
+**8b. Run guards for this phase (v2 only):**
+
+Read `guards` from `workflow.yaml`. For each guard assigned to the current phase, run the guard script:
+
+```bash
+bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+```
+
+This stores results in `.ratchet/guards/<milestone-id>/<phase>/<guard-name>.json`:
+```json
+{
+  "guard": "<name>",
+  "phase": "<phase>",
+  "command": "<command>",
+  "exit_code": 0,
+  "output": "<stdout+stderr>",
+  "blocking": true,
+  "timestamp": "<ISO timestamp>"
+}
+```
+
+- If a **blocking** guard fails:
+  - Use `AskUserQuestion`: "Blocking guard '[name]' failed: [summary of output]. How should we proceed?"
+  - Options: `"Fix and re-run"`, `"Override and advance anyway"`, `"View full output"`
+  - If fix: phase stays `in_progress`, user fixes the issue, re-runs `/ratchet:run`
+  - If override: log the override, advance anyway
+
+- If an **advisory** guard fails:
+  - Log the failure
+  - Pass the output as context to the next phase's debates
+  - Do NOT block advancement
+
+**8c. Advance phase:**
+
+If all debates passed and all blocking guards passed (or were overridden):
+- Mark current phase as `done` in `phase_status`
+- Check if there's a next phase (based on the component's workflow preset):
+  - If yes: set next phase to `in_progress`
+  - If no (all phases done): mark milestone as `status: done`, record completion timestamp
+
+Update `plan.yaml` with the new `phase_status`.
+
+**Progress tracking**: If a progress adapter is configured and the milestone has a `progress_ref`:
+- On phase advancement: add a comment noting the phase completed
+  ```bash
+  bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "Phase [name] complete. [N] pairs, all consensus. Moving to [next phase]."
+  ```
+- On milestone completion: update status and close the item
+  ```bash
+  bash .claude/ratchet-scripts/progress/<adapter>/update-status.sh "<progress_ref>" "done"
+  bash .claude/ratchet-scripts/progress/<adapter>/close-item.sh "<progress_ref>"
+  ```
+- Adapter failures never block — log a warning and continue.
+
+**For v1 (no phases):** Skip guard execution. Mark milestone done if all pairs passed.
+
+**8d. Commit or PR (on milestone completion only):**
+
+When a milestone is fully done (all phases complete, all guards passed), the work needs to be committed. Use `AskUserQuestion`:
+
+- Question: "Milestone '[name]' is complete. All phases passed, all guards green. How should we package this?"
+- Options:
+  - `"Commit locally"` — create a local git commit with a summary
+  - `"Create a pull request"` — commit, create branch if needed, push branch, open PR
+  - `"Skip — I'll handle it"` — do nothing
+
+**If "Commit locally":**
+- Stage all files that were created or modified during this milestone's debates
+- Generate a commit message from the milestone name, description, and debate outcomes
+- Create the commit — do NOT push
+
+**If "Create a pull request":**
+- Stage and commit (same as above)
+- Create a branch if not already on one (branch name derived from milestone: `ratchet/<milestone-slug>`)
+- Push the branch to origin — this is the ONE case where pushing is allowed, because the user explicitly chose "Create a pull request"
+- Create the PR using `gh pr create` with:
+  - Title: milestone name
+  - Body: summary of what was built, phases completed, debate outcomes, guard results
+  - Link to progress adapter item if one exists
+
+After PR is created, use `AskUserQuestion`:
+- Question: "PR created: [URL]. CI checks are running. What do you want to do?"
+- Options:
+  - `"Monitor CI checks and analyze results"` — runs `/ratchet:retro monitor <pr-number>` to watch checks, then auto-analyzes any failures and feeds learnings back into agents/guards
+  - `"Continue to next milestone while CI runs"` — proceed with the next milestone; the user can run `/ratchet:retro pr <number>` later to analyze results
+  - `"Monitor CI in background, continue working"` — start monitoring as a background task, continue to next milestone; report back when checks complete
+  - `"Done for now"`
+
+**CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request". Local commits are the default safe action.**
 
 ### Step 9: Post-Debate Reviews
 
@@ -307,24 +505,30 @@ For each resolved debate, run the score update script:
 bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 ```
 
-This appends a score entry to `.ratchet/scores/scores.jsonl` with fields: timestamp, debate_id, pair, milestone, rounds_to_consensus, escalated, issues_found, issues_resolved.
-
 ### Step 11: Propose Next Focus
 
 After reporting results, use `AskUserQuestion` to let the user choose what to do next.
 
-**If more milestones remain**, present a summary line then ask with options:
-- Summary: `"Focus complete: [milestone name] — [N] pairs debated, [N] consensus, [N] escalated. Epic progress: [completed]/[total] milestones."`
-- Options (adapt based on context):
-  - "Continue to [next milestone name]" — the natural next step
-  - "Review debate: [debate-id]" — one option per debate that just ran (so the user can inspect transcripts)
-  - "View quality metrics" — runs /ratchet:score
+**If more phases remain in the current milestone:**
+- Summary: `"Phase [name] complete for [milestone]. [N] pairs debated, [N] consensus. Next phase: [name]."`
+- Options:
+  - "Continue to [next phase] phase (Recommended)"
+  - "Review debate: [debate-id]" — one per debate that just ran
+  - "View quality metrics"
   - "Address unresolved conditions" — only if CONDITIONAL_ACCEPTs logged conditions
-- Use `multiSelect: false` — the user picks one action.
 
-**If ALL milestones are done**, present a summary then ask:
+**If all phases done, more milestones remain:**
+- Summary: `"Milestone [name] complete! All phases passed. Epic progress: [completed]/[total] milestones."`
+- Options:
+  - "Continue to [next milestone name]"
+  - "Review debate: [debate-id]"
+  - "View quality metrics"
+  - "View milestone status (/ratchet:status)"
+
+**If ALL milestones are done:**
 - Summary: `"Epic complete! All [N] milestones finished. Total debates: [N] | Consensus rate: [%] | Avg rounds: [N]"`
 - Options:
+  - "Create a pull request for all changes"
   - "View detailed quality metrics"
   - "Tighten agents from debate lessons"
   - "Review a specific debate"

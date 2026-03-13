@@ -40,20 +40,28 @@ Current agent definitions:
 
 Performance reviews: [contents of all review files]
 
+Retrospective findings: [contents of .ratchet/retros/*.json, if any]
+(These are gaps found AFTER debates — CI failures, PR review feedback, production issues
+that Ratchet's debates did not catch. These are high-signal for improvement.)
+
 Project context: [contents of .ratchet/project.yaml]
 
 Your task:
-1. Analyze patterns across all reviews:
-   - What issues are repeatedly missed?
+1. Analyze patterns across all reviews AND retro findings:
+   - What issues are repeatedly missed by debates?
+   - What did CI or human reviewers catch that Ratchet didn't?
    - Where is effort wasted on non-issues?
    - What blind spots exist?
    - What strengths should be preserved?
+   - Are there missing guards that should be added?
 
-2. Propose specific prompt improvements:
-   - Add knowledge about commonly missed issues
+2. Propose specific improvements:
+   - Add knowledge about commonly missed issues to agent prompts
+   - Add missing validation commands to adversarial agents
    - Remove focus areas that consistently produce false positives
    - Sharpen the adversarial's test strategy
    - Improve the generative's fix patterns
+   - Propose new guards for checks that CI catches but Ratchet doesn't
 
 3. Present proposed changes using `AskUserQuestion` for approval:
    - Show what would change in each agent's definition in the question text

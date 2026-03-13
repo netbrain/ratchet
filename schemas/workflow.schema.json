@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratchet.dev/schemas/workflow.schema.json",
+  "title": "Ratchet Workflow Configuration",
+  "description": "v2 workflow configuration — extends v1 config with components, phases, guards, and progress tracking",
+  "type": "object",
+  "required": ["version", "max_rounds", "escalation", "pairs"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Schema version — must be 2 for workflow.yaml"
+    },
+    "max_rounds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3,
+      "description": "Maximum debate rounds before escalation"
+    },
+    "escalation": {
+      "type": "string",
+      "enum": ["human", "orchestrator", "both"],
+      "default": "human",
+      "description": "Escalation policy when max_rounds reached without consensus"
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "type": "string",
+          "enum": ["none", "markdown", "github-issues", "linear", "jira"],
+          "default": "none",
+          "description": "Work tracking adapter — failures never block debates"
+        }
+      },
+      "required": ["adapter"]
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/component"
+      },
+      "description": "Logical groupings of files with per-component workflow policies"
+    },
+    "pairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/pair"
+      },
+      "description": "Agent pairs — generative + adversarial debate partners"
+    },
+    "guards": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/guard"
+      },
+      "description": "Deterministic checks at phase boundaries"
+    }
+  },
+  "$defs": {
+    "phase": {
+      "type": "string",
+      "enum": ["plan", "test", "build", "review", "harden"],
+      "description": "Ordered development phase — plan → test → build → review → harden"
+    },
+    "workflow_preset": {
+      "type": "string",
+      "enum": ["tdd", "traditional", "review-only"],
+      "description": "Workflow preset selecting phase subsets. tdd: plan→test→build→review→harden. traditional: plan→build→review→harden. review-only: review only."
+    },
+    "component": {
+      "type": "object",
+      "required": ["name", "scope", "workflow"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique component identifier (lowercase, hyphens allowed)"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Comma-separated file glob patterns for this component"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflow_preset",
+          "description": "Which phases apply to this component"
+        }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "required": ["name", "scope", "enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique pair identifier"
+        },
+        "component": {
+          "type": "string",
+          "description": "Component this pair belongs to (must match a component name)"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase",
+          "default": "review",
+          "description": "Phase this pair runs in — defaults to 'review' for v1 backward compat"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Comma-separated file glob patterns this pair reviews"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this pair is active"
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "required": ["name", "command", "phase", "blocking"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique guard identifier"
+        },
+        "command": {
+          "type": "string",
+          "description": "Shell command to execute — exit 0 = pass, non-zero = fail"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase",
+          "description": "Phase boundary where this guard runs (after phase completes)"
+        },
+        "blocking": {
+          "type": "boolean",
+          "description": "If true, failure blocks advancement to next phase. If false, advisory only."
+        },
+        "components": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Components this guard applies to (empty = all components)"
+        }
+      }
+    }
+  }
+}
