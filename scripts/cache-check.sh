@@ -26,10 +26,12 @@ if [ ! -f "$CACHE_FILE" ]; then
 fi
 
 # Collect files matching comma-separated scope globs
+# Note: find -path's * already matches across directories (unlike shell globbing),
+# so ** is redundant. We collapse **/ and ** to * for compatibility.
 matched_files=""
 IFS=',' read -ra globs <<< "$SCOPE_GLOB"
 for glob in "${globs[@]}"; do
-    glob="$(echo "$glob" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    glob="$(echo "$glob" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s|\*\*/|*|g;s|\*\*|*|g')"
     matches=$(find . -path "./$glob" -type f 2>/dev/null || true)
     if [ -n "$matches" ]; then
         matched_files="${matched_files:+${matched_files}
