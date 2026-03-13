@@ -28,10 +28,21 @@ nix run github:netbrain/ratchet -- --uninstall --global
 nix run github:netbrain/ratchet -- --uninstall --local
 ```
 
+### With Nix (v2 branch — pre-release)
+
+```bash
+# Global
+nix run github:netbrain/ratchet/v2 -- --global
+
+# Project-local
+cd /your/project
+nix run github:netbrain/ratchet/v2 -- --local
+```
+
 ### Manual
 
 ```bash
-git clone git@github.com:netbrain/ratchet.git && cd ratchet
+git clone -b v2 git@github.com:netbrain/ratchet.git && cd ratchet
 ./install.sh --global    # or --local from your project dir
 ```
 
