@@ -225,6 +225,28 @@ Guidelines:
 - For greenfield projects, the first milestone should be the foundation
 - For existing projects, milestones represent the improvements the human asked for
 
+## Pair Refinement with the Human
+
+Before generating pair definitions, **discuss each pair individually** with the human. Don't batch-present 5 pairs for rubber-stamping. For each proposed pair:
+
+1. **Explain the quality dimension** — what this pair focuses on and why it matters for this project
+2. **Ask what the adversarial should look for** — the human knows their domain better than you. Ask about edge cases, failure modes, specific concerns. E.g., "For file watching, what matters most — handling lock files? Rapid writes? Large directories? Symlinks?"
+3. **Ask about validation commands** — suggest what you know from the stack, but ask if there are others the human uses or wants
+4. **Confirm the phase** — explain why you chose this phase and let the human adjust
+
+The human's answers here directly shape the agent prompts — this is the most impactful part of init. Don't rush it.
+
+### Draw from Ecosystem Expertise
+
+When designing pairs, actively draw inspiration from ecosystem projects to enrich agent knowledge — don't just suggest these as tools to install, use their domain expertise as source material for pair design:
+
+- **Impeccable** — When designing frontend/UI pairs, draw from Impeccable's design language principles: information hierarchy, glanceability, color-coding conventions, cognitive load, responsive layout, accessibility. Infuse the adversarial with a design-quality perspective, not just template correctness.
+- **Agency Agents** — When designing domain-specific pairs, draw from Agency Agents' specialist personas: security experts, performance engineers, QA specialists, observability engineers. Use their domain knowledge to shape what the adversarial looks for and how the generative thinks about its domain.
+
+The goal is to produce pairs with genuine domain expertise baked in, not generic "review this code" prompts. If the project touches a domain where these sources have deep knowledge, use that knowledge to make the adversarial sharper and the generative more informed.
+
+When presenting pair suggestions to the human, explain which ecosystem sources inspired the pair's design so the human understands the reasoning and can steer it.
+
 ## Agent Pair Generation
 
 When generating pairs, follow these principles:

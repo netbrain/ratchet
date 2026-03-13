@@ -109,21 +109,37 @@ Options: `"Option A: [Name]"`, `"Option B: [Name]"`, `"Option C: [Name]"`, `"Let
 
 If "Let's discuss": use follow-up `AskUserQuestion` calls to refine. The user may want pieces from different options.
 
-### Step 6: Finalize Configuration
+### Step 6: Finalize Configuration (iterative — do NOT skip to a final config)
 
-Based on the chosen approach, finalize:
-1. **Components** — logical groupings with scope globs and workflow presets
-2. **Pairs** — quality dimensions with scope, component assignment, and phase
-3. **Guards** — validation commands inferred from the project's tooling
-4. **Progress tracking** — ask how the user wants to track work
+Finalize the configuration through conversation, one concern at a time. Do NOT jump to a complete config — walk through each area with the user.
 
-Use `AskUserQuestion` for progress tracking:
-- Question: "How do you want to track progress for milestones?"
+**6a. Components** — present the proposed components with scope globs and workflow presets. Use `AskUserQuestion`:
+- Question: "[component list with scopes and workflows]. Do these groupings make sense?"
+- Options: `"Looks good"`, `"Modify"`, `"Add/remove components"`
+
+**6b. Pairs — discuss each one.** For each proposed pair, use `AskUserQuestion` to validate:
+- What quality dimension does this pair focus on?
+- What should the adversarial specifically look for? Ask the user — they know their domain. E.g., "For the file-watching pair, what edge cases matter most? Lock files? Rapid successive writes? Symlinks?"
+- What validation commands should the adversarial run? Suggest based on the stack but ask if there are others.
+- Is the phase assignment right? Explain why you chose it and let the user adjust.
+
+Don't present all pairs at once for rubber-stamping. Walk through them — the user's input here directly shapes the agent prompts, which is the most important output of init.
+
+**Ecosystem-inspired pairs:** After discussing the initial pairs, consider whether ecosystem projects suggest additional quality dimensions the user hasn't thought of. Draw from Impeccable's design expertise (information hierarchy, glanceability, accessibility) for frontend pairs and Agency Agents' specialist personas (security, performance, observability) for domain-specific pairs. Present these as suggestions with the inspiration source explained — e.g., "Drawing from Impeccable's design principles, a dashboard-ux pair could evaluate whether status information is glanceable and color-coded effectively." Let the user decide whether to add them.
+
+**6c. Guards — discuss what checks matter.** Use `AskUserQuestion`:
+- Present what you inferred from the stack (e.g., "I'd suggest `go vet`, `go test`, `gofmt` as blocking guards on the build phase")
+- Ask what's missing: "Are there other checks you run or want to run? Linters, security scanners, benchmarks?"
+- For each guard, confirm: blocking or advisory? Which phase? Which components?
+- Options: `"These guards are good"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
+
+**6d. Progress tracking:**
+- Question: "How do you want to track milestone progress?"
 - Options: `"None (just local)"`, `"Markdown files in .ratchet/progress/"`, `"GitHub Issues (requires gh CLI)"`, `"Other / configure later"`
 
-Present the final configuration using `AskUserQuestion` for approval:
-- Question: "[formatted component list, pair list, guards, and progress adapter]. Approve this configuration?"
-- Options: `"Approve"`, `"Modify"`, `"Start over"`
+**6e. Final review** — only after walking through each area, present the complete config for approval:
+- Question: "[full formatted config]. Everything look right?"
+- Options: `"Approve"`, `"Modify [section]"`, `"Start over"`
 
 Wait for approval before proceeding.
 
