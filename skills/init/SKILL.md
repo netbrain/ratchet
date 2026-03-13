@@ -146,7 +146,8 @@ Wait for approval before proceeding.
 ### Step 7: Build Epic
 
 Based on everything learned, propose a development roadmap:
-- Break the project into milestones (ordered by dependency and priority)
+- **For greenfield projects, Milestone 1 is always "Workflow Validation"** — a minimal vertical slice that proves the Ratchet pipeline works end-to-end. Pick the simplest possible feature that exercises all configured pairs and guards. The acceptance criteria should focus on the workflow functioning correctly (debates reach consensus, guards pass, phases gate properly), not on feature completeness. Real project work starts at Milestone 2.
+- Break remaining milestones by dependency and priority
 - Each milestone has: name, description, which pairs are relevant, what "done" looks like
 - Present the epic to the human using `AskUserQuestion` for approval:
   - Question: "Proposed roadmap: [formatted milestone list]. Approve this epic?"

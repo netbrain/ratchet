@@ -222,7 +222,7 @@ epic:
 Guidelines:
 - Order milestones by dependency
 - Keep milestones small enough to complete in one `/ratchet:run` session
-- For greenfield projects, the first milestone should be the foundation
+- **For greenfield projects, Milestone 1 is always "Workflow Validation"** — a minimal vertical slice whose purpose is to prove the Ratchet pipeline works end-to-end (debates trigger, guards run, phases gate correctly). Pick the simplest possible feature that exercises all configured pairs and guards. The real project work starts at Milestone 2. This catches misconfigured pairs, broken guards, and workflow issues before investing in real features.
 - For existing projects, milestones represent the improvements the human asked for
 
 ## Pair Refinement with the Human
