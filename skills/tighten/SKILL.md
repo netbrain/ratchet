@@ -47,7 +47,7 @@ that Ratchet's debates did not catch. These are high-signal for improvement.)
 Project context: [contents of .ratchet/project.yaml]
 
 Escalation rulings: [contents of .ratchet/escalations/*.json, if any]
-(These are orchestrator verdicts from prior escalations. If a dispute type has 3+ rulings
+(These are tiebreaker verdicts from prior escalations. If a dispute type has 3+ rulings
 in the same direction, inject it as "settled law" in the adversarial prompt so the pair
 stops re-litigating settled disputes.)
 

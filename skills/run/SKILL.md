@@ -35,7 +35,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 6c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, **halt** and report.
 - **Step 6b (static analysis)**: Auto-select "Fix these before debating". Same 2-attempt retry, then halt.
 - **Step 7 (debates)**: Run normally. Debates are autonomous by nature.
-- **Step 7 (escalation)**: If escalation policy is `orchestrator` or `both`, auto-escalate to orchestrator. If policy is `human`, **halt** — this is the primary stop condition. Present: "Unsupervised run paused: debate [id] requires human escalation."
+- **Step 7 (escalation)**: If escalation policy is `tiebreaker` or `both`, auto-escalate to tiebreaker. If policy is `human`, **halt** — this is the primary stop condition. Present: "Unsupervised run paused: debate [id] requires human escalation."
 - **Step 7 (precedent)**: Auto-select "Apply settled pattern" when available.
 - **Step 8b (post-debate guards)**: If blocking guard fails → auto-select "Fix and re-run" (2 attempts, then halt).
 - **Step 8c (advance)**: Auto-advance to next phase. No user confirmation needed (this already happens for all-fast-path phases; unsupervised extends it to all phases).
@@ -483,10 +483,10 @@ Parse the adversarial's output for verdict:
 - **REJECT** → Continue to next round (or escalate if at max_rounds)
 - **REGRESS** → Parse target phase from verdict. Validate the target phase is earlier than the current phase. Proceed to Step 8e (Phase Regression).
 
-When the orchestrator renders a verdict after escalation, map its output:
-- Orchestrator **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`
-- Orchestrator **MODIFY** → Treat as **CONDITIONAL_ACCEPT** — set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, log `required_changes` as unresolved conditions
-- Orchestrator **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`, mark phase as needing re-run
+When the tiebreaker renders a verdict after escalation, map its output:
+- Tiebreaker **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`
+- Tiebreaker **MODIFY** → Treat as **CONDITIONAL_ACCEPT** — set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`, log `required_changes` as unresolved conditions
+- Tiebreaker **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`, mark phase as needing re-run
 
 On consensus, update the cache:
 ```bash
@@ -503,15 +503,15 @@ Update `meta.json` after each round — increment `rounds`, update `status`.
 
 If max_rounds reached without consensus:
 - Set status to `escalated`
-- **Precedent check (M6)**: Before spawning the orchestrator, scan `.ratchet/escalations/` for existing rulings with the same pair and a similar dispute pattern. If 3+ rulings exist in the same direction (e.g., 3+ ACCEPTs for the same pair on the same dispute type):
+- **Precedent check (M6)**: Before spawning the tiebreaker, scan `.ratchet/escalations/` for existing rulings with the same pair and a similar dispute pattern. If 3+ rulings exist in the same direction (e.g., 3+ ACCEPTs for the same pair on the same dispute type):
   - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
   - Options: `"Apply settled pattern (Recommended)"`, `"Escalate anyway"`, `"Escalate to human"`
-  - If "Apply settled pattern": write verdict matching the settled direction, skip orchestrator
+  - If "Apply settled pattern": write verdict matching the settled direction, skip tiebreaker
 - Read `escalation` policy from `workflow.yaml`:
-  - `orchestrator`: Spawn orchestrator agent with full debate transcript → write verdict
+  - `tiebreaker`: Spawn tiebreaker agent with full debate transcript → write verdict
   - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
-  - `both`: Spawn orchestrator first, then present recommendation to human via `/ratchet:verdict`
-- **Store ruling**: After any orchestrator verdict, store the ruling in `.ratchet/escalations/<debate-id>.json`:
+  - `both`: Spawn tiebreaker first, then present recommendation to human via `/ratchet:verdict`
+- **Store ruling**: After any tiebreaker verdict, store the ruling in `.ratchet/escalations/<debate-id>.json`:
   ```json
   {
     "debate_id": "<id>",

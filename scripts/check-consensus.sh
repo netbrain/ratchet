@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit gate: verify all active debates have reached a terminal state.
-# Terminal states: "consensus" (pair agreement) or "resolved" (human/orchestrator verdict).
+# Terminal states: "consensus" (pair agreement) or "resolved" (human/tiebreaker verdict).
 # Blocks commit if any debate is "escalated" (no verdict) or "initiated" (in progress).
 # Non-invasive: allows commit if no .ratchet/ directory or no debates exist.
 

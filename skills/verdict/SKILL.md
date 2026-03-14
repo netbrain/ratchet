@@ -5,7 +5,7 @@ description: Human-in-the-loop — cast the deciding vote on an escalated debate
 
 # /ratchet:verdict — Human Decides
 
-Cast a human verdict on an escalated debate, overriding or confirming the orchestrator's recommendation.
+Cast a human verdict on an escalated debate, overriding or confirming the tiebreaker's recommendation.
 
 ## Usage
 ```
@@ -17,7 +17,7 @@ Cast a human verdict on an escalated debate, overriding or confirming the orches
 
 ### Step 1: Load Debate
 
-Read `.ratchet/debates/<id>/meta.json`. Verify status is `escalated` or has an orchestrator verdict pending human review.
+Read `.ratchet/debates/<id>/meta.json`. Verify status is `escalated` or has an tiebreaker verdict pending human review.
 
 If no ID provided, scan all `.ratchet/debates/*/meta.json` for debates with status `escalated`.
 
@@ -32,7 +32,7 @@ If escalated debates exist, use `AskUserQuestion` to let the user pick:
 
 ### Step 2: Present Summary
 
-Show a concise summary of the debate (files, round count, key arguments, orchestrator recommendation if any) in the question text, then use `AskUserQuestion`:
+Show a concise summary of the debate (files, round count, key arguments, tiebreaker recommendation if any) in the question text, then use `AskUserQuestion`:
 
 - Question: "[summary text]. What's your verdict?"
 - Options: `"Accept"`, `"Reject"`, `"Modify"`

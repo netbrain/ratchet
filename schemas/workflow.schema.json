@@ -21,7 +21,7 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["human", "orchestrator", "both"],
+      "enum": ["human", "tiebreaker", "both"],
       "default": "human",
       "description": "Escalation policy when max_rounds reached without consensus"
     },

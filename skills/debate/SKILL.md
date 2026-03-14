@@ -53,8 +53,8 @@ Started: [timestamp]
 
 [If verdict exists:]
 --- Verdict ---
-Decision: [ACCEPT/CONDITIONAL_ACCEPT/REJECT] (or [accept/modify/reject] for human/orchestrator verdicts)
-Decided by: [consensus/orchestrator/human]
+Decision: [ACCEPT/CONDITIONAL_ACCEPT/REJECT] (or [accept/modify/reject] for human/tiebreaker verdicts)
+Decided by: [consensus/tiebreaker/human]
 Reasoning: [...]
 ```
 

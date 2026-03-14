@@ -30,7 +30,7 @@ Read all available signals:
 - `.ratchet/scores/scores.jsonl` — debate metrics per pair
 - `.ratchet/reviews/` — performance reviews from debates
 - `.ratchet/retros/*.json` — retrospective findings with severity and recurrence
-- `.ratchet/escalations/*.json` — orchestrator rulings and dispute patterns
+- `.ratchet/escalations/*.json` — tiebreaker rulings and dispute patterns
 - `.ratchet/debates/*/meta.json` — debate outcomes, fast-path flags, round counts
 - `.ratchet/workflow.yaml` — current configuration (pairs, guards, components)
 - `.ratchet/plan.yaml` — milestone progress and regression counts

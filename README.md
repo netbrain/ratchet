@@ -200,7 +200,7 @@ max_regressions:                            # or per-phase limits
 
 **Cross-cutting scope** — Changed files are matched against all component scopes, not just the first match. Multi-component changes automatically trigger pairs from all relevant components. Pairs can use `scope: "auto"` to inherit their parent component's scope.
 
-**Orchestrator learning** — Escalation rulings are stored in `.ratchet/escalations/`. When 3+ rulings exist in the same direction for the same pair and dispute type, the settled pattern is offered as a shortcut before spawning the orchestrator.
+**Tiebreaker learning** — Escalation rulings are stored in `.ratchet/escalations/`. When 3+ rulings exist in the same direction for the same pair and dispute type, the settled pattern is offered as a shortcut before spawning the tiebreaker.
 
 **Workflow health checks** — `/ratchet:advise` spawns the analyst for an on-demand assessment: pair effectiveness rankings, scope coverage gaps, guard recommendations, and workflow preset suggestions. Also runs automatically after each milestone completion.
 
@@ -262,7 +262,7 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
 ### Key Agents
 
 - **Analyst** — scans codebase, interviews human, debates approach internally, generates tailored pairs and workflow config
-- **Orchestrator** — impartial tiebreaker for escalated debates
+- **Tiebreaker** — impartial arbiter for escalated debates
 - **Generative** (per pair) — builds/reviews code, has full tool access
 - **Adversarial** (per pair) — critiques code, runs validation commands, cannot edit source
 
@@ -273,7 +273,7 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
 ```yaml
 version: 2
 max_rounds: 3
-escalation: human       # human | orchestrator | both
+escalation: human       # human | tiebreaker | both
 max_regressions: 2      # integer (all phases) or object (per-phase)
 pr_scope: debate        # debate | phase | milestone | issue
 
@@ -321,7 +321,7 @@ guards:
 ├── guards/              # Guard execution results
 ├── reviews/             # Agent performance reviews
 ├── retros/              # Retrospective findings with severity and recurrence  (.gitignore)
-├── escalations/         # Orchestrator rulings for precedent lookup            (.gitignore)
+├── escalations/         # Tiebreaker rulings for precedent lookup              (.gitignore)
 ├── guards/              # Guard execution results                              (.gitignore)
 ├── reports/             # Health check reports from /ratchet:advise            (.gitignore)
 ├── progress/            # Local progress tracking (markdown adapter)           (.gitignore)

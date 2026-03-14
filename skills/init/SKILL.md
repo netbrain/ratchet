@@ -202,7 +202,7 @@ For each approved pair, write:
 ```yaml
 version: 2
 max_rounds: 3
-escalation: human  # human | orchestrator | both
+escalation: human  # human | tiebreaker | both
 
 progress:
   adapter: none  # none | markdown | github-issues | linear | jira
