@@ -275,6 +275,8 @@ Generate debate ID as: `<pair-name>-<timestamp>` (e.g., `api-contracts-20260312T
 
 Resolve `max_rounds` for each pair: use the pair-level `max_rounds` if set in workflow.yaml, otherwise use the global `max_rounds`.
 
+If the current milestone has an `issues` array, determine which issue this pair belongs to by matching the pair name against each issue's `pairs` list. If matched, record the issue ref in `meta.json` and append this debate ID to the issue's `debates` array in `plan.yaml`.
+
 Write initial `meta.json`:
 ```json
 {
@@ -282,6 +284,7 @@ Write initial `meta.json`:
   "pair": "<pair-name>",
   "phase": "<current phase>",
   "milestone": "<milestone id if epic mode, null otherwise>",
+  "issue": "<issue ref if matched, null otherwise>",
   "files": ["list", "of", "matched", "files"],
   "status": "initiated",
   "rounds": 0,
@@ -292,6 +295,8 @@ Write initial `meta.json`:
   "fast_path": false
 }
 ```
+
+After a debate reaches consensus, update the issue's `files` array in `plan.yaml` with any files created or modified during the debate. This builds up the per-issue file list needed for `pr_scope: issue`.
 
 ### Step 6b: Static Analysis Pre-Gate
 
@@ -608,7 +613,7 @@ Work is packaged based on `pr_scope` from `workflow.yaml` (default: `debate`). T
 - `pr_scope: debate` — after each debate reaches consensus (Step 7, after verdict)
 - `pr_scope: phase` — after all debates in a phase complete and guards pass (Step 8c)
 - `pr_scope: milestone` — after all phases complete (milestone done)
-- `pr_scope: issue` — one PR per progress tracking issue (requires a progress adapter). If a milestone maps to a single issue, the PR covers the full milestone. If the milestone is large (more than 3 phases with substantive changes), split into per-phase PRs instead and link them all to the issue. Present: "This issue spans [N] phases with significant changes — splitting into [N] PRs linked to [issue ref]."
+- `pr_scope: issue` — one PR per individual issue tracked in the milestone's `issues` array. A milestone with 4 issues produces 4 PRs. Each PR contains exactly the files recorded in that issue's `files` list in `plan.yaml` (populated during debates via the `issue` field in `meta.json`). The PR is created when all debates for that issue reach consensus. If an issue's changes are too large for a single PR (more than 3 phases with substantive file changes), split into per-phase PRs and link them all to the issue.
 
 **Auto-detection** (when `pr_scope` is not explicitly set):
 1. If a progress adapter is configured (`github-issues`, `linear`, `jira`) → default to `issue`
@@ -626,7 +631,7 @@ When the boundary is reached, use `AskUserQuestion`:
   - For `debate`: "Debate [pair-name] reached consensus in [phase] phase."
   - For `phase`: "Phase [name] complete for [milestone]. [N] pairs, all consensus."
   - For `milestone`: "Milestone '[name]' complete. All phases passed, all guards green."
-  - For `issue`: "Issue [ref] complete ([milestone name]). All phases passed." (or per-phase if split)
+  - For `issue`: "Issue [ref]: [title] — all debates resolved. [N] files changed."
 - Options:
   - `"Commit locally (Recommended)"` — create a local git commit with a summary
   - `"Create a pull request"` — commit, create branch if needed, push branch, open PR
@@ -638,7 +643,7 @@ When the boundary is reached, use `AskUserQuestion`:
   - `debate`: pair name, phase, and verdict summary
   - `phase`: phase name, pairs involved, and outcome
   - `milestone`: milestone name, description, and debate outcomes
-  - `issue`: issue reference, milestone name, and summary
+  - `issue`: issue reference, title, and summary of changes
 - Create the commit — do NOT push
 
 **If "Create a pull request":**
@@ -650,8 +655,9 @@ When the boundary is reached, use `AskUserQuestion`:
   - `issue`: `ratchet/<issue-ref>` (or `ratchet/<issue-ref>/<phase>` if split)
 - Push the branch to origin — this is the ONE case where pushing is allowed, because the user explicitly chose "Create a pull request"
 - Create the PR using `gh pr create` with:
-  - Title scoped to the boundary (pair name, phase name, or milestone name)
+  - Title scoped to the boundary (pair name, phase name, milestone name, or issue title)
   - Body: summary of what was done, debate outcomes, guard results
+  - For `issue` scope: include `Closes [issue ref]` in the body so the issue is auto-closed on merge
   - Link to progress adapter item if one exists
 
 After PR is created, use `AskUserQuestion`:

@@ -210,7 +210,7 @@ epic:
       description: "what this milestone delivers"
       pairs: [pair-name-1, pair-name-2]
       status: pending        # pending | in_progress | done
-      phase_status:           # v2: per-phase tracking
+      phase_status:           # per-phase tracking
         plan: pending
         test: pending
         build: pending
@@ -218,6 +218,13 @@ epic:
         harden: pending
       done_when: "concrete acceptance criteria"
       progress_ref: null     # set by progress adapter when milestone starts
+      issues:                # optional — per-issue tracking within milestone
+        - ref: "#123"
+          title: "issue title"
+          pairs: [pair-name-1]
+          files: []           # populated during debates
+          debates: []         # populated during debates
+          status: pending
   current_focus: null
 ```
 

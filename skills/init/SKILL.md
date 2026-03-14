@@ -176,8 +176,19 @@ epic:
         harden: pending
       done_when: "<concrete acceptance criteria>"
       progress_ref: null     # set by progress adapter when milestone starts
+      issues:                # optional — tracks individual issues within this milestone
+        - ref: "<issue reference, e.g. #480>"
+          title: "<issue title>"
+          pairs: [<pairs relevant to this issue>]
+          files: []           # populated during debates — files changed for this issue
+          debates: []         # populated during debates — debate IDs for this issue
+          status: pending     # pending | in_progress | done
   current_focus: null
 ```
+
+When a milestone has an `issues` array, each issue tracks its own subset of pairs, changed files, and debate IDs. This enables `pr_scope: issue` to produce one PR per issue with exactly the right files.
+
+If a progress adapter is configured, issues are populated during init by querying the tracker. For `github-issues`, the analyst can import existing issues that match the milestone's scope. Issues can also be added manually.
 
 ### Step 8: Generate
 
