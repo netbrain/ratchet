@@ -20,7 +20,8 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 /ratchet:run --all-files    # Run all pairs against all files in scope
 /ratchet:run --no-cache     # Force re-debate even if files haven't changed
 /ratchet:run --dry-run      # Preview what would run without executing anything
-/ratchet:run --unsupervised # Run the full plan end-to-end without human intervention
+/ratchet:run --unsupervised           # Run the full plan end-to-end without human intervention
+/ratchet:run --unsupervised --auto-pr # Same, but auto-create PRs at milestone boundaries
 ```
 
 ## Unsupervised Mode
@@ -38,7 +39,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 7 (precedent)**: Auto-select "Apply settled pattern" when available.
 - **Step 8b (post-debate guards)**: If blocking guard fails → auto-select "Fix and re-run" (2 attempts, then halt).
 - **Step 8c (advance)**: Auto-advance to next phase. No user confirmation needed (this already happens for all-fast-path phases; unsupervised extends it to all phases).
-- **Step 8d (commit/PR)**: Auto-select "Commit locally". Never auto-create PRs in unsupervised mode — too visible an action for unattended operation.
+- **Step 8d (commit/PR)**: Auto-select "Commit locally" by default. If `--auto-pr` is also set, auto-select "Create a pull request" instead — the human pre-approved this by passing the flag.
 - **Step 8e (regression)**: If within budget, auto-regress. If budget exhausted, **halt**.
 - **Step 8f (analyst assessment)**: Auto-select "Note for later" — don't halt for advisory feedback.
 - **Step 11 (next focus)**: Do not present options. Instead, use the **self-continuation mechanism** (see below).
@@ -82,6 +83,7 @@ Unsupervised run [completed|paused]:
 
 ### Combining with Other Flags
 
+- `--unsupervised --auto-pr`: Auto-create PRs at milestone boundaries (human pre-approves by passing this flag)
 - `--unsupervised --no-cache`: Force re-debate all files, unsupervised
 - `--unsupervised --all-files`: Run all pairs against all files, unsupervised
 - `--unsupervised --dry-run`: Dry-run takes precedence (preview only, no execution)

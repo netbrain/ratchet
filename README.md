@@ -87,7 +87,8 @@ Preview what would run without executing anything:
 Run the full plan end-to-end without human intervention (halts on human escalation or unrecoverable failures):
 
 ```
-/ratchet:run --unsupervised
+/ratchet:run --unsupervised             # auto-commits locally
+/ratchet:run --unsupervised --auto-pr   # auto-creates PRs at milestone boundaries
 ```
 
 ### Existing project
