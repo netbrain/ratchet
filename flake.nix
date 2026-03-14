@@ -25,7 +25,7 @@
 
             mkdir -p $out/bin
             makeWrapper $out/share/ratchet/install.sh $out/bin/ratchet-install \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.python3 pkgs.git pkgs.coreutils pkgs.gnused ]}
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.gnused ]}
           '';
         };
       in

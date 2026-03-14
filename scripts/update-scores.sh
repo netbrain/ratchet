@@ -4,7 +4,18 @@
 
 set -euo pipefail
 
-command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+# JSON parsing uses grep/sed for simple key lookups — no external deps (jq, python3, node).
+# CAVEAT: If JSON structures become nested or complex, migrate to jq or similar.
+
+# Extract a top-level string value from a JSON file: json_get <file> <key>
+json_get() {
+    sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
+
+# Extract a top-level numeric value from a JSON file: json_get_num <file> <key>
+json_get_num() {
+    sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$1" | head -1
+}
 
 RATCHET_DIR=".ratchet"
 SCORES_FILE="$RATCHET_DIR/scores/scores.jsonl"
@@ -25,59 +36,54 @@ fi
 # Ensure scores directory exists
 mkdir -p "$(dirname "$SCORES_FILE")"
 
-# Extract fields and append score
-python3 -c "
-import json, sys
-from datetime import datetime, timezone
-
-try:
-    with open(sys.argv[1]) as f:
-        meta = json.load(f)
-except json.JSONDecodeError as e:
-    print(f'Error: Malformed JSON in {sys.argv[1]}: {e}', file=sys.stderr)
-    sys.exit(1)
+# Extract fields from meta.json
+meta_id=$(json_get "$META_FILE" "id")
+meta_pair=$(json_get "$META_FILE" "pair")
+meta_milestone=$(json_get "$META_FILE" "milestone")
+meta_rounds=$(json_get_num "$META_FILE" "rounds")
+meta_status=$(json_get "$META_FILE" "status")
+meta_fast_path=$(sed -n 's/.*"fast_path"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$META_FILE" | head -1)
 
 # Validate required fields
-for key in ('id', 'pair', 'rounds'):
-    if key not in meta:
-        print(f'Error: Missing required field \"{key}\" in {sys.argv[1]}', file=sys.stderr)
-        sys.exit(1)
+if [ -z "$meta_id" ] || [ -z "$meta_pair" ] || [ -z "$meta_rounds" ]; then
+    echo "Error: Missing required fields (id, pair, rounds) in $META_FILE" >&2
+    exit 1
+fi
 
 # Count issues from adversarial round files
-import glob, os, re
-rounds_dir = os.path.join(os.path.dirname(sys.argv[1]), 'rounds')
-issues_found = 0
-issues_resolved = 0
+rounds_dir="$RATCHET_DIR/debates/$DEBATE_ID/rounds"
+issues_found=0
 
-for f in sorted(glob.glob(f'{rounds_dir}/round-*-adversarial.md')):
-    content = open(f).read()
-    # Count findings by looking for severity markers
-    issues_found += len(re.findall(r'\"severity\":', content))
+if [ -d "$rounds_dir" ]; then
+    for f in "$rounds_dir"/round-*-adversarial.md; do
+        [ -f "$f" ] || continue
+        count=$(grep -c '"severity":' "$f" 2>/dev/null || true)
+        issues_found=$((issues_found + count))
+    done
+fi
 
-# If consensus or accept verdict, assume all issues resolved
-verdict = meta.get('verdict') or {}
-decision = verdict.get('decision', '')
-if decision in ('accept', '') and meta.get('status') in ('consensus', 'resolved'):
-    issues_resolved = issues_found
-elif decision in ('modify', 'conditional_accept'):
-    # Partial resolution
-    issues_resolved = max(0, issues_found - len(verdict.get('required_changes', [])))
-else:
-    issues_resolved = 0
+# Determine issues resolved based on status
+if [ "$meta_status" = "consensus" ] || [ "$meta_status" = "resolved" ]; then
+    issues_resolved=$issues_found
+else
+    issues_resolved=0
+fi
 
-score = {
-    'timestamp': datetime.now(timezone.utc).isoformat(),
-    'debate_id': meta['id'],
-    'pair': meta['pair'],
-    'milestone': meta.get('milestone', None),
-    'rounds_to_consensus': meta['rounds'],
-    'escalated': meta.get('status') not in ('consensus',),
-    'issues_found': issues_found,
-    'issues_resolved': issues_resolved
-}
+# Determine escalated flag
+if [ "$meta_status" = "consensus" ]; then escalated="false"; else escalated="true"; fi
 
-with open(sys.argv[2], 'a') as f:
-    f.write(json.dumps(score) + '\n')
+# Handle null milestone
+if [ -n "$meta_milestone" ]; then
+    milestone_json="\"$meta_milestone\""
+else
+    milestone_json="null"
+fi
 
-print(f'Score recorded for {meta[\"id\"]}: {issues_found} found, {issues_resolved} resolved')
-" "$META_FILE" "$SCORES_FILE"
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
+
+# Append score as JSONL
+printf '{"timestamp":"%s","debate_id":"%s","pair":"%s","milestone":%s,"rounds_to_consensus":%s,"escalated":%s,"issues_found":%s,"issues_resolved":%s,"fast_path":%s}\n' \
+    "$timestamp" "$meta_id" "$meta_pair" "$milestone_json" "$meta_rounds" "$escalated" "$issues_found" "$issues_resolved" "${meta_fast_path:-false}" \
+    >> "$SCORES_FILE"
+
+echo "Score recorded for $meta_id: $issues_found found, $issues_resolved resolved"

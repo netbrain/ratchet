@@ -4,7 +4,8 @@
 # Scope-glob supports comma-separated patterns (e.g., "scripts/*.sh,install.sh")
 set -euo pipefail
 
-command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+# JSON parsing uses grep/sed for simple key lookups — no external deps (jq, python3, node).
+# CAVEAT: If JSON structures become nested or complex, migrate to jq or similar.
 
 # Cross-platform sha256: macOS uses shasum, Linux uses sha256sum
 if command -v sha256sum >/dev/null 2>&1; then
@@ -47,30 +48,34 @@ current_hash=$(echo "$matched_files" | while IFS= read -r f; do cat "$f"; done 2
 mkdir -p "$(dirname "$CACHE_FILE")"
 
 # Update cache
-python3 -c "
-import json, os, sys
-from datetime import datetime, timezone
+# Strategy: build the new entry, then merge into existing cache file.
+# We remove any existing block for this pair and append the new one.
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
+DEBATE_REF="${DEBATE_ID:-null}"
+if [ "$DEBATE_REF" != "null" ]; then
+    DEBATE_REF="\"$DEBATE_REF\""
+fi
 
-cache_file = sys.argv[1]
-pair_name = sys.argv[2]
-file_hash = sys.argv[3]
-debate_id = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+NEW_ENTRY=$(cat <<ENTRY_EOF
+  "$PAIR_NAME": {
+    "hash": "$current_hash",
+    "debate_id": $DEBATE_REF,
+    "timestamp": "$TIMESTAMP"
+  }
+ENTRY_EOF
+)
 
-cache = {}
-if os.path.isfile(cache_file):
-    try:
-        with open(cache_file) as f:
-            cache = json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        cache = {}
-
-cache[pair_name] = {
-    'hash': file_hash,
-    'debate_id': debate_id,
-    'timestamp': datetime.now(timezone.utc).isoformat()
-}
-
-with open(cache_file, 'w') as f:
-    json.dump(cache, f, indent=2)
-    f.write('\n')
-" "$CACHE_FILE" "$PAIR_NAME" "$current_hash" "$DEBATE_ID"
+if [ -f "$CACHE_FILE" ] && [ -s "$CACHE_FILE" ]; then
+    # Remove existing entry for this pair (from key line to next key or closing brace)
+    # Then remove the outer braces, trim, and rebuild
+    existing=$(sed '1d;$d' "$CACHE_FILE" | sed -n '/^  "'"$PAIR_NAME"'"/,/^  }/!p' | sed '/^$/d')
+    # Remove trailing comma from existing if present
+    existing=$(echo "$existing" | sed '$ s/,$//')
+    if [ -n "$existing" ]; then
+        printf '{\n%s,\n%s\n}\n' "$existing" "$NEW_ENTRY" > "$CACHE_FILE"
+    else
+        printf '{\n%s\n}\n' "$NEW_ENTRY" > "$CACHE_FILE"
+    fi
+else
+    printf '{\n%s\n}\n' "$NEW_ENTRY" > "$CACHE_FILE"
+fi

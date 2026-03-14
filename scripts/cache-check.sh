@@ -5,7 +5,8 @@
 # Exit 0 = unchanged (skip debate), Exit 1 = changed (debate needed)
 set -euo pipefail
 
-command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+# JSON parsing uses grep/sed for simple key lookups — no external deps (jq, python3, node).
+# CAVEAT: If JSON structures become nested or complex, migrate to jq or similar.
 
 # Cross-platform sha256: macOS uses shasum, Linux uses sha256sum
 if command -v sha256sum >/dev/null 2>&1; then
@@ -48,15 +49,9 @@ fi
 current_hash=$(echo "$matched_files" | while IFS= read -r f; do cat "$f"; done 2>/dev/null | sha256)
 
 # Compare against cached hash
-cached_hash=$(python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        cache = json.load(f)
-    print(cache.get(sys.argv[2], {}).get('hash', ''))
-except (json.JSONDecodeError, FileNotFoundError):
-    print('')
-" "$CACHE_FILE" "$PAIR_NAME" 2>/dev/null)
+# cache.json structure: { "pair-name": { "hash": "...", ... }, ... }
+# We look for the pair name key, then extract the hash value from within its block.
+cached_hash=$(sed -n '/"'"$PAIR_NAME"'"/,/}/s/.*"hash"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CACHE_FILE" 2>/dev/null | head -1)
 
 if [ "$current_hash" = "$cached_hash" ]; then
     exit 0

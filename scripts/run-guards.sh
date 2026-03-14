@@ -8,7 +8,8 @@
 
 set -euo pipefail
 
-command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required but not found" >&2; exit 1; }
+# JSON output uses printf — no external deps (jq, python3, node).
+# CAVEAT: If JSON structures become nested or complex, migrate to jq or similar.
 
 MILESTONE_ID="${1:?Usage: run-guards.sh <milestone-id> <phase> <guard-name> <command> <blocking>}"
 PHASE="${2:?Usage: run-guards.sh <milestone-id> <phase> <guard-name> <command> <blocking>}"
@@ -28,24 +29,22 @@ exit_code=0
 output=$(eval "$GUARD_COMMAND" 2>&1) || exit_code=$?
 
 # Write result JSON
-python3 -c "
-import json, sys
-from datetime import datetime, timezone
+# Escape special characters in output for JSON embedding
+escaped_output=$(printf '%s' "$output" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
+if [ "$BLOCKING" = "true" ]; then blocking_json="true"; else blocking_json="false"; fi
 
-result = {
-    'guard': sys.argv[1],
-    'phase': sys.argv[2],
-    'command': sys.argv[3],
-    'exit_code': int(sys.argv[4]),
-    'output': sys.argv[5],
-    'blocking': sys.argv[6] == 'true',
-    'timestamp': datetime.now(timezone.utc).isoformat()
+cat > "$GUARDS_DIR/$GUARD_NAME.json" <<JSON_EOF
+{
+  "guard": "$GUARD_NAME",
+  "phase": "$PHASE",
+  "command": "$GUARD_COMMAND",
+  "exit_code": $exit_code,
+  "output": "$escaped_output",
+  "blocking": $blocking_json,
+  "timestamp": "$timestamp"
 }
-
-with open(sys.argv[7], 'w') as f:
-    json.dump(result, f, indent=2)
-    f.write('\n')
-" "$GUARD_NAME" "$PHASE" "$GUARD_COMMAND" "$exit_code" "$output" "$BLOCKING" "$GUARDS_DIR/$GUARD_NAME.json"
+JSON_EOF
 
 if [ "$exit_code" -ne 0 ]; then
     if [ "$BLOCKING" = "true" ]; then
