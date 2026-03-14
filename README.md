@@ -92,16 +92,6 @@ Preview what would run without executing anything:
 
 Same flow, but Ratchet scans your codebase first — it reads your manifests, tests, CI config, and directory structure before asking you anything. The interview focuses on what you want to *improve*, not what already exists.
 
-### Upgrading from v1
-
-If you have an existing `.ratchet/config.yaml` from v1:
-
-```
-/ratchet:migrate
-```
-
-This converts your v1 config to v2 `workflow.yaml` with components, phases, and guards inferred from your existing setup.
-
 ## Commands
 
 | Command | Description |
@@ -118,7 +108,6 @@ This converts your v1 config to v2 `workflow.yaml` with components, phases, and 
 | `/ratchet:gen-tests` | Generate tests from debate findings |
 | `/ratchet:tighten [pair]` | Sharpen agents from debate lessons and retro findings |
 | `/ratchet:advise` | On-demand workflow health check — pair effectiveness, scope gaps, guard recommendations |
-| `/ratchet:migrate` | Upgrade v1 config.yaml to v2 workflow.yaml |
 
 ## Workflow
 

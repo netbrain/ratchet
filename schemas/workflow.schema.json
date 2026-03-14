@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ratchet.dev/schemas/workflow.schema.json",
   "title": "Ratchet Workflow Configuration",
-  "description": "v2 workflow configuration — extends v1 config with components, phases, guards, and progress tracking",
+  "description": "Ratchet workflow configuration — components, phases, guards, and progress tracking",
   "type": "object",
   "required": ["version", "max_rounds", "escalation", "pairs"],
   "additionalProperties": false,
@@ -131,7 +131,7 @@
         "phase": {
           "$ref": "#/$defs/phase",
           "default": "review",
-          "description": "Phase this pair runs in — defaults to 'review' for v1 backward compat"
+          "description": "Phase this pair runs in — defaults to 'review'"
         },
         "scope": {
           "type": "string",

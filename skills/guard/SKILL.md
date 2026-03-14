@@ -20,10 +20,10 @@ Guards are deterministic shell commands (lint, test, security scan, benchmarks) 
 - `.ratchet/` must exist
 - `.ratchet/workflow.yaml` must exist (guards are a v2 feature)
 
-If `workflow.yaml` does not exist but `config.yaml` does, inform the user:
-> "Guards require workflow.yaml (v2). Run /ratchet:migrate to upgrade from v1."
+If `workflow.yaml` does not exist, inform the user:
+> "No workflow.yaml found. Run /ratchet:init to set up."
 
-Then use `AskUserQuestion` with options: `"Migrate now (/ratchet:migrate) (Recommended)"`, `"Cancel"`.
+Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
 
 ## Execution Steps
 

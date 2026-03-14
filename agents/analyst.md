@@ -186,7 +186,7 @@ pairs:
 guards: []
 ```
 
-When reading existing config, check for `workflow.yaml` first, fall back to `config.yaml` (v1). v1 pairs have no component or phase — treat them as `phase: review`.
+Read config from `workflow.yaml` (v2 format required).
 
 ## Epic / Roadmap Generation
 

@@ -26,7 +26,7 @@ Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommend
 
 ### Step 1: Read State
 
-Read `.ratchet/plan.yaml` and the workflow config (`.ratchet/workflow.yaml` or `.ratchet/config.yaml`).
+Read `.ratchet/plan.yaml` and `.ratchet/workflow.yaml`.
 
 Also scan `.ratchet/debates/*/meta.json` to count active/resolved debates per milestone.
 
@@ -59,8 +59,6 @@ Adapt the phase display based on the component's workflow preset:
 - `tdd`: show all 5 phases
 - `traditional`: show plan, build, review, harden (skip test)
 - `review-only`: show only review
-
-For v1 configs (no phases), show a simplified view without phase tracking.
 
 ### Step 3: Detailed Milestone View
 

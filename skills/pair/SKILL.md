@@ -17,7 +17,7 @@ If `[name]` is provided, use it as the pair name. Otherwise, the analyst will su
 ## Prerequisites
 - `.ratchet/` must exist (run `/ratchet:init` first)
 - `.ratchet/project.yaml` must exist
-- `.ratchet/workflow.yaml` or `.ratchet/config.yaml` must exist
+- `.ratchet/workflow.yaml` must exist
 
 If prerequisites are not met, inform the user and suggest `/ratchet:init`.
 
@@ -25,7 +25,7 @@ If prerequisites are not met, inform the user and suggest `/ratchet:init`.
 
 ### Step 1: Load Project Context
 
-Read `.ratchet/project.yaml` and the workflow config (`.ratchet/workflow.yaml` or fall back to `.ratchet/config.yaml`) to understand:
+Read `.ratchet/project.yaml` and `.ratchet/workflow.yaml` to understand:
 - Current tech stack and architecture
 - Existing pairs (to avoid overlap)
 - Testing capabilities
@@ -38,7 +38,7 @@ Spawn the **analyst** agent with the following task:
 A new agent pair is being added to this Ratchet-configured project.
 
 Project profile: [contents of .ratchet/project.yaml]
-Existing pairs: [list from workflow.yaml or config.yaml]
+Existing pairs: [list from workflow.yaml]
 Requested pair name: [name if provided, otherwise "to be determined"]
 
 Your task:
@@ -52,7 +52,7 @@ Your task:
    - .ratchet/pairs/<name>/adversarial.md — critic agent with testing commands baked in
 5. Present the pair definition to the human for approval using `AskUserQuestion`
    - Options: "Approve (Recommended)", "Modify scope", "Modify agents", "Start over"
-6. On approval, write the agent files and update the workflow config (.ratchet/workflow.yaml or .ratchet/config.yaml) to register the new pair. For v2, include component and phase fields.
+6. On approval, write the agent files and update `.ratchet/workflow.yaml` to register the new pair with component and phase fields.
 
 Follow the same agent generation conventions as init:
 - Generative: tools: Read, Grep, Glob, Bash, Write, Edit

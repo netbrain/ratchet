@@ -31,7 +31,7 @@ If `.ratchet/` does not exist, inform the user:
 
 Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
 
-If no enabled pairs exist in the workflow config (`workflow.yaml` or `config.yaml`), inform the user:
+If no enabled pairs exist in the workflow config (`workflow.yaml`), inform the user:
 > "No active pairs found. Add a pair with /ratchet:pair."
 
 Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommended)"`, `"Cancel"`.
@@ -40,10 +40,7 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 
 ### Step 1: Read Context
 
-Read `.ratchet/plan.yaml` (if it exists), `.ratchet/project.yaml`, and the workflow config:
-- Read `.ratchet/workflow.yaml` if it exists (v2 format)
-- Otherwise fall back to `.ratchet/config.yaml` (v1 format)
-- When reading v1 config, treat all pairs as having `phase: review` and no components/guards
+Read `.ratchet/plan.yaml` (if it exists), `.ratchet/project.yaml`, and `.ratchet/workflow.yaml`.
 
 Build a picture of:
 - Which milestones are **completed** (status: done)
@@ -125,10 +122,6 @@ Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. 
    - `review-only`: review only (skip plan, test, build, harden)
 3. Match pairs assigned to the current phase (from the pair's `phase` field)
 4. Skip disabled pairs (`enabled: false`)
-
-**For v1 (config.yaml, no phases):**
-- All pairs are treated as `phase: review`
-- No phase gating — run all matched pairs
 
 **Scope resolution (all modes):**
 - If a pair has `scope: "auto"`, resolve it to the parent component's scope glob before matching files.
@@ -441,7 +434,7 @@ If max_rounds reached without consensus:
   - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
   - Options: `"Apply settled pattern (Recommended)"`, `"Escalate anyway"`, `"Escalate to human"`
   - If "Apply settled pattern": write verdict matching the settled direction, skip orchestrator
-- Read `escalation` policy from the workflow config (`workflow.yaml` or `config.yaml`):
+- Read `escalation` policy from `workflow.yaml`:
   - `orchestrator`: Spawn orchestrator agent with full debate transcript → write verdict
   - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
   - `both`: Spawn orchestrator first, then present recommendation to human via `/ratchet:verdict`
@@ -539,8 +532,6 @@ When an adversarial agent issues a REGRESS verdict targeting an earlier phase:
    - Preserve all debate history (do not delete previous rounds)
    - Present: "Regressing from [current] to [target]. Reason: [reasoning]. Regression [N]/[max]."
    - Return to Step 4 (re-match pairs for the target phase)
-
-**For v1 (no phases):** Skip guard execution. Mark milestone done if all pairs passed.
 
 **8d. Commit or PR (on milestone completion only):**
 
