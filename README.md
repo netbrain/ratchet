@@ -84,6 +84,12 @@ Preview what would run without executing anything:
 /ratchet:run --dry-run
 ```
 
+Run the full plan end-to-end without human intervention (halts on human escalation or unrecoverable failures):
+
+```
+/ratchet:run --unsupervised
+```
+
 ### Existing project
 
 ```

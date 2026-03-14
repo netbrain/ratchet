@@ -15,12 +15,63 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 
 ## Usage
 ```
-/ratchet:run              # Resume from epic — propose next focus or run against changes
-/ratchet:run [pair-name]  # Run a specific pair against its scoped files
-/ratchet:run --all-files  # Run all pairs against all files in scope
-/ratchet:run --no-cache   # Force re-debate even if files haven't changed
-/ratchet:run --dry-run    # Preview what would run without executing anything
+/ratchet:run                # Resume from epic — propose next focus or run against changes
+/ratchet:run [pair-name]    # Run a specific pair against its scoped files
+/ratchet:run --all-files    # Run all pairs against all files in scope
+/ratchet:run --no-cache     # Force re-debate even if files haven't changed
+/ratchet:run --dry-run      # Preview what would run without executing anything
+/ratchet:run --unsupervised # Run the full plan end-to-end without human intervention
 ```
+
+## Unsupervised Mode
+
+When `--unsupervised` is set, the run loop executes the entire plan (all milestones, all phases) without human interaction. The principle is simple: **wherever an `AskUserQuestion` has a "(Recommended)" option, auto-select it.**
+
+### Behavior
+
+- **Step 2 (focus)**: Auto-select "Continue [current phase]" for the current milestone. When a milestone completes, auto-advance to the next.
+- **Step 5b (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
+- **Step 6c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, **halt** and report.
+- **Step 6b (static analysis)**: Auto-select "Fix these before debating". Same 2-attempt retry, then halt.
+- **Step 7 (debates)**: Run normally. Debates are autonomous by nature.
+- **Step 7 (escalation)**: If escalation policy is `orchestrator` or `both`, auto-escalate to orchestrator. If policy is `human`, **halt** — this is the primary stop condition. Present: "Unsupervised run paused: debate [id] requires human escalation."
+- **Step 7 (precedent)**: Auto-select "Apply settled pattern" when available.
+- **Step 8b (post-debate guards)**: If blocking guard fails → auto-select "Fix and re-run" (2 attempts, then halt).
+- **Step 8c (advance)**: Auto-advance to next phase. No user confirmation needed (this already happens for all-fast-path phases; unsupervised extends it to all phases).
+- **Step 8d (commit/PR)**: Auto-select "Commit locally". Never auto-create PRs in unsupervised mode — too visible an action for unattended operation.
+- **Step 8e (regression)**: If within budget, auto-regress. If budget exhausted, **halt**.
+- **Step 8f (analyst assessment)**: Auto-select "Note for later" — don't halt for advisory feedback.
+- **Step 11 (next focus)**: Auto-continue to next phase or milestone.
+- **Milestone re-opening guard (Step 3)**: Never auto-reopen done milestones. **Halt** and report.
+
+### Halt Conditions
+
+Unsupervised mode **halts** (stops the loop and reports to the user) when:
+1. A debate requires human escalation (`escalation: human`)
+2. A blocking guard fails after 2 auto-fix attempts
+3. A static analysis fix fails after 2 attempts
+4. Regression budget is exhausted and no auto-resolution is possible
+5. A done milestone would need re-opening
+6. All milestones are complete (success)
+
+On halt, present a summary:
+```
+Unsupervised run [completed|paused]:
+
+  Milestones completed: [N]/[total]
+  Phases completed: [N]
+  Debates run: [N] (consensus: [N], escalated: [N], fast-path: [N])
+  Guards run: [N] (passed: [N], failed: [N])
+  Commits created: [N]
+
+  [If paused: "Stopped at: [reason]. Resume with /ratchet:run or /ratchet:run --unsupervised"]
+```
+
+### Combining with Other Flags
+
+- `--unsupervised --no-cache`: Force re-debate all files, unsupervised
+- `--unsupervised --all-files`: Run all pairs against all files, unsupervised
+- `--unsupervised --dry-run`: Dry-run takes precedence (preview only, no execution)
 
 ## Prerequisites
 - `.ratchet/` must exist with valid config
