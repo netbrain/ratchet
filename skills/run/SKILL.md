@@ -41,8 +41,21 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 8d (commit/PR)**: Auto-select "Commit locally". Never auto-create PRs in unsupervised mode — too visible an action for unattended operation.
 - **Step 8e (regression)**: If within budget, auto-regress. If budget exhausted, **halt**.
 - **Step 8f (analyst assessment)**: Auto-select "Note for later" — don't halt for advisory feedback.
-- **Step 11 (next focus)**: Auto-continue to next phase or milestone.
+- **Step 11 (next focus)**: Do not present options. Instead, use the **self-continuation mechanism** (see below).
 - **Milestone re-opening guard (Step 3)**: Never auto-reopen done milestones. **Halt** and report.
+
+### Self-Continuation via Agent Tool
+
+The unsupervised loop is driven by `plan.yaml` as a state machine and the Agent tool as the continuation mechanism.
+
+At **Step 11**, if `--unsupervised` is set and no halt condition was triggered:
+1. Write all state to `plan.yaml` (phase_status, current_focus, regressions, etc.)
+2. Spawn a new agent via the Agent tool with the task: `/ratchet:run --unsupervised`
+3. The spawned agent reads `plan.yaml`, finds the next pending phase/milestone, and continues from Step 1
+
+This creates a chain: each agent handles one phase, persists state, and spawns the next. `plan.yaml` is the continuity mechanism — if the session crashes at any point, a manual `/ratchet:run --unsupervised` picks up from the last persisted state.
+
+**Why Agent tool, not a shell loop**: Agents share the conversation context, can read/write project files, and the state machine (`plan.yaml`) handles crash recovery naturally. No external tooling or hook configuration required.
 
 ### Halt Conditions
 
@@ -665,7 +678,9 @@ bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 
 ### Step 11: Propose Next Focus
 
-After reporting results, use `AskUserQuestion` to let the user choose what to do next.
+**If `--unsupervised`**: Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more phases or milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+
+**Otherwise**, use `AskUserQuestion` to let the user choose what to do next.
 
 **If more phases remain in the current milestone:**
 - Summary: `"Phase [name] complete for [milestone]. [N] pairs debated, [N] consensus. Next phase: [name]."`
