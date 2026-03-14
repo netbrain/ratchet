@@ -19,6 +19,7 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 /ratchet:run [pair-name]  # Run a specific pair against its scoped files
 /ratchet:run --all-files  # Run all pairs against all files in scope
 /ratchet:run --no-cache   # Force re-debate even if files haven't changed
+/ratchet:run --dry-run    # Preview what would run without executing anything
 ```
 
 ## Prerequisites
@@ -70,6 +71,7 @@ Epic: [project name] — [completed]/[total] milestones done.
 Current milestone: [name] — [description]
 Phase progress: plan ✓ → test ✓ → build ● → review ○ → harden ○
 (✓ = done, ● = current, ○ = pending)
+[If regressions > 0: "Regressions: [N]/[max_regressions] used"]
 
 What should we focus on?
 ```
@@ -89,7 +91,7 @@ Options:
 git diff --name-only HEAD 2>/dev/null || git diff --name-only
 git diff --name-only --cached
 ```
-Match changed files to pairs by `scope` globs.
+Match changed files to pairs by `scope` globs. For each changed file, match against ALL component scopes — not just the first match. Collect pairs from all matching components for the current phase. If a change spans multiple components, present: "This change spans [components]. Running pairs from all matching components."
 
 #### Mode D: Greenfield (no plan.yaml, no code)
 Use `AskUserQuestion` to ask what to build first.
@@ -128,6 +130,9 @@ Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. 
 - All pairs are treated as `phase: review`
 - No phase gating — run all matched pairs
 
+**Scope resolution (all modes):**
+- If a pair has `scope: "auto"`, resolve it to the parent component's scope glob before matching files.
+
 **For explicit pair / changed files / all-files modes:**
 - Run the specified pairs regardless of phase assignment
 
@@ -144,10 +149,58 @@ bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
 
 Use `--no-cache` flag to skip this check and force re-debate.
 
+### Step 5b: Dry-Run Preview
+
+If `--dry-run` is specified, produce a formatted preview and stop. No agents are spawned, no debates created, no files modified.
+
+Present:
+```
+Dry-Run Preview
+═══════════════
+
+Milestone: [name] — [description]
+Phase: [current phase]
+
+Matched pairs:
+  [pair-name] → [scope] ([N] files)
+  [pair-name] → [scope] ([N] files)
+
+Pre-debate guards:
+  [guard-name] — [command] (blocking: [yes/no])
+
+Post-debate guards:
+  [guard-name] — [command] (blocking: [yes/no])
+
+Phase flow: [phase1] → [phase2] → ... → [phaseN]
+
+[If cross-cutting: "This change spans [components]"]
+```
+
+Then use `AskUserQuestion`:
+- Options: `"Run for real"`, `"Done for now"`
+- If "Run for real": restart from Step 6c without `--dry-run`
+
 After a debate reaches consensus, update the cache:
 ```bash
 bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
 ```
+
+### Step 6c: Pre-Debate Guards
+
+Before creating debates, run guards where `timing: "pre-debate"` for the current phase. Guards without a `timing` field are treated as `post-debate` (backward compatible).
+
+For each pre-debate guard assigned to the current phase:
+```bash
+bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+```
+
+- If a **blocking** pre-debate guard fails:
+  - Use `AskUserQuestion`: "Pre-debate guard '[name]' failed: [summary]. Debates have NOT started yet."
+  - Options: `"Fix and re-run"`, `"Override and proceed to debates"`, `"Cancel — skip this phase"`
+  - If fix or cancel: skip debate creation entirely
+- If an **advisory** pre-debate guard fails:
+  - Log the failure and pass the output as context to the debates
+  - Continue to debate creation
 
 ### Step 6a: Create Debate(s)
 
@@ -161,6 +214,8 @@ For each matched pair, create a debate directory:
 
 Generate debate ID as: `<pair-name>-<timestamp>` (e.g., `api-contracts-20260312T100000`).
 
+Resolve `max_rounds` for each pair: use the pair-level `max_rounds` if set in workflow.yaml, otherwise use the global `max_rounds`.
+
 Write initial `meta.json`:
 ```json
 {
@@ -171,10 +226,11 @@ Write initial `meta.json`:
   "files": ["list", "of", "matched", "files"],
   "status": "initiated",
   "rounds": 0,
-  "max_rounds": "<from workflow config>",
+  "max_rounds": "<resolved: pair-level if set, else global>",
   "started": "<ISO timestamp>",
   "resolved": null,
-  "verdict": null
+  "verdict": null,
+  "fast_path": false
 }
 ```
 
@@ -339,7 +395,16 @@ Generative agent's assessment: [content of round-N-generative.md]
 
 Review the output and the generative agent's assessment.
 Run validation commands as evidence where applicable.
-Produce your findings and verdict: ACCEPT, CONDITIONAL_ACCEPT, or REJECT.
+Produce your findings and verdict:
+- ACCEPT: No remaining concerns — consensus reached
+- CONDITIONAL_ACCEPT: Acceptable if specific minor items are addressed — consensus (items logged)
+- REJECT: Issues must be addressed — next round
+- TRIVIAL_ACCEPT: "This change is trivially correct — [justification]" → fast-path consensus.
+  Use ONLY for mechanical, obviously correct changes with no design implications
+  (typo fix, missing import, version bump). Never for logic, control flow, or architecture.
+- REGRESS: "This needs to return to [target phase] because [reasoning]" → phase regression.
+  Use when current phase reveals a fundamental flaw in an earlier phase's output.
+  Target phase must be earlier than current. Budget: max_regressions per milestone.
 ```
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
@@ -348,7 +413,9 @@ Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 
 Parse the adversarial's output for verdict:
 - **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `"consensus"`, write verdict, update file-hash cache, break loop
+- **TRIVIAL_ACCEPT** → Handle same as ACCEPT, but also set `fast_path: true` in meta.json. This indicates the change was trivially correct and required no meaningful debate.
 - **REJECT** → Continue to next round (or escalate if at max_rounds)
+- **REGRESS** → Parse target phase from verdict. Validate the target phase is earlier than the current phase. Proceed to Step 8e (Phase Regression).
 
 When the orchestrator renders a verdict after escalation, map its output:
 - Orchestrator **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "orchestrator"`
@@ -370,10 +437,28 @@ Update `meta.json` after each round — increment `rounds`, update `status`.
 
 If max_rounds reached without consensus:
 - Set status to `escalated`
+- **Precedent check (M6)**: Before spawning the orchestrator, scan `.ratchet/escalations/` for existing rulings with the same pair and a similar dispute pattern. If 3+ rulings exist in the same direction (e.g., 3+ ACCEPTs for the same pair on the same dispute type):
+  - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
+  - Options: `"Apply settled pattern"`, `"Escalate anyway"`, `"Escalate to human"`
+  - If "Apply settled pattern": write verdict matching the settled direction, skip orchestrator
 - Read `escalation` policy from the workflow config (`workflow.yaml` or `config.yaml`):
   - `orchestrator`: Spawn orchestrator agent with full debate transcript → write verdict
   - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
   - `both`: Spawn orchestrator first, then present recommendation to human via `/ratchet:verdict`
+- **Store ruling**: After any orchestrator verdict, store the ruling in `.ratchet/escalations/<debate-id>.json`:
+  ```json
+  {
+    "debate_id": "<id>",
+    "pair": "<pair-name>",
+    "phase": "<phase>",
+    "timestamp": "<ISO>",
+    "dispute_type": "<categorization>",
+    "adversarial_argument": "<summary>",
+    "generative_argument": "<summary>",
+    "verdict": "accept|reject|modify",
+    "reasoning": "<reasoning>"
+  }
+  ```
 
 ### Step 8: Phase Gate — Run Guards and Advance
 
@@ -383,9 +468,9 @@ After all debates for the current phase resolve:
 - If all pairs reached consensus (ACCEPT or CONDITIONAL_ACCEPT) → proceed to guards
 - If any pair was REJECTED or remains escalated → phase stays `in_progress`, report which pairs need re-running
 
-**8b. Run guards for this phase (v2 only):**
+**8b. Run post-debate guards for this phase (v2 only):**
 
-Read `guards` from `workflow.yaml`. For each guard assigned to the current phase, run the guard script:
+Read `guards` from `workflow.yaml`. Filter to guards where `timing: "post-debate"` or where `timing` is not set (backward compatible — guards without a timing field default to post-debate). For each matching guard assigned to the current phase, run the guard script:
 
 ```bash
 bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
@@ -419,6 +504,7 @@ This stores results in `.ratchet/guards/<milestone-id>/<phase>/<guard-name>.json
 
 If all debates passed and all blocking guards passed (or were overridden):
 - Mark current phase as `done` in `phase_status`
+- **Auto-advance on fast-path**: If ALL debates in the phase had `fast_path: true` (TRIVIAL_ACCEPT), auto-advance without `AskUserQuestion`. Still run post-debate guards. Present: "All pairs fast-pathed. Auto-advancing to [next phase]."
 - Check if there's a next phase (based on the component's workflow preset):
   - If yes: set next phase to `in_progress`
   - If no (all phases done): mark milestone as `status: done`, record completion timestamp
@@ -436,6 +522,23 @@ Update `plan.yaml` with the new `phase_status`.
   bash .claude/ratchet-scripts/progress/<adapter>/close-item.sh "<progress_ref>"
   ```
 - Adapter failures never block — log a warning and continue.
+
+**8e. Phase Regression (on REGRESS verdict):**
+
+When an adversarial agent issues a REGRESS verdict targeting an earlier phase:
+
+1. Read `max_regressions` from workflow config (default: 2). This budget is per-milestone.
+2. Track `regressions` counter in `plan.yaml` on the current milestone (initialize to 0 if absent).
+3. If budget exhausted (`regressions >= max_regressions`):
+   - Use `AskUserQuestion`: "Regression budget exhausted ([N]/[max]). The adversarial wants to regress from [current] to [target] because: [reasoning]."
+   - Options: `"Allow one more regression"`, `"Reject regression — continue current phase"`, `"Escalate to human"`
+4. If within budget (or human allowed):
+   - Increment `regressions` counter in `plan.yaml`
+   - Reset `phase_status` for the target phase and all later phases to `pending`
+   - Set the target phase to `in_progress`
+   - Preserve all debate history (do not delete previous rounds)
+   - Present: "Regressing from [current] to [target]. Reason: [reasoning]. Regression [N]/[max]."
+   - Return to Step 4 (re-match pairs for the target phase)
 
 **For v1 (no phases):** Skip guard execution. Mark milestone done if all pairs passed.
 
@@ -470,6 +573,19 @@ After PR is created, use `AskUserQuestion`:
   - `"Continue to next milestone while CI runs"` — proceed with the next milestone; the user can run `/ratchet:retro pr <number>` later to analyze results
   - `"Monitor CI in background, continue working"` — start monitoring as a background task, continue to next milestone; report back when checks complete
   - `"Done for now"`
+
+**8f. Post-Milestone Analyst Assessment:**
+
+After commit or PR (regardless of which packaging option the user chose), spawn the analyst agent for a brief post-milestone assessment. The analyst reviews the milestone's debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
+- Pair effectiveness observations (any pairs that always fast-path? always escalate?)
+- Scope coverage gaps discovered during this milestone
+- Guard recommendations (missing checks, overly strict guards)
+- Workflow preset recommendations (should any component switch presets?)
+
+Present via `AskUserQuestion`:
+- Question: "Post-milestone assessment for [milestone name]:\n[bullet points]"
+- Options: `"Apply recommendations"`, `"Note for later"`, `"Skip"`
+- If "Apply recommendations": walk through each recommendation with follow-up `AskUserQuestion` calls
 
 **CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request". Local commits are the default safe action.**
 

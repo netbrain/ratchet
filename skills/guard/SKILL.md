@@ -42,7 +42,7 @@ Guards
 
   [name]
     Command: [command]
-    Phase: [phase] | Blocking: [yes/no]
+    Phase: [phase] | Timing: [pre-debate/post-debate] | Blocking: [yes/no]
     Components: [list or "all"]
     Last result: [pass/fail/not run] ([timestamp])
 
@@ -70,13 +70,17 @@ Use `AskUserQuestion` to gather guard details interactively:
    - Options: `"plan"`, `"test"`, `"build"`, `"review"`, `"harden"`
    - Suggest based on what the command does (lint → build, security → harden, tests → build)
 
-4. **Blocking or advisory?**
+4. **Timing** — when should this guard run:
+   - Options: `"Pre-debate (run before debates start — catches issues early)"`, `"Post-debate (run after debates complete — default)"`
+   - Suggest based on what the command does: lint/format checks benefit from pre-debate (no point debating code that fails lint), tests/security scans are typically post-debate
+
+5. **Blocking or advisory?**
    - Options: `"Blocking (must pass to advance)"`, `"Advisory (log and continue)"`
 
-5. **Components** — which components:
+6. **Components** — which components:
    - Options: list component names from workflow.yaml + `"All components"`
 
-6. **Confirm** — present the guard definition:
+7. **Confirm** — present the guard definition:
    - Use `AskUserQuestion`: "[guard summary]. Add this guard?"
    - Options: `"Add"`, `"Modify"`, `"Cancel"`
 

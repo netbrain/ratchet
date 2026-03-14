@@ -46,6 +46,11 @@ that Ratchet's debates did not catch. These are high-signal for improvement.)
 
 Project context: [contents of .ratchet/project.yaml]
 
+Escalation rulings: [contents of .ratchet/escalations/*.json, if any]
+(These are orchestrator verdicts from prior escalations. If a dispute type has 3+ rulings
+in the same direction, inject it as "settled law" in the adversarial prompt so the pair
+stops re-litigating settled disputes.)
+
 Your task:
 1. Analyze patterns across all reviews AND retro findings:
    - What issues are repeatedly missed by debates?
@@ -54,6 +59,14 @@ Your task:
    - What blind spots exist?
    - What strengths should be preserved?
    - Are there missing guards that should be added?
+
+1b. Process retro findings by severity (critical first, skip noise unless asked):
+   - Present severity distribution: "[N] critical, [N] major, [N] minor, [N] noise (skipped)"
+   - Flag recurring findings (those with `related_findings`) as needing structural fixes, not just prompt tweaks
+
+1c. Consume escalation rulings from `.ratchet/escalations/*.json`:
+   - If a dispute type has 3+ rulings in the same direction, inject as "settled law" in the adversarial prompt
+   - This prevents the pair from re-litigating disputes that have been consistently resolved the same way
 
 2. Propose specific improvements:
    - Add knowledge about commonly missed issues to agent prompts

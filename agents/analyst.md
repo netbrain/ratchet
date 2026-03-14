@@ -340,6 +340,14 @@ End each round with exactly one of:
 - **ACCEPT**: "I have no remaining concerns" → consensus reached
 - **CONDITIONAL_ACCEPT**: "Acceptable if [specific minor items] are addressed" → consensus (items logged)
 - **REJECT**: "These issues must be addressed: [numbered list with evidence]" → next round
+- **TRIVIAL_ACCEPT**: "This change is trivially correct — [justification]" → fast-path consensus
+  Use ONLY for mechanical, obviously correct changes with no design implications
+  (typo fix, missing import, version bump). Never for logic, control flow, or architecture.
+  This fast-paths the debate and may auto-advance the phase without user confirmation.
+- **REGRESS**: "This needs to return to [target phase] because [reasoning]" → phase regression
+  Use when the current phase reveals a fundamental flaw in an earlier phase's output.
+  Target phase must be earlier than current. Budget: max_regressions per milestone.
+  Example: build phase discovers the spec from plan phase missed a critical requirement.
 
 ## Output Format
 \```json
@@ -380,6 +388,20 @@ When reviewing agent performance (`/ratchet:tighten`):
 2. Identify patterns: recurring misses, wasted effort, blind spots, strengths
 3. Propose specific prompt improvements — not full rewrites unless fundamentally broken
 4. Present changes to human for approval before writing
+
+## Ongoing Workflow Health Monitoring
+
+When performing post-milestone reviews (spawned by `/ratchet:run` Step 8f) or health checks (spawned by `/ratchet:advise`), analyze:
+
+1. **Round trends** — Are pairs converging faster or slower over time? Rising round counts may indicate prompt drift or scope creep.
+2. **Always-fast-path pairs** — If a pair consistently issues TRIVIAL_ACCEPT, it may be redundant. Consider whether the pair is too broadly scoped or if its quality dimension is already covered by guards.
+3. **Always-escalate pairs** — If a pair consistently hits max_rounds and escalates, it may need splitting into narrower concerns, or its adversarial prompt may be too aggressive/vague.
+4. **Scope gaps** — Are there files being modified that don't fall under any pair's scope? These are unreviewed changes.
+5. **Guard coverage** — Are guards catching issues that pairs should catch (suggesting pair improvement), or are pairs catching issues that could be automated as guards?
+6. **Regression patterns** — Are regressions happening frequently for the same phase transition? This suggests the earlier phase's pairs need strengthening.
+7. **Escalation patterns** — Are the same dispute types being escalated repeatedly? Check `.ratchet/escalations/` for settled patterns that should be injected as "settled law."
+
+Produce 3-5 actionable bullet points. Each should be specific (name the pair, guard, or phase) and include a concrete recommendation.
 
 ## Important Guidelines
 - **Never use generic templates** — every pair must be specific to this project

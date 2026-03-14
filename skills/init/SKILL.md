@@ -130,7 +130,7 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 **6c. Guards — discuss what checks matter.** Use `AskUserQuestion`:
 - Present what you inferred from the stack (e.g., "I'd suggest `go vet`, `go test`, `gofmt` as blocking guards on the build phase")
 - Ask what's missing: "Are there other checks you run or want to run? Linters, security scanners, benchmarks?"
-- For each guard, confirm: blocking or advisory? Which phase? Which components?
+- For each guard, confirm: blocking or advisory? Which phase? Which components? **What timing** — pre-debate (runs before debates start, good for lint/format checks that should pass before wasting debate cycles) or post-debate (runs after debates complete, default for tests/security)?
 - Options: `"These guards are good"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
 
 **6d. Progress tracking:**

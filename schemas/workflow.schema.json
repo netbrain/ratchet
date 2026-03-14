@@ -38,6 +38,13 @@
       },
       "required": ["adapter"]
     },
+    "max_regressions": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 2,
+      "description": "Maximum phase regressions allowed per milestone before requiring human approval"
+    },
     "components": {
       "type": "array",
       "items": {
@@ -113,7 +120,13 @@
         },
         "scope": {
           "type": "string",
-          "description": "Comma-separated file glob patterns this pair reviews"
+          "description": "Comma-separated file glob patterns this pair reviews. Use \"auto\" to inherit scope from the parent component."
+        },
+        "max_rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Per-pair max rounds override — omit to use global max_rounds"
         },
         "enabled": {
           "type": "boolean",
@@ -143,6 +156,12 @@
         "blocking": {
           "type": "boolean",
           "description": "If true, failure blocks advancement to next phase. If false, advisory only."
+        },
+        "timing": {
+          "type": "string",
+          "enum": ["pre-debate", "post-debate"],
+          "default": "post-debate",
+          "description": "When this guard runs — pre-debate (before debates start) or post-debate (after debates complete, default)"
         },
         "components": {
           "type": "array",

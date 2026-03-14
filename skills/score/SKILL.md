@@ -32,7 +32,8 @@ If data exists, each line is a JSON object with:
   "rounds_to_consensus": N,
   "escalated": bool,
   "issues_found": N,
-  "issues_resolved": N
+  "issues_resolved": N,
+  "fast_path": bool
 }
 ```
 
@@ -45,6 +46,7 @@ Per pair, calculate:
 - **Issues found**: total across all debates
 - **Issues resolved**: total resolved
 - **Resolution rate**: resolved / found
+- **Fast-path rate**: % of debates with `fast_path: true` (TRIVIAL_ACCEPT)
 - **Trend**: compare last 5 debates to previous 5 — improving, stable, or degrading
 
 ### Step 3: Present
@@ -56,16 +58,16 @@ Ratchet Quality Scores
 Pair: api-contracts
   Debates: 12 | Consensus rate: 83% | Avg rounds: 1.8
   Issues: 24 found, 22 resolved (92%)
-  Trend: ↑ improving (fewer rounds, higher resolution)
+  Fast-path rate: 25% | Trend: ↑ improving (fewer rounds, higher resolution)
 
 Pair: db-performance
   Debates: 8 | Consensus rate: 62% | Avg rounds: 2.4
   Issues: 15 found, 11 resolved (73%)
-  Trend: → stable
+  Fast-path rate: 0% | Trend: → stable
 
 Overall:
   Total debates: 20 | Overall consensus: 75%
-  Quality trajectory: ↑ improving
+  Fast-path rate: 15% | Quality trajectory: ↑ improving
 ```
 
 If a specific pair is requested, show more detail including recent debate summaries.

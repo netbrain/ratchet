@@ -84,7 +84,20 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
    - **Missing pair** → Suggest running `/ratchet:pair` for the uncovered dimension
    - **Phase gap** → Suggest reassigning a pair to an earlier phase
 
-6. **Store retro results:**
+6. **Classify severity and check recurrence:**
+
+   For each finding, assign a severity level:
+   - `critical`: build-breaking, security vulnerability, data loss
+   - `major`: test failure, functional regression, missing validation
+   - `minor`: lint/style, formatting, convention deviation
+   - `noise`: CI flake (passed on re-run), environment-specific issue
+
+   **Cross-retro recurrence check**: Before storing, scan existing `.ratchet/retros/*.json` for findings with the same `type` and a similar `description`. If 2+ prior matches exist:
+   - Auto-escalate severity one level (noise → minor → major → critical; critical stays critical)
+   - Populate `related_findings` with references to the matching prior findings
+   - Present: "This is the Nth time this gap was found. Escalating from [old severity] to [new severity]."
+
+7. **Store retro results:**
    Write to `.ratchet/retros/<timestamp>.json`:
    ```json
    {
@@ -96,13 +109,15 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
          "type": "missing_validation|missing_guard|missing_pair|phase_gap",
          "description": "what was missed",
          "evidence": "CI output or review comment",
-         "fix_applied": "what was changed, or null if skipped"
+         "fix_applied": "what was changed, or null if skipped",
+         "severity": "critical|major|minor|noise",
+         "related_findings": ["<timestamp>:<index>"]
        }
      ]
    }
    ```
 
-   This history helps `/ratchet:tighten` understand systemic patterns — e.g., "the adversarial keeps missing lint issues" vs. "one-off CI flake."
+   This history helps `/ratchet:tighten` understand systemic patterns — e.g., "the adversarial keeps missing lint issues" vs. "one-off CI flake." Severity and recurrence data give tighten a priority queue.
 
 ### Mode: Monitor (`retro monitor [number]`)
 
