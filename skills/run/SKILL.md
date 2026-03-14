@@ -608,7 +608,15 @@ Work is packaged based on `pr_scope` from `workflow.yaml` (default: `debate`). T
 - `pr_scope: milestone` — after all phases complete (milestone done)
 - `pr_scope: issue` — one PR per progress tracking issue (requires a progress adapter). If a milestone maps to a single issue, the PR covers the full milestone. If the milestone is large (more than 3 phases with substantive changes), split into per-phase PRs instead and link them all to the issue. Present: "This issue spans [N] phases with significant changes — splitting into [N] PRs linked to [issue ref]."
 
-**Auto-detection**: If `pr_scope` is not set and a progress adapter is configured (`github-issues`, `linear`, `jira`), default to `issue` instead of `debate`.
+**Auto-detection** (when `pr_scope` is not explicitly set):
+1. If a progress adapter is configured (`github-issues`, `linear`, `jira`) → default to `issue`
+2. If no adapter is configured, but the project has GitHub Issues activity (check via `gh issue list --limit 5`), use `AskUserQuestion`:
+   - Question: "This project uses GitHub Issues. Would you like PRs scoped to issues? This links each PR to its corresponding issue for traceability."
+   - Options: `"Yes — one PR per issue (Recommended)"`, `"No — one PR per debate"`, `"No — one PR per phase"`, `"No — one PR per milestone"`
+   - If "Yes": set `pr_scope: issue` and suggest enabling the `github-issues` progress adapter
+3. Otherwise → default to `debate`
+
+This check runs once on the first `/ratchet:run` when `pr_scope` is unset. The user's choice is persisted to `workflow.yaml` so it's not asked again.
 
 When the boundary is reached, use `AskUserQuestion`:
 
