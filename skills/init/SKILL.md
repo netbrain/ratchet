@@ -82,25 +82,25 @@ Each option should have: a name, a brief description, the tradeoffs (pros/cons),
 
 ### Step 5: Present Options to the User
 
-Use `AskUserQuestion` to present the approach options. Put the full comparison in the question text:
+Use `AskUserQuestion` to present the approach options. Put the full comparison in the question text.
+
+IMPORTANT: `AskUserQuestion` renders as a terminal selector, NOT as markdown. Do NOT use markdown formatting (`**bold**`, `#` headers, `- ` lists). Use plain text with simple indentation and line breaks:
 
 ```
 Based on what I learned, here are three approaches:
 
-**Option A: [Name]**
-[Description]. Phases: [which]. Pairs: [how many, what kind].
-+ [pro]
-+ [pro]
-- [con]
+Option A: [Name]
+  [Description]. Phases: [which]. Pairs: [how many, what kind].
+  Pros: [pro], [pro]
+  Cons: [con]
 
-**Option B: [Name]**
-[Description]. Phases: [which]. Pairs: [how many, what kind].
-+ [pro]
-+ [pro]
-- [con]
+Option B: [Name]
+  [Description]. Phases: [which]. Pairs: [how many, what kind].
+  Pros: [pro], [pro]
+  Cons: [con]
 
-**Option C: [Name]**
-...
+Option C: [Name]
+  ...
 
 Which approach fits best?
 ```

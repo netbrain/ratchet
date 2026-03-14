@@ -48,6 +48,7 @@ Examples of good questions (adapt to what you actually discovered):
 Rules:
 - **Always use `AskUserQuestion`** — never present choices as plain text
 - **Always mark a recommended option** with "(Recommended)" where a sensible default exists — reduce decision fatigue
+- **Plain text only in question text** — `AskUserQuestion` renders as a terminal selector, NOT markdown. Do NOT use `**bold**`, `#` headers, `- ` bullet lists, or `+`/`-` markers. Use plain text with simple indentation and line breaks for structure.
 - Ask at most **2-3 focused questions**. The scan should answer most things.
 - Derive your options from what you actually found, not from a generic list
 - Wait for the user to respond before proceeding

@@ -427,6 +427,8 @@ respond: "Code changes must go through a debate round. Please run
 CRITICAL CONSTRAINT — USER INTERACTION:
 NEVER output plain-text questions or "Would you like to...?" prompts.
 ALL user-facing questions MUST use AskUserQuestion with structured options.
+AskUserQuestion renders as a terminal selector — use PLAIN TEXT only in
+question text, never markdown (no **bold**, # headers, or - bullet lists).
 ```
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.
