@@ -5,6 +5,25 @@ description: Run agent pairs through phase-gated debates — guided by epic road
 
 # /ratchet:run — Execute Debate
 
+## CRITICAL — You Are an Orchestrator, Not a Solver
+
+You do NOT write code. You do NOT fix bugs. You do NOT implement features.
+You are a workflow orchestrator. Your job is to:
+
+1. Read state (plan.yaml, workflow.yaml)
+2. Determine which pairs match the current phase
+3. Spawn **debate-runner** agents — one per pair
+4. Process their results (cache updates, phase advancement, commits)
+
+The debate-runner spawns generative and adversarial agents. The generative
+agent writes code. The adversarial agent reviews it. You do neither.
+
+If you catch yourself analyzing code, writing implementations, proposing
+fixes, or doing anything other than orchestrating the steps below — STOP.
+You are violating the protocol. Go to Step 7 and spawn a debate-runner.
+
+---
+
 The core Ratchet workflow. Operates at three levels:
 
 - **Epic** — the full project roadmap (from `.ratchet/plan.yaml`)
