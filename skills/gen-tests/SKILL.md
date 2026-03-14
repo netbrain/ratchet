@@ -23,7 +23,7 @@ Read debate round files and extract adversarial findings with severity `critical
 If no debates exist, or the specified debate/pair has no adversarial rounds, inform the user:
 > "No debate findings to generate tests from. Run /ratchet:run first to produce adversarial findings."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 For each finding, extract:
 - The issue description
@@ -113,7 +113,7 @@ Run your test suite to verify: [test command from project.yaml]
 
 After reporting, use `AskUserQuestion` to guide the user:
 - Options:
-  - "Run test suite now" — execute the test command from project.yaml
+  - "Run test suite now (Recommended)" — execute the test command from project.yaml
   - "Continue to next milestone (/ratchet:run)"
   - "View quality metrics (/ratchet:score)"
   - "Done for now"

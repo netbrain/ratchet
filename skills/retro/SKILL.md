@@ -73,7 +73,7 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
    ```
 
    Options:
-   - `"Apply all fixes"` — update adversarial prompts, add guards, add pairs
+   - `"Apply all fixes (Recommended)"` — update adversarial prompts, add guards, add pairs
    - `"Review fixes one by one"`
    - `"Just log — I'll fix manually"`
    - `"Cancel"`
@@ -139,7 +139,7 @@ Watch a PR's checks and analyze when they complete.
 
 3. **After analysis**, use `AskUserQuestion`:
    - Options:
-     - `"Apply fixes and re-run failed debates"` — fix gaps, then `/ratchet:run` the affected pairs
+     - `"Apply fixes and re-run failed debates (Recommended)"` — fix gaps, then `/ratchet:run` the affected pairs
      - `"Apply fixes only"` — update agents/guards but don't re-run
      - `"Just log"`
      - `"Done for now"`

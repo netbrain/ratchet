@@ -22,7 +22,7 @@ Read `.ratchet/reviews/<pair-name>/` for each target pair. Look for `review-*.js
 If the reviews directory doesn't exist or has no review files, inform the user:
 > "No review data found for [pair-name]. Reviews are generated after debates complete. Run /ratchet:run to produce debate data first."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 If fewer than 3 reviews exist, inform the user that more debate data is needed before meaningful tightening can occur, but offer to proceed anyway:
 - Use `AskUserQuestion` with options: `"Proceed with limited data"`, `"Run more debates first (/ratchet:run)"`, `"Done for now"`
@@ -80,7 +80,7 @@ Your task:
    - Show what would change in each agent's definition in the question text
    - Explain the rationale for each change
    - Flag whether this is incremental tuning or a significant rework
-   - Options: "Approve all changes", "Approve with modifications", "Reject changes"
+   - Options: "Approve all changes (Recommended)", "Approve with modifications", "Reject changes"
 
 4. If "Approve with modifications", use follow-up `AskUserQuestion` calls to refine. Wait for explicit human approval before writing any changes.
 

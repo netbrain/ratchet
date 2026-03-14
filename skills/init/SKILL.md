@@ -105,7 +105,9 @@ Based on what I learned, here are three approaches:
 Which approach fits best?
 ```
 
-Options: `"Option A: [Name]"`, `"Option B: [Name]"`, `"Option C: [Name]"`, `"Let's discuss / mix and match"`
+Options: `"Option A: [Name] (Recommended)"`, `"Option B: [Name]"`, `"Option C: [Name]"`, `"Let's discuss / mix and match"`
+
+Mark the option you believe best fits the user's stated goals as "(Recommended)".
 
 If "Let's discuss": use follow-up `AskUserQuestion` calls to refine. The user may want pieces from different options.
 
@@ -115,7 +117,7 @@ Finalize the configuration through conversation, one concern at a time. Do NOT j
 
 **6a. Components** — present the proposed components with scope globs and workflow presets. Use `AskUserQuestion`:
 - Question: "[component list with scopes and workflows]. Do these groupings make sense?"
-- Options: `"Looks good"`, `"Modify"`, `"Add/remove components"`
+- Options: `"Looks good (Recommended)"`, `"Modify"`, `"Add/remove components"`
 
 **6b. Pairs — discuss each one.** For each proposed pair, use `AskUserQuestion` to validate:
 - What quality dimension does this pair focus on?
@@ -131,7 +133,7 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 - Present what you inferred from the stack (e.g., "I'd suggest `go vet`, `go test`, `gofmt` as blocking guards on the build phase")
 - Ask what's missing: "Are there other checks you run or want to run? Linters, security scanners, benchmarks?"
 - For each guard, confirm: blocking or advisory? Which phase? Which components? **What timing** — pre-debate (runs before debates start, good for lint/format checks that should pass before wasting debate cycles) or post-debate (runs after debates complete, default for tests/security)?
-- Options: `"These guards are good"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
+- Options: `"These guards are good (Recommended)"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
 
 **6d. Progress tracking:**
 - Question: "How do you want to track milestone progress?"
@@ -139,7 +141,7 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 
 **6e. Final review** — only after walking through each area, present the complete config for approval:
 - Question: "[full formatted config]. Everything look right?"
-- Options: `"Approve"`, `"Modify [section]"`, `"Start over"`
+- Options: `"Approve (Recommended)"`, `"Modify [section]"`, `"Start over"`
 
 Wait for approval before proceeding.
 
@@ -151,7 +153,7 @@ Based on everything learned, propose a development roadmap:
 - Each milestone has: name, description, which pairs are relevant, what "done" looks like
 - Present the epic to the human using `AskUserQuestion` for approval:
   - Question: "Proposed roadmap: [formatted milestone list]. Approve this epic?"
-  - Options: `"Approve"`, `"Modify milestones"`, `"Start over"`
+  - Options: `"Approve (Recommended)"`, `"Modify milestones"`, `"Start over"`
 - The epic is a living document — it evolves as the project develops
 
 plan.yaml format:
@@ -259,6 +261,6 @@ Pairs created:
 
 Then use `AskUserQuestion` to guide the user on what to do next:
 - Options:
-  - "Start first debate (/ratchet:run)" — begin the epic workflow
+  - "Start first debate (/ratchet:run) (Recommended)" — begin the epic workflow
   - "Add more pairs (/ratchet:pair)"
   - "Done for now"

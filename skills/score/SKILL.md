@@ -20,7 +20,7 @@ View quality metrics and trends across all pairs or a specific pair.
 Read `.ratchet/scores/scores.jsonl`. If the file does not exist or is empty, inform the user:
 > "No quality scores recorded yet. Scores are generated after debates complete. Run /ratchet:run to start your first debate."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 If data exists, each line is a JSON object with:
 ```json

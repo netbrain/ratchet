@@ -76,7 +76,7 @@ Verdict recorded for [id]: [decision] (human)
 
 After reporting, use `AskUserQuestion` to guide the user:
 - Options (adapt based on context):
-  - "Continue to next milestone (/ratchet:run)" — if the verdict resolved all debates for the current focus
+  - "Continue to next milestone (/ratchet:run) (Recommended)" — if the verdict resolved all debates for the current focus
   - "Verdict another debate" — if more escalated debates exist
   - "View quality metrics (/ratchet:score)"
   - "Done for now"

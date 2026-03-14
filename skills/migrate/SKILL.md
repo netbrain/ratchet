@@ -26,7 +26,7 @@ Then use `AskUserQuestion` with options: `"View current workflow config"`, `"Don
 If `config.yaml` does not exist, inform the user:
 > "No config.yaml found. Run /ratchet:init to set up a new v2 project."
 
-Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init)"`, `"Cancel"`.
+Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
 
 ## Execution Steps
 
@@ -82,7 +82,7 @@ Proposed v2 workflow:
 [If --dry-run: "Dry run — no files will be written."]
 ```
 
-Options: `"Approve migration"`, `"Modify components"`, `"Modify phase assignments"`, `"Cancel"`
+Options: `"Approve migration (Recommended)"`, `"Modify components"`, `"Modify phase assignments"`, `"Cancel"`
 
 If "Modify components" or "Modify phase assignments": use follow-up `AskUserQuestion` calls to refine.
 
@@ -185,6 +185,6 @@ All existing debates, reviews, and scores are preserved.
 
 After reporting, use `AskUserQuestion` to guide the user:
 - Options:
-  - "Run next debate with v2 workflow (/ratchet:run)"
+  - "Run next debate with v2 workflow (/ratchet:run) (Recommended)"
   - "View workflow config"
   - "Done for now"

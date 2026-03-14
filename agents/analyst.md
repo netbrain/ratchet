@@ -47,6 +47,7 @@ Examples of good questions (adapt to what you actually discovered):
 
 Rules:
 - **Always use `AskUserQuestion`** — never present choices as plain text
+- **Always mark a recommended option** with "(Recommended)" where a sensible default exists — reduce decision fatigue
 - Ask at most **2-3 focused questions**. The scan should answer most things.
 - Derive your options from what you actually found, not from a generic list
 - Wait for the user to respond before proceeding
@@ -84,7 +85,7 @@ Based on what you learned, **proactively suggest** a technology stack and develo
 
 Use `AskUserQuestion` to present your recommendation:
 - "Based on what you described, I'd suggest: [stack recommendation with brief rationale for each choice]. Does this work for you?"
-- Options: `"Looks good"`, `"I have a different stack in mind"`, `"Let's discuss"`
+- Options: `"Looks good (Recommended)"`, `"I have a different stack in mind"`, `"Let's discuss"`
 
 If they have preferences, respect them. If they're unsure, guide them.
 

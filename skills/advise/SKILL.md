@@ -20,7 +20,7 @@ On-demand assessment of your Ratchet workflow's health. The analyst reviews accu
 If no data exists, inform the user:
 > "Not enough data for a health assessment. Run a few milestones first, then come back."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 ## Execution Steps
 
@@ -78,7 +78,7 @@ Overall health: [healthy / needs attention / at risk]
 ```
 
 Options:
-- `"Apply recommendations"` — walk through each recommendation interactively
+- `"Apply recommendations (Recommended)"` — walk through each recommendation interactively
 - `"Apply all automatically"` — apply all changes without individual confirmation
 - `"Export as report"` — save to `.ratchet/reports/health-<timestamp>.md`
 - `"Done for now"`

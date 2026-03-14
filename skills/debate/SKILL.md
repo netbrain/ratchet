@@ -21,7 +21,7 @@ View the full transcript of a debate, or continue an unresolved one.
 Read all `.ratchet/debates/*/meta.json` files. If no debates exist (directory is empty or no meta.json files found), inform the user:
 > "No debates found. Run /ratchet:run to start your first debate."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 If debates exist, use `AskUserQuestion` to let the user pick a debate to view:
 
@@ -71,7 +71,7 @@ Resume the debate protocol from where it left off. Use `AskUserQuestion` to let 
 
 - If `initiated`:
   - Question: "Debate [id] was interrupted at round [N]. Resume from where it left off?"
-  - Options: `"Resume debate"`, `"Restart debate"`, `"Abandon debate"`
+  - Options: `"Resume debate (Recommended)"`, `"Restart debate"`, `"Abandon debate"`
   - If "Restart debate": delete all files in the `rounds/` directory, reset `rounds` to 0 in meta.json, then start fresh from round 1 per `/ratchet:run` Step 7 protocol.
 
 When resuming or running another round, execute the same debate protocol as `/ratchet:run` Step 7 (generative round, adversarial round, check verdict). Read the pair's agent definitions from `.ratchet/pairs/<pair-name>/` and the debate context from `meta.json` and existing round files. If `rounds/` is empty (no prior round files), start from round 1.
@@ -87,5 +87,5 @@ After showing a transcript (or completing a --continue action), use `AskUserQues
   - "Continue this debate" — only if status is `escalated` or `initiated`
   - "Render verdict (/ratchet:verdict)" — only if status is `escalated`
   - "View another debate" — if more debates exist
-  - "Back to main flow (/ratchet:run)"
+  - "Back to main flow (/ratchet:run) (Recommended)"
   - "Done for now"

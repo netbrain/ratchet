@@ -23,7 +23,7 @@ Guards are deterministic shell commands (lint, test, security scan, benchmarks) 
 If `workflow.yaml` does not exist but `config.yaml` does, inform the user:
 > "Guards require workflow.yaml (v2). Run /ratchet:migrate to upgrade from v1."
 
-Then use `AskUserQuestion` with options: `"Migrate now (/ratchet:migrate)"`, `"Cancel"`.
+Then use `AskUserQuestion` with options: `"Migrate now (/ratchet:migrate) (Recommended)"`, `"Cancel"`.
 
 ## Execution Steps
 
@@ -32,7 +32,7 @@ Then use `AskUserQuestion` with options: `"Migrate now (/ratchet:migrate)"`, `"C
 Read `guards` from `.ratchet/workflow.yaml`. If no guards are configured:
 > "No guards configured. Guards are deterministic checks (lint, tests, security scans) that run at phase boundaries."
 
-Then use `AskUserQuestion` with options: `"Add a guard"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Add a guard (Recommended)"`, `"Done for now"`.
 
 If guards exist, display:
 
@@ -82,7 +82,7 @@ Use `AskUserQuestion` to gather guard details interactively:
 
 7. **Confirm** — present the guard definition:
    - Use `AskUserQuestion`: "[guard summary]. Add this guard?"
-   - Options: `"Add"`, `"Modify"`, `"Cancel"`
+   - Options: `"Add (Recommended)"`, `"Modify"`, `"Cancel"`
 
 On approval, append to the `guards` array in `.ratchet/workflow.yaml`.
 
@@ -112,7 +112,7 @@ Guard Results: [phase] phase
 ```
 
 If any blocking guards failed, use `AskUserQuestion`:
-- Options: `"View full output of [name]"`, `"Override [name]"`, `"Fix and re-run"`, `"Done for now"`
+- Options: `"Fix and re-run (Recommended)"`, `"View full output of [name]"`, `"Override [name]"`, `"Done for now"`
 
 ### override — Override a Failed Guard
 

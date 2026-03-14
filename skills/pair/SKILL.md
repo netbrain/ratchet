@@ -51,7 +51,7 @@ Your task:
    - .ratchet/pairs/<name>/generative.md — builder agent with project-specific knowledge
    - .ratchet/pairs/<name>/adversarial.md — critic agent with testing commands baked in
 5. Present the pair definition to the human for approval using `AskUserQuestion`
-   - Options: "Approve", "Modify scope", "Modify agents", "Start over"
+   - Options: "Approve (Recommended)", "Modify scope", "Modify agents", "Start over"
 6. On approval, write the agent files and update the workflow config (.ratchet/workflow.yaml or .ratchet/config.yaml) to register the new pair. For v2, include component and phase fields.
 
 Follow the same agent generation conventions as init:
@@ -76,6 +76,6 @@ Run /ratchet:run [name] to test the new pair.
 
 After reporting, use `AskUserQuestion` to guide the user:
 - Options:
-  - "Run debate for [name] (/ratchet:run [name])" — test the new pair immediately
+  - "Run debate for [name] (/ratchet:run [name]) (Recommended)" — test the new pair immediately
   - "Add another pair (/ratchet:pair)"
   - "Done for now"

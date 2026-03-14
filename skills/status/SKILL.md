@@ -20,7 +20,7 @@ Display a snapshot of the project's progress through the epic, milestones, and p
 If `.ratchet/` or `plan.yaml` does not exist, inform the user:
 > "No epic found. Run /ratchet:init to set up a project, or /ratchet:run to start without an epic."
 
-Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init)"`, `"Done for now"`.
+Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommended)"`, `"Done for now"`.
 
 ## Execution Steps
 
@@ -97,7 +97,7 @@ Unresolved Conditions:
 
 After displaying status, use `AskUserQuestion`:
 - Options (adapt based on context):
-  - "Continue current phase (/ratchet:run)" — if there's an active milestone
+  - "Continue current phase (/ratchet:run) (Recommended)" — if there's an active milestone
   - "View a specific milestone" — if overview was shown
   - "View debate transcript (/ratchet:debate)" — if debates exist
   - "View quality metrics (/ratchet:score)"

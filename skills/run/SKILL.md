@@ -29,12 +29,12 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 If `.ratchet/` does not exist, inform the user:
 > "Ratchet is not initialized for this project. Run /ratchet:init to set up."
 
-Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init)"`, `"Cancel"`.
+Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
 
 If no enabled pairs exist in the workflow config (`workflow.yaml` or `config.yaml`), inform the user:
 > "No active pairs found. Add a pair with /ratchet:pair."
 
-Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair)"`, `"Cancel"`.
+Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommended)"`, `"Cancel"`.
 
 ## Execution Steps
 
@@ -177,7 +177,7 @@ Phase flow: [phase1] → [phase2] → ... → [phaseN]
 ```
 
 Then use `AskUserQuestion`:
-- Options: `"Run for real"`, `"Done for now"`
+- Options: `"Run for real (Recommended)"`, `"Done for now"`
 - If "Run for real": restart from Step 6c without `--dry-run`
 
 After a debate reaches consensus, update the cache:
@@ -196,7 +196,7 @@ bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "
 
 - If a **blocking** pre-debate guard fails:
   - Use `AskUserQuestion`: "Pre-debate guard '[name]' failed: [summary]. Debates have NOT started yet."
-  - Options: `"Fix and re-run"`, `"Override and proceed to debates"`, `"Cancel — skip this phase"`
+  - Options: `"Fix and re-run (Recommended)"`, `"Override and proceed to debates"`, `"Cancel — skip this phase"`
   - If fix or cancel: skip debate creation entirely
 - If an **advisory** pre-debate guard fails:
   - Log the failure and pass the output as context to the debates
@@ -242,7 +242,7 @@ Run each configured command. If any fail:
 1. Present the failures in the question text
 2. Use `AskUserQuestion` to let the user decide:
    - Question: "Static analysis failed with [N] errors: [summary]. How should we proceed?"
-   - Options: `"Fix these before debating"`, `"Proceed to debates anyway"`
+   - Options: `"Fix these before debating (Recommended)"`, `"Proceed to debates anyway"`
    - If fix: stop here, let the user fix, then re-run `/ratchet:run`
    - If proceed: note failures in debate context
 
@@ -439,7 +439,7 @@ If max_rounds reached without consensus:
 - Set status to `escalated`
 - **Precedent check (M6)**: Before spawning the orchestrator, scan `.ratchet/escalations/` for existing rulings with the same pair and a similar dispute pattern. If 3+ rulings exist in the same direction (e.g., 3+ ACCEPTs for the same pair on the same dispute type):
   - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
-  - Options: `"Apply settled pattern"`, `"Escalate anyway"`, `"Escalate to human"`
+  - Options: `"Apply settled pattern (Recommended)"`, `"Escalate anyway"`, `"Escalate to human"`
   - If "Apply settled pattern": write verdict matching the settled direction, skip orchestrator
 - Read `escalation` policy from the workflow config (`workflow.yaml` or `config.yaml`):
   - `orchestrator`: Spawn orchestrator agent with full debate transcript → write verdict
@@ -491,7 +491,7 @@ This stores results in `.ratchet/guards/<milestone-id>/<phase>/<guard-name>.json
 
 - If a **blocking** guard fails:
   - Use `AskUserQuestion`: "Blocking guard '[name]' failed: [summary of output]. How should we proceed?"
-  - Options: `"Fix and re-run"`, `"Override and advance anyway"`, `"View full output"`
+  - Options: `"Fix and re-run (Recommended)"`, `"Override and advance anyway"`, `"View full output"`
   - If fix: phase stays `in_progress`, user fixes the issue, re-runs `/ratchet:run`
   - If override: log the override, advance anyway
 
@@ -548,7 +548,7 @@ When a milestone is fully done (all phases complete, all guards passed), the wor
 
 - Question: "Milestone '[name]' is complete. All phases passed, all guards green. How should we package this?"
 - Options:
-  - `"Commit locally"` — create a local git commit with a summary
+  - `"Commit locally (Recommended)"` — create a local git commit with a summary
   - `"Create a pull request"` — commit, create branch if needed, push branch, open PR
   - `"Skip — I'll handle it"` — do nothing
 
@@ -569,7 +569,7 @@ When a milestone is fully done (all phases complete, all guards passed), the wor
 After PR is created, use `AskUserQuestion`:
 - Question: "PR created: [URL]. CI checks are running. What do you want to do?"
 - Options:
-  - `"Monitor CI checks and analyze results"` — runs `/ratchet:retro monitor <pr-number>` to watch checks, then auto-analyzes any failures and feeds learnings back into agents/guards
+  - `"Monitor CI checks and analyze results (Recommended)"` — runs `/ratchet:retro monitor <pr-number>` to watch checks, then auto-analyzes any failures and feeds learnings back into agents/guards
   - `"Continue to next milestone while CI runs"` — proceed with the next milestone; the user can run `/ratchet:retro pr <number>` later to analyze results
   - `"Monitor CI in background, continue working"` — start monitoring as a background task, continue to next milestone; report back when checks complete
   - `"Done for now"`
@@ -584,7 +584,7 @@ After commit or PR (regardless of which packaging option the user chose), spawn 
 
 Present via `AskUserQuestion`:
 - Question: "Post-milestone assessment for [milestone name]:\n[bullet points]"
-- Options: `"Apply recommendations"`, `"Note for later"`, `"Skip"`
+- Options: `"Apply recommendations (Recommended)"`, `"Note for later"`, `"Skip"`
 - If "Apply recommendations": walk through each recommendation with follow-up `AskUserQuestion` calls
 
 **CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request". Local commits are the default safe action.**
@@ -636,7 +636,7 @@ After reporting results, use `AskUserQuestion` to let the user choose what to do
 **If all phases done, more milestones remain:**
 - Summary: `"Milestone [name] complete! All phases passed. Epic progress: [completed]/[total] milestones."`
 - Options:
-  - "Continue to [next milestone name]"
+  - "Continue to [next milestone name] (Recommended)"
   - "Review debate: [debate-id]"
   - "View quality metrics"
   - "View milestone status (/ratchet:status)"
@@ -644,7 +644,7 @@ After reporting results, use `AskUserQuestion` to let the user choose what to do
 **If ALL milestones are done:**
 - Summary: `"Epic complete! All [N] milestones finished. Total debates: [N] | Consensus rate: [%] | Avg rounds: [N]"`
 - Options:
-  - "Create a pull request for all changes"
+  - "Create a pull request for all changes (Recommended)"
   - "View detailed quality metrics"
   - "Tighten agents from debate lessons"
   - "Review a specific debate"
