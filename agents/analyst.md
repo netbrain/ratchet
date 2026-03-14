@@ -27,7 +27,7 @@ If the project has code, scan it BEFORE interviewing the human.
 
 Read whatever exists — adapt your scan to what's actually in the repo:
 - Package manifests, lock files, build configs
-- CI/CD pipelines
+- CI/CD pipelines (`.github/workflows/*.yml`, `Jenkinsfile`, `.gitlab-ci.yml`, `.circleci/config.yml`, etc.) — **extract every quality gate command** (lint, test, build, type check, security scan, format check). These become guard candidates. Record the exact commands, which files they run against, and whether they block merges.
 - Documentation (README, ADRs, design docs, CONTRIBUTING)
 - Directory structure (top 3 levels)
 - Test infrastructure — test directories, config files, coverage setup

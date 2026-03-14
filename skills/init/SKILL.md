@@ -21,7 +21,7 @@ Check if `.ratchet/` already exists. If so, inform the user and suggest `/ratche
 Before asking the human anything, scan whatever exists in the project:
 
 - Package manifests, lock files, build configs
-- CI/CD pipelines
+- CI/CD pipelines (`.github/workflows/*.yml`, `Jenkinsfile`, `.gitlab-ci.yml`, `.circleci/config.yml`, etc.) — extract every command/step that acts as a quality gate (lint, test, build, security scan, type check, format check). These become guard candidates.
 - Documentation (README, ADRs, design docs, CONTRIBUTING)
 - Directory structure (top 3 levels)
 - Test infrastructure — test directories, config files, coverage setup
@@ -129,10 +129,11 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 
 **Ecosystem-inspired pairs:** After discussing the initial pairs, consider whether ecosystem projects suggest additional quality dimensions the user hasn't thought of. Draw from Impeccable's design expertise (information hierarchy, glanceability, accessibility) for frontend pairs and Agency Agents' specialist personas (security, performance, observability) for domain-specific pairs. Present these as suggestions with the inspiration source explained — e.g., "Drawing from Impeccable's design principles, a dashboard-ux pair could evaluate whether status information is glanceable and color-coded effectively." Let the user decide whether to add them.
 
-**6c. Guards — discuss what checks matter.** Use `AskUserQuestion`:
-- Present what you inferred from the stack (e.g., "I'd suggest `go vet`, `go test`, `gofmt` as blocking guards on the build phase")
-- Ask what's missing: "Are there other checks you run or want to run? Linters, security scanners, benchmarks?"
-- For each guard, confirm: blocking or advisory? Which phase? Which components? **What timing** — pre-debate (runs before debates start, good for lint/format checks that should pass before wasting debate cycles) or post-debate (runs after debates complete, default for tests/security)?
+**6c. Guards — mirror CI and add what's missing.** Use `AskUserQuestion`:
+- **Start from CI**: For each quality gate command discovered in CI/CD pipelines during the codebase scan (Step 2), propose a matching guard. The goal is that every check CI runs should have a corresponding Ratchet guard so debates never produce code that will fail the pipeline. Present these as: "I found these checks in your CI pipeline — I'll mirror them as guards:"
+  - Map CI steps to guard properties: lint/format commands → `timing: pre-debate`, `phase: build`, `blocking: true`; test commands → `timing: post-debate`, `phase: build`, `blocking: true`; security scans → `timing: post-debate`, `phase: harden`, `blocking: true`; type checks → `timing: pre-debate`, `phase: build`, `blocking: true`
+- **Then suggest additions**: Based on the stack, suggest guards for checks that CI *doesn't* run but should (e.g., "Your CI doesn't run a security scanner — want to add one as an advisory guard?")
+- For each guard, confirm: blocking or advisory? Which phase? Which components? What timing?
 - Options: `"These guards are good (Recommended)"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
 
 **6d. Progress tracking:**
