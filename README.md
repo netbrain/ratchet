@@ -323,11 +323,12 @@ guards:
 ├── debates/             # Debate transcripts
 ├── guards/              # Guard execution results
 ├── reviews/             # Agent performance reviews
-├── retros/              # Retrospective findings with severity and recurrence
-├── escalations/         # Orchestrator rulings for precedent lookup
-├── reports/             # Health check reports from /ratchet:advise
-├── progress/            # Local progress tracking (markdown adapter)
-└── scores/              # Historical quality metrics (includes fast-path data)
+├── retros/              # Retrospective findings with severity and recurrence  (.gitignore)
+├── escalations/         # Orchestrator rulings for precedent lookup            (.gitignore)
+├── guards/              # Guard execution results                              (.gitignore)
+├── reports/             # Health check reports from /ratchet:advise            (.gitignore)
+├── progress/            # Local progress tracking (markdown adapter)           (.gitignore)
+└── scores/              # Historical quality metrics (includes fast-path data) (.gitignore)
 ```
 
 ## Progress Tracking

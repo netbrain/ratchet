@@ -223,7 +223,26 @@ Create the `.ratchet/` directory structure:
 │       └── adversarial.md
 ├── debates/
 ├── reviews/
-└── scores/
+├── scores/
+├── retros/
+├── escalations/
+├── guards/
+├── reports/
+└── progress/
+```
+
+**Gitignore**: If the project is a git repo, append the following to `.gitignore` (create it if it doesn't exist). These are runtime artifacts — the tracked pair definitions, workflow config, and plan are the source of truth.
+
+```
+# Ratchet runtime artifacts (regenerable, environment-specific)
+.ratchet/debates/
+.ratchet/reviews/
+.ratchet/scores/
+.ratchet/retros/
+.ratchet/escalations/
+.ratchet/guards/
+.ratchet/reports/
+.ratchet/progress/
 ```
 
 IMPORTANT:
@@ -241,6 +260,7 @@ IMPORTANT:
 After generation, verify:
 - `.ratchet/project.yaml` exists and contains valid stack/testing info
 - `.ratchet/workflow.yaml` exists with `version: 2` and at least one pair registered
+- `.gitignore` contains the Ratchet runtime artifact entries (if git repo)
 - Each registered pair has both `generative.md` and `adversarial.md` in `.ratchet/pairs/`
 - All directories created: `debates/`, `reviews/`, `scores/`
 
