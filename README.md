@@ -235,7 +235,8 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
                         └──────────┬──────────────────┘
                                    │ (all pre-debate guards pass)
               ┌────────────────────▼───────────────────┐
-              │              Debate Protocol            │
+              │           Debate Runner Agent           │
+              │   (orchestrates — cannot write code)    │
               │                                        │
               │  ┌───────────┐       ┌──────────────┐  │
               │  │Generative │◄─────►│ Adversarial  │  │
@@ -262,6 +263,7 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
 ### Key Agents
 
 - **Analyst** — scans codebase, interviews human, debates approach internally, generates tailored pairs and workflow config
+- **Debate Runner** — orchestrates a single debate: spawns generative/adversarial agents, manages rounds, persists artifacts. Cannot write code itself
 - **Tiebreaker** — impartial arbiter for escalated debates
 - **Generative** (per pair) — builds/reviews code, has full tool access
 - **Adversarial** (per pair) — critiques code, runs validation commands, cannot edit source

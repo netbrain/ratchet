@@ -261,42 +261,20 @@ bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "
   - Log the failure and pass the output as context to the debates
   - Continue to debate creation
 
-### Step 6a: Create Debate(s)
+### Step 6a: Prepare Debate Context
 
-For each matched pair, create a debate directory:
+For each matched pair, prepare the context that the **debate-runner** agent needs:
 
-```
-.ratchet/debates/<debate-id>/
-├── meta.json
-└── rounds/
-```
+1. **Resolve `max_rounds`**: Use the pair-level `max_rounds` if set in workflow.yaml, otherwise use the global `max_rounds`.
 
-Generate debate ID as: `<pair-name>-<timestamp>` (e.g., `api-contracts-20260312T100000`).
+2. **Resolve issue association**: If the current milestone has an `issues` array, determine which issue this pair belongs to by matching the pair name against each issue's `pairs` list.
 
-Resolve `max_rounds` for each pair: use the pair-level `max_rounds` if set in workflow.yaml, otherwise use the global `max_rounds`.
+3. **Gather escalation precedents**: Scan `.ratchet/escalations/` for existing rulings with the same pair name. Summarize any matching precedents (pair, dispute type, verdict direction, count).
 
-If the current milestone has an `issues` array, determine which issue this pair belongs to by matching the pair name against each issue's `pairs` list. If matched, record the issue ref in `meta.json` and append this debate ID to the issue's `debates` array in `plan.yaml`.
-
-Write initial `meta.json`:
-```json
-{
-  "id": "<debate-id>",
-  "pair": "<pair-name>",
-  "phase": "<current phase>",
-  "milestone": "<milestone id if epic mode, null otherwise>",
-  "issue": "<issue ref if matched, null otherwise>",
-  "files": ["list", "of", "matched", "files"],
-  "status": "initiated",
-  "rounds": 0,
-  "max_rounds": "<resolved: pair-level if set, else global>",
-  "started": "<ISO timestamp>",
-  "resolved": null,
-  "verdict": null,
-  "fast_path": false
-}
-```
-
-After a debate reaches consensus, update the issue's `files` array in `plan.yaml` with any files created or modified during the debate. This builds up the per-issue file list needed for `pr_scope: issue`.
+4. **Gather phase context**:
+   - If phase > plan: read the plan phase spec output
+   - If phase > test: read test file locations
+   - Collect any unresolved CONDITIONAL_ACCEPT conditions from previous debates
 
 ### Step 6b: Static Analysis Pre-Gate
 
@@ -312,227 +290,66 @@ Run each configured command. If any fail:
 
 If all pass (or none configured), proceed silently.
 
-### Step 7: Execute Debates
+### Step 7: Run Debates
 
-Run matched pairs. When multiple pairs match, run them **in parallel** using separate agents.
+Spawn a **debate-runner** agent (from `agents/debate-runner.md`) for each matched pair. When multiple pairs match the current phase, spawn them **in parallel** using separate Agent calls.
 
-For each pair, execute the debate protocol with **phase-specific prompts**:
+Each debate-runner receives:
 
-#### Phase-Specific Generative Prompts
-
-The generative agent's task varies by phase. Spawn from `.ratchet/pairs/<name>/generative.md` with:
-
-**Phase: plan**
 ```
-You are in the PLAN phase (round [N]).
+Run debate for pair [pair-name] in phase [phase].
 
-Epic context: [milestone name and description]
-Focus: [what we're planning]
+Pair definitions:
+  Generative: .ratchet/pairs/<name>/generative.md
+  Adversarial: .ratchet/pairs/<name>/adversarial.md
 
-Your job: Produce a SPECIFICATION for this milestone's scope.
-- Define acceptance criteria (concrete, testable)
-- Describe the approach and key design decisions
-- Identify risks and unknowns
-- List the interfaces/contracts other code will depend on
-
-DO NOT write implementation code. DO NOT write tests.
-Output a spec document that the test and build phases will use.
-
-[If round > 1: Previous adversarial critique: [content]]
-[If round > 1: Address the critique — refine the spec or explain why the concern is invalid.]
+Context:
+  Phase: [current phase]
+  Milestone: [id, name, description]
+  Issue: [issue ref or null]
+  Files in scope: [matched file list]
+  Max rounds: [resolved value from Step 6a]
+  Escalation policy: [from workflow.yaml]
+  Escalation precedents: [summary from Step 6a, or "none"]
+  Plan phase output: [path, if phase > plan]
+  Test phase output: [paths, if phase > test]
+  Previous debate context: [unresolved conditions, if any]
 ```
 
-**Phase: test**
-```
-You are in the TEST phase (round [N]).
+The debate-runner handles all round management, generative/adversarial agent spawning, verdict parsing, escalation, and artifact persistence. See `agents/debate-runner.md` for the full protocol.
 
-Epic context: [milestone name and description]
-Spec from plan phase: [content of plan phase output or acceptance criteria from plan.yaml]
-Focus: [what we're testing]
+#### Handle Results
 
-Your job: Write FAILING TESTS that encode the acceptance criteria.
-- Tests should fail because the implementation doesn't exist yet
-- Cover the contracts and invariants defined in the spec
-- Include edge cases the spec identified as risks
-- Use the project's test framework and conventions
+Each debate-runner returns a result object. Process each result:
 
-DO NOT write implementation code. Only tests.
+- **`verdict: "consensus"`** (ACCEPT, CONDITIONAL_ACCEPT, or TRIVIAL_ACCEPT):
+  - Update file-hash cache:
+    ```bash
+    bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
+    ```
+  - If issue association exists, update the issue's `files` array in `plan.yaml` with `files_modified` from the result, and append the debate ID to the issue's `debates` array
+  - If CONDITIONAL_ACCEPT: log conditions for tracking
+  - If TRIVIAL_ACCEPT: note `fast_path: true` for auto-advance logic in Step 8c
 
-[If round > 1: Previous adversarial critique: [content]]
-[If round > 1: Address the critique — fix tests or explain why they're correct.]
-```
+- **`verdict: "escalated"`** (human escalation required):
+  - Phase stays `in_progress`
+  - Use `AskUserQuestion`: "Debate [id] requires human escalation."
+  - Options: `"Resolve now (/ratchet:verdict [id]) (Recommended)"`, `"Continue with other pairs"`, `"Done for now"`
 
-**Phase: build**
-```
-You are in the BUILD phase (round [N]).
+- **`verdict: "regress"`** (REGRESS):
+  - Extract `regress_target` and `regress_reasoning` from the result
+  - Proceed to Step 8e (Phase Regression)
 
-Epic context: [milestone name and description]
-Spec from plan phase: [content]
-Tests from test phase: [test file locations and what they test]
-Focus: [what we're building]
-
-Your job: Write IMPLEMENTATION code that makes the tests pass.
-- Follow the spec from the plan phase
-- Make the failing tests from the test phase pass
-- Follow the project's conventions and patterns
-
-[If greenfield: No source code exists yet. Create the implementation from scratch.]
-[If existing code: Files under review: [file list]]
-
-[If round > 1: Previous adversarial critique: [content]]
-[If round > 1: Address the critique — fix issues or explain why they're not valid.]
-```
-
-**Phase: review**
-```
-You are in the REVIEW phase (round [N]).
-
-Epic context: [milestone name and description]
-Focus: [what we're reviewing]
-Files under review: [file list]
-
-Your job: Review the code for quality along your dimension.
-- Assess correctness, maintainability, and adherence to project conventions
-- Look for bugs, logic errors, and design issues
-- Propose concrete improvements where issues are found
-- Implement fixes for issues you identify
-
-[If round > 1: Previous adversarial critique: [content]]
-[If round > 1: Address the critique — fix issues or explain why they're not valid.]
-```
-
-**Phase: harden**
-```
-You are in the HARDEN phase (round [N]).
-
-Epic context: [milestone name and description]
-Focus: [what we're hardening]
-Files under review: [file list]
-
-Your job: Harden the code against edge cases, security issues, and performance problems.
-- Add input validation and error handling where missing
-- Identify and fix security vulnerabilities
-- Add performance-sensitive paths if applicable
-- Write additional tests for edge cases discovered during review
-
-[If round > 1: Previous adversarial critique: [content]]
-[If round > 1: Address the critique — fix issues or explain why they're not valid.]
-```
-
-**All phases include these constraints:**
-```
-CRITICAL CONSTRAINT — DEBATE BOUNDARY:
-You may ONLY create, modify, or delete code during this debate round.
-All code you produce MUST be reviewed by the adversarial agent before it is
-considered accepted. Do NOT propose or make code changes outside the debate
-loop. If the user asks you to make changes outside a debate round,
-respond: "Code changes must go through a debate round. Please run
-/ratchet:run to start a new debate."
-
-CRITICAL CONSTRAINT — USER INTERACTION:
-NEVER output plain-text questions or "Would you like to...?" prompts.
-ALL user-facing questions MUST use AskUserQuestion with structured options.
-AskUserQuestion renders as a terminal selector — use PLAIN TEXT only in
-question text, never markdown (no **bold**, # headers, or - bullet lists).
-```
-
-Save output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.
-
-#### Adversarial Round
-
-Spawn the pair's adversarial agent (from `.ratchet/pairs/<name>/adversarial.md`) with task:
-```
-You are in the [PHASE] phase (round [N]) of a debate.
-
-Epic context: [milestone name and description]
-Focus: [what we're working on]
-
-[Phase-specific adversarial focus:]
-- plan: Does the spec have gaps? Are acceptance criteria testable? Are risks identified?
-- test: Do tests actually encode the spec? Are they correct? Do they cover edge cases?
-- build: Does the implementation make tests pass? Does it follow the spec? Are there bugs?
-- review: Are there quality issues? Logic errors? Convention violations?
-- harden: Are there security holes? Missing validation? Performance issues? Untested edges?
-
-Files under review: [file list]
-Generative agent's assessment: [content of round-N-generative.md]
-[If round > 1: Your previous critique: [content of round-N-1-adversarial.md]]
-[If round > 1: Generative's response: [content of round-N-generative.md]]
-
-Review the output and the generative agent's assessment.
-Run validation commands as evidence where applicable.
-Produce your findings and verdict:
-- ACCEPT: No remaining concerns — consensus reached
-- CONDITIONAL_ACCEPT: Acceptable if specific minor items are addressed — consensus (items logged)
-- REJECT: Issues must be addressed — next round
-- TRIVIAL_ACCEPT: "This change is trivially correct — [justification]" → fast-path consensus.
-  Use ONLY for mechanical, obviously correct changes with no design implications
-  (typo fix, missing import, version bump). Never for logic, control flow, or architecture.
-- REGRESS: "This needs to return to [target phase] because [reasoning]" → phase regression.
-  Use when current phase reveals a fundamental flaw in an earlier phase's output.
-  Target phase must be earlier than current. Budget: max_regressions per milestone.
-```
-
-Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
-
-#### Check Verdict
-
-Parse the adversarial's output for verdict:
-- **ACCEPT** or **CONDITIONAL_ACCEPT** → Set status to `"consensus"`, write verdict, update file-hash cache, break loop
-- **TRIVIAL_ACCEPT** → Handle same as ACCEPT, but also set `fast_path: true` in meta.json. This indicates the change was trivially correct and required no meaningful debate.
-- **REJECT** → Continue to next round (or escalate if at max_rounds)
-- **REGRESS** → Parse target phase from verdict. Validate the target phase is earlier than the current phase. Proceed to Step 8e (Phase Regression).
-
-When the tiebreaker renders a verdict after escalation, map its output:
-- Tiebreaker **ACCEPT** → Set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`
-- Tiebreaker **MODIFY** → Treat as **CONDITIONAL_ACCEPT** — set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`, log `required_changes` as unresolved conditions
-- Tiebreaker **REJECT** → Set status to `"resolved"`, write verdict with `decided_by: "tiebreaker"`, mark phase as needing re-run
-
-On consensus, update the cache:
-```bash
-bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
-```
-
-Update `meta.json` after each round — increment `rounds`, update `status`.
-
-**IMPORTANT**: The debate loop MUST execute fully. After the generative agent produces output, the adversarial agent MUST review it. Do not stop after the generative round.
-
-**IMPORTANT**: Code changes are ONLY permitted inside this debate loop. The generative agent must NOT create, modify, or delete code outside of an active debate round.
-
-#### Escalation
-
-If max_rounds reached without consensus:
-- Set status to `escalated`
-- **Precedent check (M6)**: Before spawning the tiebreaker, scan `.ratchet/escalations/` for existing rulings with the same pair and a similar dispute pattern. If 3+ rulings exist in the same direction (e.g., 3+ ACCEPTs for the same pair on the same dispute type):
-  - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
-  - Options: `"Apply settled pattern (Recommended)"`, `"Escalate anyway"`, `"Escalate to human"`
-  - If "Apply settled pattern": write verdict matching the settled direction, skip tiebreaker
-- Read `escalation` policy from `workflow.yaml`:
-  - `tiebreaker`: Spawn tiebreaker agent with full debate transcript → write verdict
-  - `human`: Set status to `escalated`, inform user to use `/ratchet:verdict`
-  - `both`: Spawn tiebreaker first, then present recommendation to human via `/ratchet:verdict`
-- **Store ruling**: After any tiebreaker verdict, store the ruling in `.ratchet/escalations/<debate-id>.json`:
-  ```json
-  {
-    "debate_id": "<id>",
-    "pair": "<pair-name>",
-    "phase": "<phase>",
-    "timestamp": "<ISO>",
-    "dispute_type": "<categorization>",
-    "adversarial_argument": "<summary>",
-    "generative_argument": "<summary>",
-    "verdict": "accept|reject|modify",
-    "reasoning": "<reasoning>"
-  }
-  ```
+**IMPORTANT**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. The debate-runner agent is the ONLY path to running debates. If no debate-runner is spawned, no code gets written. This is a structural constraint, not a suggestion.
 
 ### Step 8: Phase Gate — Run Guards and Advance
 
 After all debates for the current phase resolve:
 
-**8a. Check debate outcomes:**
-- If all pairs reached consensus (ACCEPT or CONDITIONAL_ACCEPT) → proceed to guards
-- If any pair was REJECTED or remains escalated → phase stays `in_progress`, report which pairs need re-running
+**8a. Check debate-runner results:**
+- If all debate-runners returned `verdict: "consensus"` → proceed to guards
+- If any returned `verdict: "escalated"` → phase stays `in_progress`, report which debates need resolution
+- If any returned `verdict: "regress"` → proceed to Step 8e before checking guards
 
 **8b. Run post-debate guards for this phase (v2 only):**
 
