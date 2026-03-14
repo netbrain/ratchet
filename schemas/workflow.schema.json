@@ -38,6 +38,12 @@
       },
       "required": ["adapter"]
     },
+    "pr_scope": {
+      "type": "string",
+      "enum": ["debate", "phase", "milestone", "issue"],
+      "default": "debate",
+      "description": "Granularity of pull requests — debate (one PR per pair consensus, default), phase (one PR per completed phase), milestone (one PR per completed milestone), or issue (one PR per progress tracking issue — requires a progress adapter like github-issues)"
+    },
     "max_regressions": {
       "oneOf": [
         {

@@ -275,6 +275,7 @@ version: 2
 max_rounds: 3
 escalation: human       # human | orchestrator | both
 max_regressions: 2      # integer (all phases) or object (per-phase)
+pr_scope: debate        # debate | phase | milestone | issue
 
 progress:
   adapter: none          # none | markdown | github-issues

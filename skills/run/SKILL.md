@@ -39,7 +39,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 7 (precedent)**: Auto-select "Apply settled pattern" when available.
 - **Step 8b (post-debate guards)**: If blocking guard fails → auto-select "Fix and re-run" (2 attempts, then halt).
 - **Step 8c (advance)**: Auto-advance to next phase. No user confirmation needed (this already happens for all-fast-path phases; unsupervised extends it to all phases).
-- **Step 8d (commit/PR)**: Auto-select "Commit locally" by default. If `--auto-pr` is also set, auto-select "Create a pull request" instead — the human pre-approved this by passing the flag.
+- **Step 8d (commit/PR)**: Auto-select "Commit locally" by default. If `--auto-pr` is also set, auto-select "Create a pull request" instead — the human pre-approved this by passing the flag. PR scope follows `pr_scope` from workflow.yaml.
 - **Step 8e (regression)**: If within budget, auto-regress. If budget exhausted, **halt**.
 - **Step 8f (analyst assessment)**: Auto-select "Note for later" — don't halt for advisory feedback.
 - **Step 11 (next focus)**: Do not present options. Instead, use the **self-continuation mechanism** (see below).
@@ -599,36 +599,57 @@ When an adversarial agent issues a REGRESS verdict targeting an earlier phase:
    - Present: "Regressing from [current] to [target]. Reason: [reasoning]. Regression [N]/[max]."
    - Return to Step 4 (re-match pairs for the target phase)
 
-**8d. Commit or PR (on milestone completion only):**
+**8d. Commit or PR:**
 
-When a milestone is fully done (all phases complete, all guards passed), the work needs to be committed. Use `AskUserQuestion`:
+Work is packaged based on `pr_scope` from `workflow.yaml` (default: `debate`). This step triggers at the boundary matching the configured scope:
 
-- Question: "Milestone '[name]' is complete. All phases passed, all guards green. How should we package this?"
+- `pr_scope: debate` — after each debate reaches consensus (Step 7, after verdict)
+- `pr_scope: phase` — after all debates in a phase complete and guards pass (Step 8c)
+- `pr_scope: milestone` — after all phases complete (milestone done)
+- `pr_scope: issue` — one PR per progress tracking issue (requires a progress adapter). If a milestone maps to a single issue, the PR covers the full milestone. If the milestone is large (more than 3 phases with substantive changes), split into per-phase PRs instead and link them all to the issue. Present: "This issue spans [N] phases with significant changes — splitting into [N] PRs linked to [issue ref]."
+
+**Auto-detection**: If `pr_scope` is not set and a progress adapter is configured (`github-issues`, `linear`, `jira`), default to `issue` instead of `debate`.
+
+When the boundary is reached, use `AskUserQuestion`:
+
+- Question: "[Scope] complete: [context]. How should we package this?"
+  - For `debate`: "Debate [pair-name] reached consensus in [phase] phase."
+  - For `phase`: "Phase [name] complete for [milestone]. [N] pairs, all consensus."
+  - For `milestone`: "Milestone '[name]' complete. All phases passed, all guards green."
+  - For `issue`: "Issue [ref] complete ([milestone name]). All phases passed." (or per-phase if split)
 - Options:
   - `"Commit locally (Recommended)"` — create a local git commit with a summary
   - `"Create a pull request"` — commit, create branch if needed, push branch, open PR
   - `"Skip — I'll handle it"` — do nothing
 
 **If "Commit locally":**
-- Stage all files that were created or modified during this milestone's debates
-- Generate a commit message from the milestone name, description, and debate outcomes
+- Stage files that were created or modified during this scope's debates
+- Generate a commit message scoped to what was done:
+  - `debate`: pair name, phase, and verdict summary
+  - `phase`: phase name, pairs involved, and outcome
+  - `milestone`: milestone name, description, and debate outcomes
+  - `issue`: issue reference, milestone name, and summary
 - Create the commit — do NOT push
 
 **If "Create a pull request":**
 - Stage and commit (same as above)
-- Create a branch if not already on one (branch name derived from milestone: `ratchet/<milestone-slug>`)
+- Create a branch if not already on one:
+  - `debate`: `ratchet/<milestone-slug>/<pair-name>`
+  - `phase`: `ratchet/<milestone-slug>/<phase>`
+  - `milestone`: `ratchet/<milestone-slug>`
+  - `issue`: `ratchet/<issue-ref>` (or `ratchet/<issue-ref>/<phase>` if split)
 - Push the branch to origin — this is the ONE case where pushing is allowed, because the user explicitly chose "Create a pull request"
 - Create the PR using `gh pr create` with:
-  - Title: milestone name
-  - Body: summary of what was built, phases completed, debate outcomes, guard results
+  - Title scoped to the boundary (pair name, phase name, or milestone name)
+  - Body: summary of what was done, debate outcomes, guard results
   - Link to progress adapter item if one exists
 
 After PR is created, use `AskUserQuestion`:
 - Question: "PR created: [URL]. CI checks are running. What do you want to do?"
 - Options:
   - `"Monitor CI checks and analyze results (Recommended)"` — runs `/ratchet:retro monitor <pr-number>` to watch checks, then auto-analyzes any failures and feeds learnings back into agents/guards
-  - `"Continue to next milestone while CI runs"` — proceed with the next milestone; the user can run `/ratchet:retro pr <number>` later to analyze results
-  - `"Monitor CI in background, continue working"` — start monitoring as a background task, continue to next milestone; report back when checks complete
+  - `"Continue while CI runs"` — proceed; the user can run `/ratchet:retro pr <number>` later
+  - `"Monitor CI in background, continue working"` — background monitoring, continue working; report back when checks complete
   - `"Done for now"`
 
 **8f. Post-Milestone Analyst Assessment:**
