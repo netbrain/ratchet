@@ -78,6 +78,12 @@ Then start building:
 
 Ratchet walks you through each phase of the first milestone. The generative agent does the work, the adversarial agent verifies it, guards run at phase boundaries.
 
+Preview what would run without executing anything:
+
+```
+/ratchet:run --dry-run
+```
+
 ### Existing project
 
 ```
@@ -111,6 +117,7 @@ This converts your v1 config to v2 `workflow.yaml` with components, phases, and 
 | `/ratchet:retro [pr]` | Retrospective — learn from CI failures and PR feedback |
 | `/ratchet:gen-tests` | Generate tests from debate findings |
 | `/ratchet:tighten [pair]` | Sharpen agents from debate lessons and retro findings |
+| `/ratchet:advise` | On-demand workflow health check — pair effectiveness, scope gaps, guard recommendations |
 | `/ratchet:migrate` | Upgrade v1 config.yaml to v2 workflow.yaml |
 
 ## Workflow
@@ -154,6 +161,53 @@ guards:
     blocking: false    # advisory — logs but doesn't block
 ```
 
+### Adaptive Intelligence
+
+Ratchet adapts how much structure to apply based on context:
+
+**Pre-debate guards** — Guards can run before debates start (`timing: pre-debate`), catching lint/format failures before wasting debate cycles. Guards without a timing field default to post-debate (backward compatible).
+
+```yaml
+guards:
+  - name: fmt-check
+    command: "gofmt -l ."
+    phase: build
+    blocking: true
+    timing: pre-debate    # fails fast — no debates if formatting is broken
+```
+
+**Adaptive round budgets** — Pairs can override the global `max_rounds`. Experienced pairs that rarely need more than one round can run lean:
+
+```yaml
+pairs:
+  - name: api-quality
+    component: backend
+    phase: review
+    scope: "src/api/**"
+    max_rounds: 2         # this pair converges fast
+    enabled: true
+```
+
+**Trivial fast-path** — The adversarial can issue `TRIVIAL_ACCEPT` for mechanical, obviously correct changes (typo fix, missing import, version bump). All-fast-path phases auto-advance without user confirmation.
+
+**Phase regression** — The adversarial can issue `REGRESS` to send work backward when a later phase discovers a flaw in an earlier phase's output. Budget controlled by `max_regressions` — set globally as an integer, or per-phase as an object:
+
+```yaml
+max_regressions: 3                          # 3 regressions allowed for any phase
+max_regressions:                            # or per-phase limits
+  build: 3                                  # build can regress more (common during TDD)
+  review: 1                                 # review regressions are expensive
+  # unspecified phases fall back to 2
+```
+
+**Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs across retros, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
+
+**Cross-cutting scope** — Changed files are matched against all component scopes, not just the first match. Multi-component changes automatically trigger pairs from all relevant components. Pairs can use `scope: "auto"` to inherit their parent component's scope.
+
+**Orchestrator learning** — Escalation rulings are stored in `.ratchet/escalations/`. When 3+ rulings exist in the same direction for the same pair and dispute type, the settled pattern is offered as a shortcut before spawning the orchestrator.
+
+**Workflow health checks** — `/ratchet:advise` spawns the analyst for an on-demand assessment: pair effectiveness rankings, scope coverage gaps, guard recommendations, and workflow preset suggestions. Also runs automatically after each milestone completion.
+
 ### Feedback Loop
 
 ```
@@ -176,8 +230,14 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
                         │     Phase Gate Loop          │
                         │  plan → test → build →       │
                         │  review → harden             │
+                        │  (REGRESS can send backward) │
                         └──────────┬──────────────────┘
                                    │ (per phase)
+                        ┌──────────▼──────────────────┐
+                        │  Pre-debate Guards           │
+                        │  fmt ✓  lint ✓  (fail fast)  │
+                        └──────────┬──────────────────┘
+                                   │ (all pre-debate guards pass)
               ┌────────────────────▼───────────────────┐
               │              Debate Protocol            │
               │                                        │
@@ -186,18 +246,20 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
               │  │  (builds) │debate │  (critiques)  │  │
               │  └───────────┘       └──────────────┘  │
               │                                        │
-              │  Round N → ACCEPT / REJECT → Round N+1 │
-              │  Max rounds → Escalate to orchestrator  │
+              │  ACCEPT / TRIVIAL_ACCEPT → consensus   │
+              │  REJECT → next round                   │
+              │  REGRESS → return to earlier phase      │
+              │  Max rounds → check precedent/escalate  │
               └────────────────────┬───────────────────┘
                                    │ (consensus reached)
                         ┌──────────▼──────────────────┐
-                        │     Guards (deterministic)   │
-                        │  lint ✓  tests ✓  security ✓ │
+                        │  Post-debate Guards          │
+                        │  tests ✓  security ✓         │
                         └──────────┬──────────────────┘
                                    │ (all blocking guards pass)
                         ┌──────────▼──────────────────┐
-                        │    Advance to next phase     │
-                        │    or complete milestone     │
+                        │  Advance / analyst assess    │
+                        │  or complete milestone       │
                         └─────────────────────────────┘
 ```
 
@@ -216,6 +278,7 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
 version: 2
 max_rounds: 3
 escalation: human       # human | orchestrator | both
+max_regressions: 2      # integer (all phases) or object (per-phase)
 
 progress:
   adapter: none          # none | markdown | github-issues
@@ -233,7 +296,8 @@ pairs:
   - name: api-quality
     component: backend
     phase: review
-    scope: "src/api/**"
+    scope: "src/api/**"     # or "auto" to inherit component scope
+    max_rounds: 2            # optional per-pair override
     enabled: true
 
 guards:
@@ -241,6 +305,7 @@ guards:
     command: "npm run lint"
     phase: build
     blocking: true
+    timing: pre-debate       # pre-debate | post-debate (default)
     components: [backend, frontend]
 ```
 
@@ -258,9 +323,11 @@ guards:
 ├── debates/             # Debate transcripts
 ├── guards/              # Guard execution results
 ├── reviews/             # Agent performance reviews
-├── retros/              # Retrospective findings (CI/PR feedback)
+├── retros/              # Retrospective findings with severity and recurrence
+├── escalations/         # Orchestrator rulings for precedent lookup
+├── reports/             # Health check reports from /ratchet:advise
 ├── progress/            # Local progress tracking (markdown adapter)
-└── scores/              # Historical quality metrics
+└── scores/              # Historical quality metrics (includes fast-path data)
 ```
 
 ## Progress Tracking

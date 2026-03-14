@@ -527,9 +527,9 @@ Update `plan.yaml` with the new `phase_status`.
 
 When an adversarial agent issues a REGRESS verdict targeting an earlier phase:
 
-1. Read `max_regressions` from workflow config (default: 2). This budget is per-milestone.
-2. Track `regressions` counter in `plan.yaml` on the current milestone (initialize to 0 if absent).
-3. If budget exhausted (`regressions >= max_regressions`):
+1. Read `max_regressions` from workflow config (default: 2). If it's an integer, that limit applies to all phases. If it's an object with per-phase keys (e.g., `{ "build": 3, "review": 1 }`), use the limit for the current phase, falling back to 2 for unspecified phases. The budget is tracked per-milestone.
+2. Track `regressions` counter in `plan.yaml` on the current milestone (initialize to 0 if absent). Also track per-phase regression counts if per-phase limits are configured.
+3. If budget exhausted (`regressions >= max_regressions` for the current phase):
    - Use `AskUserQuestion`: "Regression budget exhausted ([N]/[max]). The adversarial wants to regress from [current] to [target] because: [reasoning]."
    - Options: `"Allow one more regression"`, `"Reject regression — continue current phase"`, `"Escalate to human"`
 4. If within budget (or human allowed):

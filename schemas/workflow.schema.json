@@ -39,11 +39,26 @@
       "required": ["adapter"]
     },
     "max_regressions": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 10,
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        {
+          "type": "object",
+          "properties": {
+            "plan": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "test": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "build": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "review": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "harden": { "type": "integer", "minimum": 0, "maximum": 10 }
+          },
+          "additionalProperties": false
+        }
+      ],
       "default": 2,
-      "description": "Maximum phase regressions allowed per milestone before requiring human approval"
+      "description": "Maximum phase regressions per milestone. Integer applies to all phases. Object sets per-phase limits with fallback to 2 for unspecified phases."
     },
     "components": {
       "type": "array",
