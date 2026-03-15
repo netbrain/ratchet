@@ -361,6 +361,8 @@ Each debate-runner returns a result object. Process each result:
 
 **IMPORTANT**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. The debate-runner agent is the ONLY path to running debates. If no debate-runner is spawned, no code gets written. This is a structural constraint, not a suggestion.
 
+**IMPORTANT**: After processing debate results, you MUST proceed through ALL of Step 8 — including 8d (commit/PR). Do NOT skip to the next issue, phase, or milestone without packaging the work. Every completed scope boundary (debate, phase, milestone, or issue — per `pr_scope`) MUST produce a commit or PR before moving on. If you find yourself starting the next piece of work without having committed the previous one, STOP and go back to Step 8d.
+
 ### Step 8: Phase Gate — Run Guards and Advance
 
 After all debates for the current phase resolve:
