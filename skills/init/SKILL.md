@@ -126,11 +126,84 @@ If "Let's discuss": use follow-up `AskUserQuestion` calls to refine. The user ma
 
 Finalize the configuration through conversation, one concern at a time. Do NOT jump to a complete config — walk through each area with the user.
 
-**6a. Components** — present the proposed components with scope globs and workflow presets. Use `AskUserQuestion`:
-- Question: "[component list with scopes and workflows]. Do these groupings make sense?"
+**6a. Phases and workflow presets** — before discussing components, explain how phases work and what presets are available. The user needs to understand this to make informed choices about their component workflows. Use `AskUserQuestion` with the explanation in the question text:
+
+```
+Ratchet organizes work into phases. Each milestone progresses through its assigned phases in order — a phase must complete before the next begins.
+
+The five phases:
+
+  plan    — Produce a spec. Generative writes acceptance criteria and design
+            decisions. Adversarial challenges gaps and untestable criteria.
+
+  test    — Write failing tests. Generative creates tests encoding the spec.
+            Adversarial verifies tests are correct and cover the spec.
+
+  build   — Implement. Generative writes code to make tests pass. Adversarial
+            runs tests, lint, and reviews the implementation.
+
+  review  — Quality review. Generative fixes issues. Adversarial looks for bugs,
+            logic errors, and convention violations.
+
+  harden  — Edge cases and security. Generative adds validation and fixes
+            vulnerabilities. Adversarial runs security scans and tests edge cases.
+
+Each component chooses a workflow preset that selects which phases apply:
+
+  tdd (plan > test > build > review > harden)
+    Full rigor. Best for core business logic, APIs, and anything where
+    correctness matters most. The test phase ensures tests exist before
+    implementation — true test-driven development.
+
+  traditional (plan > build > review > harden)
+    Skips the test phase. Tests are written during build alongside implementation.
+    Good for glue code, integrations, and components where TDD adds friction
+    without proportional value.
+
+  review-only (review)
+    Minimal — just review existing code. Good for legacy code, documentation,
+    or configuration where the full pipeline is overkill.
+
+A note on the review phase: the build adversarial already reviews code (it runs
+tests and critiques implementation). A separate review phase adds value when you
+want a different lens — e.g., a build pair focused on "does it work" and a review
+pair focused on "is it maintainable/idiomatic." If your build pairs already do
+thorough quality review, consider whether a dedicated review phase adds enough
+value to justify the extra debate cycle. You can always add it later.
+
+Examples:
+
+  A REST API backend — tdd
+    Core logic needs test coverage first. Plan defines the API contract,
+    tests encode it, build implements it, review checks conventions,
+    harden adds input validation and auth checks.
+
+  A React frontend — traditional
+    UI components are hard to TDD meaningfully. Plan defines the UX,
+    build implements it, review checks accessibility and patterns,
+    harden adds error boundaries and XSS prevention.
+
+  Infrastructure/CI config — review-only
+    Terraform modules, Dockerfiles, CI pipelines. No build step —
+    just review what's there for correctness and security.
+
+  CLI tool — tdd for core, traditional for scaffolding
+    Use tdd for the command parsing and business logic components,
+    traditional for the output formatting and help text components.
+
+Which preset fits your project? (You can assign different presets to different
+components in the next step.)
+```
+
+Options: `"Understood — let's assign presets to components (Recommended)"`, `"I have questions about phases"`, `"Skip phase discussion"`
+
+If the user has questions, answer them before proceeding. The goal is informed consent — the user should understand what they're opting into.
+
+**6b. Components** — present the proposed components with scope globs and workflow presets. Now that the user understands phases, propose which preset fits each component and why. Use `AskUserQuestion`:
+- Question: "[component list with scopes and recommended workflows, with brief rationale for each preset choice]. Do these groupings make sense?"
 - Options: `"Looks good (Recommended)"`, `"Modify"`, `"Add/remove components"`
 
-**6b. Pairs — discuss each one.** For each proposed pair, use `AskUserQuestion` to validate:
+**6c. Pairs — discuss each one.** For each proposed pair, use `AskUserQuestion` to validate:
 - What quality dimension does this pair focus on?
 - What should the adversarial specifically look for? Ask the user — they know their domain. E.g., "For the file-watching pair, what edge cases matter most? Lock files? Rapid successive writes? Symlinks?"
 - What validation commands should the adversarial run? Suggest based on the stack but ask if there are others.
@@ -140,18 +213,18 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 
 **Ecosystem-inspired pairs:** After discussing the initial pairs, consider whether ecosystem projects suggest additional quality dimensions the user hasn't thought of. Draw from Impeccable's design expertise (information hierarchy, glanceability, accessibility) for frontend pairs and Agency Agents' specialist personas (security, performance, observability) for domain-specific pairs. Present these as suggestions with the inspiration source explained — e.g., "Drawing from Impeccable's design principles, a dashboard-ux pair could evaluate whether status information is glanceable and color-coded effectively." Let the user decide whether to add them.
 
-**6c. Guards — mirror CI and add what's missing.** Use `AskUserQuestion`:
+**6d. Guards — mirror CI and add what's missing.** Use `AskUserQuestion`:
 - **Start from CI**: For each quality gate command discovered in CI/CD pipelines during the codebase scan (Step 2), propose a matching guard. The goal is that every check CI runs should have a corresponding Ratchet guard so debates never produce code that will fail the pipeline. Present these as: "I found these checks in your CI pipeline — I'll mirror them as guards:"
   - Map CI steps to guard properties: lint/format commands → `timing: pre-debate`, `phase: build`, `blocking: true`; test commands → `timing: post-debate`, `phase: build`, `blocking: true`; security scans → `timing: post-debate`, `phase: harden`, `blocking: true`; type checks → `timing: pre-debate`, `phase: build`, `blocking: true`
 - **Then suggest additions**: Based on the stack, suggest guards for checks that CI *doesn't* run but should (e.g., "Your CI doesn't run a security scanner — want to add one as an advisory guard?")
 - For each guard, confirm: blocking or advisory? Which phase? Which components? What timing?
 - Options: `"These guards are good (Recommended)"`, `"Add more"`, `"Modify"`, `"Skip guards for now"`
 
-**6d. Progress tracking:**
+**6e. Progress tracking:**
 - Question: "How do you want to track milestone progress?"
 - Options: `"None (just local)"`, `"Markdown files in .ratchet/progress/"`, `"GitHub Issues (requires gh CLI)"`, `"Other / configure later"`
 
-**6e. Final review** — only after walking through each area, present the complete config for approval:
+**6f. Final review** — only after walking through each area, present the complete config for approval:
 - Question: "[full formatted config]. Everything look right?"
 - Options: `"Approve (Recommended)"`, `"Modify [section]"`, `"Start over"`
 
