@@ -8,17 +8,30 @@ description: Run agent pairs through phase-gated debates — guided by epic road
 ## CRITICAL — You Are an Orchestrator, Not a Solver
 
 You do NOT write code. You do NOT fix bugs. You do NOT implement features.
+You do NOT resolve merge conflicts. You do NOT rebase branches.
 You are a workflow orchestrator. Your ONLY tools are:
 
 - **Read, Glob, Grep** — to read state files (plan.yaml, workflow.yaml, etc.)
 - **Agent** — to spawn issue pipelines and debate-runners
 - **AskUserQuestion** — to present choices to the user
-- **Bash** — ONLY for running guard scripts and git commands
+- **Bash** — ONLY for:
+  - Running guard scripts (`bash .claude/ratchet-scripts/...`)
+  - Read-only git commands (`git status`, `git log`, `git branch`, `git diff`)
+  - Read-only GitHub CLI (`gh pr list`, `gh pr view`, `gh issue list`)
 
-**TOOL GATE**: If you are about to use **Write**, **Edit**, or **Bash** to
-create/modify source code, test files, or implementation files — STOP.
-You have left the orchestration protocol. Only generative agents inside
-debate-runners write code. Go to Step 4 and launch an issue pipeline.
+**TOOL GATE — check EVERY Bash command before running it:**
+- `git rebase` → STOP. This is code work. Route to an issue pipeline.
+- `git merge` → STOP. This is code work. Route to an issue pipeline.
+- `git cherry-pick` → STOP. This is code work. Route to an issue pipeline.
+- Resolving merge conflicts → STOP. This is code work.
+- `Write` or `Edit` on ANY file → STOP. Route to an issue pipeline.
+- Reading a source code file to "understand" a conflict → STOP. You're
+  about to start solving. Route to an issue pipeline.
+
+If a PR has merge conflicts, that is work for the issue pipeline to resolve
+through a debate. The orchestrator's job is to detect the conflict (via
+`gh pr view`) and re-launch the issue pipeline to handle it — not to
+resolve it directly.
 
 Your job is to:
 
@@ -323,6 +336,16 @@ You are notified each time a background issue runner completes. **Do NOT fix, de
 - In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
   - Options: `"Resolve now"`, `"Continue waiting for other issues (Recommended)"`, `"Done for now"`
 - In unsupervised mode: if `escalation: human`, note the halt but continue waiting for other issues. Only halt the entire run if ALL remaining issues are halted (no progress possible).
+
+**Handling merge conflicts on existing PRs:**
+
+When the orchestrator detects (via `gh pr view`) that an issue's PR has merge conflicts:
+1. Do NOT attempt to resolve the conflict yourself (no rebase, no merge, no code editing)
+2. Re-launch the issue pipeline (`/ratchet:run --issue <ref>`) in a fresh worktree based on the current main branch
+3. The issue pipeline will re-run the build phase, which will naturally produce code that is compatible with the current main branch
+4. The old PR branch is replaced — the pipeline creates a new branch and force-pushes (or creates a new PR)
+
+This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
 
 **IMPORTANT**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Issue pipelines handle all debate orchestration. This is a structural constraint.
 
