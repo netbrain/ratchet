@@ -8,13 +8,24 @@ description: Analyze project and generate tailored agent pairs through codebase 
 Initialize Ratchet for the current project. You execute this entire flow inline — do NOT spawn subagents or tasks for the interview. You ARE the analyst.
 
 ## Prerequisites
-- No existing `.ratchet/` directory (use `/ratchet:pair` to add pairs to an existing setup)
+- No existing `.ratchet/` directory in the current scope (use `/ratchet:pair` to add pairs to an existing setup)
 
 ## Execution Steps
 
 ### Step 1: Check Prerequisites
 
-Check if `.ratchet/` already exists. If so, inform the user and suggest `/ratchet:pair` instead.
+Check if `.ratchet/` already exists in CWD. If so, inform the user and suggest `/ratchet:pair` instead.
+
+**Monorepo detection**: Also check if a parent directory has `.ratchet/workflow.yaml` with a `workspaces` key. If so, this is a workspace within an existing monorepo. Check whether CWD is already registered as a workspace:
+- If registered and has `.ratchet/` → already initialized, suggest `/ratchet:pair`
+- If registered but no `.ratchet/` → proceed with init for this workspace
+- If NOT registered → proceed with init, and after generating config, auto-register this workspace in the root `workflow.yaml`'s `workspaces` array
+
+**Monorepo root init**: If the user runs `/ratchet:init` at the repo root and the project contains multiple distinct subprojects (detected by multiple `go.mod`, `package.json`, or similar manifests in subdirectories), use `AskUserQuestion`:
+- Question: "This looks like a monorepo with multiple projects: [list subdirs with manifests]. Set up as a monorepo with per-project workspaces?"
+- Options: `"Yes — create monorepo config (Recommended)"`, `"No — treat as single project"`, `"Let me pick which subdirs"`
+
+If monorepo: create root `.ratchet/workflow.yaml` with only `version`, `workspaces`, and shared policy fields (models, escalation, max_rounds). No pairs, components, or guards at root. Then run workspace-level init for each workspace.
 
 ### Step 2: Codebase Scan (silent — no user interaction)
 

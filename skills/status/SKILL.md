@@ -9,13 +9,14 @@ Display a snapshot of the project's progress through the epic, milestones, and p
 
 ## Usage
 ```
-/ratchet:status              # Full status overview
+/ratchet:status              # Full status overview (or monorepo overview from root)
 /ratchet:status [milestone]  # Detailed view of a specific milestone
+/ratchet:status [workspace]  # Status for a specific workspace in a monorepo
 ```
 
 ## Prerequisites
 - `.ratchet/` must exist
-- `.ratchet/plan.yaml` must exist
+- `.ratchet/plan.yaml` must exist (for workspace-level status)
 
 If `.ratchet/` or `plan.yaml` does not exist, inform the user:
 > "No epic found. Run /ratchet:init to set up a project, or /ratchet:run to start without an epic."
@@ -26,9 +27,33 @@ Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommend
 
 ### Step 1: Read State
 
-Read `.ratchet/plan.yaml` and `.ratchet/workflow.yaml`.
+**Workspace resolution**: Same algorithm as `/ratchet:run` Step 1a. If at monorepo root with no workspace specified, show the monorepo overview (Step 2b). If a workspace is resolved, show workspace-level status.
 
-Also scan `.ratchet/debates/*/meta.json` to count active/resolved debates per milestone.
+Read `plan.yaml` and `workflow.yaml` from the resolved `.ratchet/` directory.
+
+Also scan `debates/*/meta.json` to count active/resolved debates per milestone.
+
+### Step 2b: Monorepo Overview (root only)
+
+If at monorepo root with no workspace specified, read each workspace's `plan.yaml` and show:
+
+```
+Monorepo: [N] workspaces
+Shared policy: models=[generative:opus, adversarial:sonnet] escalation=[human]
+
+┌───────────────────────────────────────────────────────────────┐
+│ monitor                                                       │
+│   Epic: [name] — [completed]/[total] milestones               │
+│   Current: [milestone name] — [phase] phase                   │
+│   Pairs: [N] active, [N] total                                │
+│                                                               │
+│ engine                                                        │
+│   No active milestones                                        │
+└───────────────────────────────────────────────────────────────┘
+```
+
+Then use `AskUserQuestion`:
+- Options: one option per workspace as `"View [name] status"`, plus `"Done for now"`
 
 ### Step 2: Display Overview
 

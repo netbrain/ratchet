@@ -4,8 +4,18 @@
   "title": "Ratchet Workflow Configuration",
   "description": "Ratchet workflow configuration — components, phases, guards, and progress tracking",
   "type": "object",
-  "required": ["version", "max_rounds", "escalation", "pairs"],
+  "required": ["version"],
   "additionalProperties": false,
+  "if": {
+    "required": ["workspaces"]
+  },
+  "then": {
+    "required": ["version", "workspaces"],
+    "not": { "required": ["pairs"] }
+  },
+  "else": {
+    "required": ["version", "max_rounds", "escalation", "pairs"]
+  },
   "properties": {
     "version": {
       "type": "integer",
@@ -66,9 +76,17 @@
       "default": 2,
       "description": "Maximum phase regressions per milestone. Integer applies to all phases. Object sets per-phase limits with fallback to 2 for unspecified phases."
     },
+    "workspaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/workspace"
+      },
+      "description": "Monorepo workspace definitions. When present, this is a root coordinator config — pairs, components, and guards live in each workspace's own .ratchet/ directory."
+    },
     "models": {
       "$ref": "#/$defs/models",
-      "description": "Model assignments for each agent role. Per-pair overrides can narrow generative/adversarial models."
+      "description": "Model assignments for each agent role. Per-pair overrides can narrow generative/adversarial models. In monorepo root, these are inherited by all workspaces."
     },
     "components": {
       "type": "array",
@@ -130,6 +148,22 @@
         }
       },
       "description": "Global model assignments for each agent role"
+    },
+    "workspace": {
+      "type": "object",
+      "required": ["path", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path from repo root to the workspace directory (must contain its own .ratchet/)"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Human-readable workspace identifier"
+        }
+      }
     },
     "phase": {
       "type": "string",

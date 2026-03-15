@@ -36,6 +36,7 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 ```
 /ratchet:run                # Resume from epic — propose next focus or run against changes
 /ratchet:run [pair-name]    # Run a specific pair against its scoped files
+/ratchet:run [workspace]    # Target a specific workspace in a monorepo
 /ratchet:run --all-files    # Run all pairs against all files in scope
 /ratchet:run --no-cache     # Force re-debate even if files haven't changed
 /ratchet:run --dry-run      # Preview what would run without executing anything
@@ -49,6 +50,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 
 ### Behavior
 
+- **Step 1a (workspace)**: If at monorepo root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
 - **Step 2 (focus)**: Auto-select "Continue [current phase]" for the current milestone. When a milestone completes, auto-advance to the next.
 - **Step 5b (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
 - **Step 6c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, **halt** and report.
@@ -123,9 +125,34 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 
 ## Execution Steps
 
-### Step 1: Read Context
+### Step 1: Resolve Workspace and Read Context
 
-Read `.ratchet/plan.yaml` (if it exists), `.ratchet/project.yaml`, and `.ratchet/workflow.yaml`.
+#### 1a. Workspace Resolution
+
+Determine which `.ratchet/` directory to use:
+
+1. **Walk up from CWD** looking for `.ratchet/workflow.yaml`
+2. Read the first `workflow.yaml` found. If it has a `workspaces` key → **monorepo root**
+3. **Monorepo root resolution**:
+   - If the user specified a workspace name as an argument (e.g., `/ratchet:run monitor`) → use that workspace
+   - If CWD is inside a workspace's `path` → auto-select that workspace
+   - Otherwise → present workspace selector via `AskUserQuestion`:
+     ```
+     Monorepo: [N] workspaces
+
+       [name] — [status summary from workspace plan.yaml]
+       [name] — [status summary]
+
+     Which workspace?
+     ```
+     Options: one per workspace name, plus `"Done for now"`
+4. **Workspace selected** → set the effective `.ratchet/` path to `<workspace-path>/.ratchet/` and prepend `<workspace-path>/` to all file operations for the rest of this run
+5. **Inherit policy from root**: Read the root `workflow.yaml` for shared policy fields (`models`, `escalation`, `max_rounds`, `max_regressions`, `pr_scope`). The workspace's own `workflow.yaml` overrides these per-field (not all-or-nothing — e.g., a workspace can override just `models.adversarial` and inherit everything else)
+6. **No `workspaces` key** → single-project mode, use `.ratchet/` as-is (no change from current behavior)
+
+#### 1b. Read State
+
+Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the resolved `.ratchet/` directory.
 
 Build a picture of:
 - Which milestones are **completed** (status: done)
