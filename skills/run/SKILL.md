@@ -416,7 +416,8 @@ Process each debate-runner result:
   - If TRIVIAL_ACCEPT: note `fast_path: true`
 
 - **`verdict: "escalated"`** (human escalation required):
-  - Return to orchestrator with `status: "escalated"`
+  - Update issue status in plan.yaml
+  - Output the early-exit summary (see Step 5h) and return
 
 - **`verdict: "regress"`** (REGRESS):
   - Handle regression (Step 5g)
@@ -429,7 +430,7 @@ Process each debate-runner result:
 
 **Check results:**
 - All consensus → proceed to guards
-- Any escalated → return `status: "escalated"` to orchestrator
+- Any escalated → update plan.yaml, output early-exit summary (Step 5h), return
 - Any regress → proceed to Step 5g
 
 **Run post-debate guards:**
@@ -489,9 +490,32 @@ When an adversarial issues REGRESS targeting an earlier phase:
 #### 5h. Issue Complete
 
 When all phases are done:
-- Set issue status to `done`
+- Set issue status to `done` in plan.yaml
 - Run score updates for all debates in this issue
-- Return result to orchestrator with `status: "done"`, branch name, PR URL, files modified
+
+**Output a completion summary as your final message.** This is critical for visibility — the orchestrator and the user need to see what happened. Use this format:
+
+```
+Issue [ref] complete:
+  [phase] ✓ ([N] debate(s), [verdict type])
+  [phase] ✓ ([N] debate(s), [verdict type])
+  [phase] — skipped ([reason, e.g. traditional workflow])
+  ...
+  Files modified: [N]
+  Branch: [branch name]
+  PR: [URL or "local commit only"]
+```
+
+**If the pipeline exits early** (escalation, guard failure, regression budget exhausted), output:
+
+```
+Issue [ref] [blocked|escalated|failed]:
+  [phase] ✓
+  [phase] — [reason for halt]
+  Halted at: [phase] phase, [halt reason]
+```
+
+This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
 
 ---
 
