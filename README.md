@@ -99,12 +99,12 @@ Run the full plan end-to-end without human intervention (halts on human escalati
 
 Same flow, but Ratchet scans your codebase first — it reads your manifests, tests, CI config, and directory structure before asking you anything. The interview focuses on what you want to *improve*, not what already exists.
 
-### Monorepo
+### Workspaces
 
-Ratchet supports monorepos with multiple independent workspaces. Each workspace has its own `.ratchet/` with pairs, plans, and debates. A root config provides shared policy defaults.
+For repos with multiple projects, Ratchet supports workspaces. Each workspace has its own `.ratchet/` with pairs, plans, and debates. A root config provides shared policy defaults.
 
 ```
-/ratchet:init    # auto-detects monorepo structure, creates root + workspace configs
+/ratchet:init    # auto-detects multi-project structure, creates root + workspace configs
 ```
 
 Root `workflow.yaml`:
@@ -128,10 +128,10 @@ Work on a specific workspace:
 ```
 /ratchet:run monitor         # from repo root — target workspace by name
 /ratchet:status monitor      # workspace-level status
-/ratchet:status              # monorepo overview from root
+/ratchet:status              # overview from root
 ```
 
-Or `cd` into a workspace directory — Ratchet finds the local `.ratchet/` and runs in single-project mode. No monorepo awareness needed.
+Or `cd` into a workspace directory — Ratchet finds the local `.ratchet/` and runs in single-project mode.
 
 Workspaces are fully autonomous — they never share pairs, guards, or plans. The root only provides policy defaults (`models`, `escalation`, `max_rounds`, `max_regressions`, `pr_scope`) that workspaces can override per-field.
 

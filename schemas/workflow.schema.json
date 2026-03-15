@@ -82,11 +82,11 @@
       "items": {
         "$ref": "#/$defs/workspace"
       },
-      "description": "Monorepo workspace definitions. When present, this is a root coordinator config — pairs, components, and guards live in each workspace's own .ratchet/ directory."
+      "description": "Workspace definitions. When present, this is a root coordinator config — pairs, components, and guards live in each workspace's own .ratchet/ directory."
     },
     "models": {
       "$ref": "#/$defs/models",
-      "description": "Model assignments for each agent role. Per-pair overrides can narrow generative/adversarial models. In monorepo root, these are inherited by all workspaces."
+      "description": "Model assignments for each agent role. Per-pair overrides can narrow generative/adversarial models. In root config, these are inherited by all workspaces."
     },
     "components": {
       "type": "array",

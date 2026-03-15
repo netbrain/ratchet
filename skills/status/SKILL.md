@@ -9,9 +9,9 @@ Display a snapshot of the project's progress through the epic, milestones, and p
 
 ## Usage
 ```
-/ratchet:status              # Full status overview (or monorepo overview from root)
+/ratchet:status              # Full status overview (or workspace overview from root)
 /ratchet:status [milestone]  # Detailed view of a specific milestone
-/ratchet:status [workspace]  # Status for a specific workspace in a monorepo
+/ratchet:status [workspace]  # Status for a specific workspace in a multi-project setup
 ```
 
 ## Prerequisites
@@ -27,18 +27,18 @@ Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommend
 
 ### Step 1: Read State
 
-**Workspace resolution**: Same algorithm as `/ratchet:run` Step 1a. If at monorepo root with no workspace specified, show the monorepo overview (Step 2b). If a workspace is resolved, show workspace-level status.
+**Workspace resolution**: Same algorithm as `/ratchet:run` Step 1a. If at workspace root with no workspace specified, show the workspace overview (Step 2b). If a workspace is resolved, show workspace-level status.
 
 Read `plan.yaml` and `workflow.yaml` from the resolved `.ratchet/` directory.
 
 Also scan `debates/*/meta.json` to count active/resolved debates per milestone.
 
-### Step 2b: Monorepo Overview (root only)
+### Step 2b: Workspace Overview (root only)
 
-If at monorepo root with no workspace specified, read each workspace's `plan.yaml` and show:
+If at workspace root with no workspace specified, read each workspace's `plan.yaml` and show:
 
 ```
-Monorepo: [N] workspaces
+Workspaces: [N]
 Shared policy: models=[generative:opus, adversarial:sonnet] escalation=[human]
 
 ┌───────────────────────────────────────────────────────────────┐

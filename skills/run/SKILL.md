@@ -36,7 +36,7 @@ Phases are ordered and gated: phase N must complete (all pairs reach consensus +
 ```
 /ratchet:run                # Resume from epic — propose next focus or run against changes
 /ratchet:run [pair-name]    # Run a specific pair against its scoped files
-/ratchet:run [workspace]    # Target a specific workspace in a monorepo
+/ratchet:run [workspace]    # Target a specific workspace
 /ratchet:run --all-files    # Run all pairs against all files in scope
 /ratchet:run --no-cache     # Force re-debate even if files haven't changed
 /ratchet:run --dry-run      # Preview what would run without executing anything
@@ -50,7 +50,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 
 ### Behavior
 
-- **Step 1a (workspace)**: If at monorepo root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
+- **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
 - **Step 2 (focus)**: Auto-select "Continue [current phase]" for the current milestone. When a milestone completes, auto-advance to the next.
 - **Step 5b (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
 - **Step 6c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, **halt** and report.
@@ -132,13 +132,13 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 Determine which `.ratchet/` directory to use:
 
 1. **Walk up from CWD** looking for `.ratchet/workflow.yaml`
-2. Read the first `workflow.yaml` found. If it has a `workspaces` key → **monorepo root**
-3. **Monorepo root resolution**:
+2. Read the first `workflow.yaml` found. If it has a `workspaces` key → **workspace root**
+3. **Workspace root resolution**:
    - If the user specified a workspace name as an argument (e.g., `/ratchet:run monitor`) → use that workspace
    - If CWD is inside a workspace's `path` → auto-select that workspace
    - Otherwise → present workspace selector via `AskUserQuestion`:
      ```
-     Monorepo: [N] workspaces
+     Workspaces: [N]
 
        [name] — [status summary from workspace plan.yaml]
        [name] — [status summary]
