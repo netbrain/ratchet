@@ -263,13 +263,13 @@ From the dependency graph built in Step 3, identify **ready issues** — issues 
 
 #### 4b. Launch Parallel Issue Runners
 
-For each ready issue, spawn an Agent with `isolation: "worktree"` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
+For each ready issue, spawn an Agent with `isolation: "worktree"` and `run_in_background: true` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
 
 **Worktree base branch:**
 - If the issue has no `depends_on` → branch from main (or current branch)
 - If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml. This ensures the dependent issue builds on top of the dependency's changes.
 
-Spawn all ready issues **in parallel** using separate Agent calls in a single message. Each agent's task:
+Launch all ready issues as **background agents** in a single message. Each agent's task:
 
 ```
 /ratchet:run --issue [ref] [--unsupervised] [--auto-pr] [--no-cache]
@@ -277,32 +277,40 @@ Spawn all ready issues **in parallel** using separate Agent calls in a single me
 
 Pass through any flags from the parent invocation. The spawned agent reads plan.yaml, finds the issue by ref, and executes the issue pipeline (Step 5) directly. It does NOT spawn further agents for issues — it IS the issue runner.
 
-Each issue runner returns a result:
-```json
-{
-  "issue_ref": "<ref>",
-  "status": "done|blocked|escalated|failed",
-  "branch": "<worktree branch name>",
-  "pr_url": "<PR URL or null>",
-  "phases_completed": ["plan", "test", "build", "review", "harden"],
-  "debates": ["<debate-id>", ...],
-  "files_modified": ["<file>", ...],
-  "halt_reason": "<reason or null>"
-}
+**Why background agents**: Using `run_in_background: true` means you are notified as each issue completes independently — you don't have to wait for the slowest issue before processing results. This enables:
+- Immediate feedback: present each issue's completion summary to the user as it arrives
+- Dependency unblocking: launch Layer 1+ issues as soon as their dependencies finish, without waiting for unrelated issues
+- Progressive status: the user sees results streaming in rather than a long silence followed by everything at once
+
+After launching all background agents, **do not sleep or poll**. You will be automatically notified when each completes. While waiting, present a summary of what was launched:
+
+```
+Launched [N] issue pipelines in parallel:
+  [ref]: [title] — [N] pairs, starting at [phase]
+  [ref]: [title] — [N] pairs, starting at [phase]
+  [ref]: [title] — waiting for [dep-ref]
+
+Waiting for results...
 ```
 
-#### 4c. Process Issue Results
+#### 4c. Process Issue Results (as they arrive)
 
-As issue runners complete:
+You are notified each time a background issue runner completes. For each completion:
 
-1. Update `plan.yaml` with each issue's final state (status, branch, files, debates, phase_status)
-2. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
-3. If newly unblocked issues exist → launch them (back to 4b)
-4. If all issues in the milestone are `done` → milestone is complete, proceed to Step 8
+1. Read the issue's completion summary (the agent's final output — see Step 5h)
+2. Present the summary to the user immediately
+3. Read updated `plan.yaml` for the issue's final state (status, branch, files, debates, phase_status)
+4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
+5. If newly unblocked issues exist → launch them as background agents (back to 4b)
+6. Track overall progress: `"[N]/[total] issues complete"`
 
-**If an issue runner returns `status: "blocked"` or `status: "escalated"`:**
+**When all issues are done** → milestone is complete, proceed to Step 8.
+
+**If an issue runner returns with a halt (blocked/escalated/failed):**
+- Present the early-exit summary immediately
 - In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
-- In unsupervised mode: if `escalation: human`, halt. Otherwise continue with other issues.
+  - Options: `"Resolve now"`, `"Continue waiting for other issues (Recommended)"`, `"Done for now"`
+- In unsupervised mode: if `escalation: human`, note the halt but continue waiting for other issues. Only halt the entire run if ALL remaining issues are halted (no progress possible).
 
 **IMPORTANT**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Issue pipelines handle all debate orchestration. This is a structural constraint.
 
