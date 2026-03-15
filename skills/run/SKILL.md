@@ -288,13 +288,13 @@ From the dependency graph built in Step 3, identify **ready issues** — issues 
 
 #### 4b. Launch Parallel Issue Runners
 
-For each ready issue, spawn an Agent with `isolation: "worktree"` and `run_in_background: true` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
+For each ready issue, spawn an Agent with `isolation: "worktree"` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
 
 **Worktree base branch:**
 - If the issue has no `depends_on` → branch from main (or current branch)
 - If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml. This ensures the dependent issue builds on top of the dependency's changes.
 
-Launch all ready issues as **background agents** in a single message. Each agent's task:
+Launch all ready issues **in parallel in a single message** — one Agent call per issue. Each agent's task:
 
 ```
 /ratchet:run --issue [ref] [--unsupervised] [--auto-pr] [--no-cache]
@@ -302,40 +302,39 @@ Launch all ready issues as **background agents** in a single message. Each agent
 
 Pass through any flags from the parent invocation. The spawned agent reads plan.yaml, finds the issue by ref, and executes the issue pipeline (Step 5) directly. It does NOT spawn further agents for issues — it IS the issue runner.
 
-**Why background agents**: Using `run_in_background: true` means you are notified as each issue completes independently — you don't have to wait for the slowest issue before processing results. This enables:
-- Immediate feedback: present each issue's completion summary to the user as it arrives
-- Dependency unblocking: launch Layer 1+ issues as soon as their dependencies finish, without waiting for unrelated issues
-- Progressive status: the user sees results streaming in rather than a long silence followed by everything at once
+**Note on parallelism**: The Agent tool runs parallel calls concurrently but returns all results together — the orchestrator blocks until ALL agents in the batch complete. This means:
+- Layer 0 issues (no dependencies) are all launched in one batch
+- The orchestrator waits for the entire batch before processing any results
+- Layer 1+ issues (with dependencies) are launched in a subsequent batch after their dependencies complete
 
-After launching all background agents, **do not sleep or poll**. You will be automatically notified when each completes. While waiting, present a summary of what was launched:
+Present a summary before the batch launches:
 
 ```
-Launched [N] issue pipelines in parallel:
+Launching [N] issue pipelines in parallel:
   [ref]: [title] — [N] pairs, starting at [phase]
   [ref]: [title] — [N] pairs, starting at [phase]
-  [ref]: [title] — waiting for [dep-ref]
 
-Waiting for results...
+[If Layer 1+ exists: "[N] more issues waiting for dependencies"]
 ```
 
-#### 4c. Process Issue Results (as they arrive)
+#### 4c. Process Issue Results (after batch completes)
 
-You are notified each time a background issue runner completes. **Do NOT fix, debug, or modify anything from the results — just report and route.** For each completion:
+When all agents in a batch return, process the results. **Do NOT fix, debug, or modify anything from the results — just report and route.** For each completed issue:
 
 1. Read the issue's completion summary (the agent's final output — see Step 5h)
-2. Present the summary to the user immediately
-3. Read updated `plan.yaml` for the issue's final state (status, branch, files, debates, phase_status)
+2. Present all summaries to the user
+3. Read updated `plan.yaml` for each issue's final state (status, branch, files, debates, phase_status)
 4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
-5. If newly unblocked issues exist → launch them as background agents (back to 4b)
-6. Track overall progress: `"[N]/[total] issues complete"`
+5. If newly unblocked issues exist → launch them as a new parallel batch (back to 4b)
+6. Report overall progress: `"[N]/[total] issues complete"`
 
-**When all issues are done** → milestone is complete, proceed to Step 8.
+**When all issues across all layers are done** → milestone is complete, proceed to Step 8.
 
 **If an issue runner returns with a halt (blocked/escalated/failed):**
-- Present the early-exit summary immediately
+- Present the early-exit summary
 - In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
-  - Options: `"Resolve now"`, `"Continue waiting for other issues (Recommended)"`, `"Done for now"`
-- In unsupervised mode: if `escalation: human`, note the halt but continue waiting for other issues. Only halt the entire run if ALL remaining issues are halted (no progress possible).
+  - Options: `"Resolve now"`, `"Continue with remaining issues (Recommended)"`, `"Done for now"`
+- In unsupervised mode: if `escalation: human`, note the halt. Continue launching subsequent layers if possible — a halted issue only blocks issues that depend on it, not unrelated issues. Halt the entire run only if no progress is possible.
 
 **Handling merge conflicts on existing PRs:**
 
