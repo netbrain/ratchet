@@ -75,9 +75,11 @@ At **Step 10**, if `--unsupervised` is set and no halt condition was triggered:
 2. Spawn a new agent via the Agent tool with the task: `/ratchet:run --unsupervised`
 3. The spawned agent reads `plan.yaml`, finds the next pending phase/milestone, and continues from Step 1
 
-This creates a chain: each agent handles one phase, persists state, and spawns the next. `plan.yaml` is the continuity mechanism — if the session crashes at any point, a manual `/ratchet:run --unsupervised` picks up from the last persisted state.
+This creates a chain: each agent handles one milestone, persists state, and spawns the next. `plan.yaml` is the continuity mechanism — if the session crashes at any point, a manual `/ratchet:run --unsupervised` picks up from the last persisted state.
 
-**Why Agent tool, not a shell loop**: Agents share the conversation context, can read/write project files, and the state machine (`plan.yaml`) handles crash recovery naturally. No external tooling or hook configuration required.
+**Context clearing at milestone boundaries**: Self-continuation MUST happen at milestone boundaries — the spawned agent starts with a fresh context and re-reads all state from disk. This prevents context drift from auto-compaction summaries corrupting downstream work. Within a milestone, phases run in the same context (cross-phase continuity has value). Between milestones, fresh context forces the agent to rely on persisted state (plan.yaml, debate transcripts, scores) rather than compressed memories.
+
+**Why Agent tool, not a shell loop**: Agents start with fresh context, can read/write project files, and the state machine (`plan.yaml`) handles crash recovery naturally. No external tooling or hook configuration required.
 
 ### Halt Conditions
 
@@ -580,12 +582,18 @@ bash .claude/ratchet-scripts/update-scores.sh <debate-id>
   - "Address unresolved conditions" — only if CONDITIONAL_ACCEPTs logged conditions
 
 **If all phases done, more milestones remain:**
-- Summary: `"Milestone [name] complete! All phases passed. Epic progress: [completed]/[total] milestones."`
+
+**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. A fresh context forces re-reading actual files, preventing drift from auto-compaction summaries.
+
+- Summary: `"Milestone [name] complete! All phases passed. Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone — all state is persisted to disk."`
 - Options:
-  - "Continue to [next milestone name] (Recommended)"
+  - "Continue to [next milestone name] (/ratchet:run) (Recommended)" — user re-invokes with fresh context
   - "Review debate: [debate-id]"
   - "View quality metrics"
   - "View milestone status (/ratchet:status)"
+  - "Done for now"
+
+When the user selects "Continue to [next milestone name]", do NOT continue in the current context. Instead, present: "Run `/ratchet:run` to start [next milestone] with a clean context. All progress is saved." This ensures the next milestone starts from disk state, not from a potentially degraded context window.
 
 **If ALL milestones are done:**
 - Summary: `"Epic complete! All [N] milestones finished. Total debates: [N] | Consensus rate: [%] | Avg rounds: [N]"`
