@@ -66,7 +66,7 @@ Then start building:
 /ratchet:run
 ```
 
-Ratchet walks you through each phase of the first milestone. The generative agent does the work, the adversarial agent verifies it, guards run at phase boundaries.
+Ratchet launches the first milestone's issues in parallel. Each issue progresses through its own phase pipeline — the generative agent does the work, the adversarial agent verifies it, guards run at phase boundaries. Each issue produces its own PR.
 
 Preview what would run without executing anything:
 
@@ -78,7 +78,7 @@ Run the full plan end-to-end without human intervention (halts on human escalati
 
 ```
 /ratchet:run --unsupervised             # auto-commits locally
-/ratchet:run --unsupervised --auto-pr   # auto-creates PRs at milestone boundaries
+/ratchet:run --unsupervised --auto-pr   # auto-creates PRs per issue
 ```
 
 ### Existing project
@@ -146,7 +146,7 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 
 ### Phases
 
-Every milestone progresses through ordered phases. Phase N must complete before phase N+1 begins:
+Every issue progresses through ordered phases. Phase N must complete before phase N+1 begins:
 
 | Phase | What happens | Generative agent's job | Adversarial agent's job |
 |-------|-------------|----------------------|----------------------|
@@ -311,7 +311,7 @@ version: 2
 max_rounds: 3
 escalation: human       # human | tiebreaker | both
 max_regressions: 2      # integer (all phases) or object (per-phase)
-pr_scope: debate        # debate | phase | milestone | issue
+pr_scope: issue         # issue | debate | phase | milestone
 
 models:                  # optional — omit to inherit parent model
   debate_runner: sonnet  # protocol orchestration
