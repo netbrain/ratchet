@@ -38,11 +38,12 @@ Issues within a milestone run **in parallel** (unless they have explicit depende
 /ratchet:run                # Resume from epic — propose next focus or run against changes
 /ratchet:run [pair-name]    # Run a specific pair against its scoped files
 /ratchet:run [workspace]    # Target a specific workspace
+/ratchet:run --issue <ref>  # Run a single issue's pipeline (used by parallel spawning)
 /ratchet:run --all-files    # Run all pairs against all files in scope
 /ratchet:run --no-cache     # Force re-debate even if files haven't changed
 /ratchet:run --dry-run      # Preview what would run without executing anything
 /ratchet:run --unsupervised           # Run the full plan end-to-end without human intervention
-/ratchet:run --unsupervised --auto-pr # Same, but auto-create PRs at milestone boundaries
+/ratchet:run --unsupervised --auto-pr # Same, but auto-create PRs per issue
 ```
 
 ## Unsupervised Mode
@@ -174,7 +175,10 @@ If no `plan.yaml` exists, skip epic tracking and fall through to file-based dete
 
 ### Step 2: Determine Focus
 
-There are four modes, checked in order:
+There are five modes, checked in order:
+
+#### Mode S: Single-issue pipeline (--issue <ref>)
+If `--issue` is set, skip all focus negotiation. Find the issue by ref in the current milestone's `issues` array. Jump directly to **Step 5** (Issue Pipeline) for this single issue. This mode is used when the orchestrator spawns parallel agents — each agent re-enters the run skill scoped to one issue. Do NOT spawn further issue-level agents; execute the pipeline directly.
 
 #### Mode A: Explicit pair or --all-files
 If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip epic negotiation.
@@ -259,29 +263,19 @@ From the dependency graph built in Step 3, identify **ready issues** — issues 
 
 #### 4b. Launch Parallel Issue Runners
 
-For each ready issue, spawn an Agent with `isolation: "worktree"`. Each agent runs the **Issue Pipeline** (Step 5) for its assigned issue.
+For each ready issue, spawn an Agent with `isolation: "worktree"` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
 
 **Worktree base branch:**
 - If the issue has no `depends_on` → branch from main (or current branch)
 - If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml. This ensures the dependent issue builds on top of the dependency's changes.
 
-Spawn all ready issues **in parallel** using separate Agent calls in a single message:
+Spawn all ready issues **in parallel** using separate Agent calls in a single message. Each agent's task:
 
 ```
-Run issue pipeline for issue [ref]: [title]
-
-Milestone: [id, name, description]
-Issue: [ref, title, pairs, phase_status]
-Workflow config: [path to .ratchet/workflow.yaml]
-Project config: [path to .ratchet/project.yaml]
-Pair definitions directory: .ratchet/pairs/
-Worktree base: [branch name — main or dependency branch]
-Models: [resolved models from workflow.yaml]
-Escalation policy: [from workflow.yaml]
-Max rounds: [global max_rounds]
-Max regressions: [from workflow.yaml]
-Flags: [--no-cache, --unsupervised, --auto-pr as applicable]
+/ratchet:run --issue [ref] [--unsupervised] [--auto-pr] [--no-cache]
 ```
+
+Pass through any flags from the parent invocation. The spawned agent reads plan.yaml, finds the issue by ref, and executes the issue pipeline (Step 5) directly. It does NOT spawn further agents for issues — it IS the issue runner.
 
 Each issue runner returns a result:
 ```json
@@ -316,9 +310,11 @@ As issue runners complete:
 
 ### Step 5: Issue Pipeline (runs per-issue, typically in a worktree)
 
-This is the phase-gated loop for a single issue. It runs inside an Agent (often with worktree isolation). It progresses through phases sequentially for ONE issue.
+This is the phase-gated loop for a single issue. You enter this step in two ways:
+- **Mode S** (`--issue <ref>`): You ARE the issue runner. A parent orchestrator spawned you via Agent tool with `isolation: "worktree"`. Execute the pipeline directly — do NOT spawn further issue-level agents.
+- **Single ready issue**: If only one issue is ready, the orchestrator can execute Step 5 inline without spawning a separate agent.
 
-The issue pipeline is the "inner loop" — it handles Steps 5a through 5h for a single issue, then returns a result to the orchestrator.
+The issue pipeline progresses through phases sequentially for ONE issue, then returns a result to the caller (or updates plan.yaml directly if running inline).
 
 #### 5a. Determine Current Phase and Match Pairs
 
