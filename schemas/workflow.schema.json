@@ -66,6 +66,10 @@
       "default": 2,
       "description": "Maximum phase regressions per milestone. Integer applies to all phases. Object sets per-phase limits with fallback to 2 for unspecified phases."
     },
+    "models": {
+      "$ref": "#/$defs/models",
+      "description": "Model assignments for each agent role. Per-pair overrides can narrow generative/adversarial models."
+    },
     "components": {
       "type": "array",
       "items": {
@@ -90,6 +94,43 @@
     }
   },
   "$defs": {
+    "model_id": {
+      "type": "string",
+      "enum": ["opus", "sonnet", "haiku"],
+      "description": "Claude model tier — opus (most capable), sonnet (balanced), haiku (fastest)"
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "debate_runner": {
+          "$ref": "#/$defs/model_id",
+          "default": "sonnet",
+          "description": "Protocol orchestration — no reasoning needed, sonnet is sufficient"
+        },
+        "generative": {
+          "$ref": "#/$defs/model_id",
+          "default": "opus",
+          "description": "Writes code and makes design decisions — needs full capability"
+        },
+        "adversarial": {
+          "$ref": "#/$defs/model_id",
+          "default": "sonnet",
+          "description": "Reviews code and runs validation — structured critique"
+        },
+        "tiebreaker": {
+          "$ref": "#/$defs/model_id",
+          "default": "sonnet",
+          "description": "Reads transcripts and renders judgment on escalated debates"
+        },
+        "analyst": {
+          "$ref": "#/$defs/model_id",
+          "default": "opus",
+          "description": "Deep analysis, pattern recognition, pair generation"
+        }
+      },
+      "description": "Global model assignments for each agent role"
+    },
     "phase": {
       "type": "string",
       "enum": ["plan", "test", "build", "review", "harden"],
@@ -153,6 +194,15 @@
           "type": "boolean",
           "default": true,
           "description": "Whether this pair is active"
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "generative": { "$ref": "#/$defs/model_id" },
+            "adversarial": { "$ref": "#/$defs/model_id" }
+          },
+          "description": "Per-pair model overrides for generative/adversarial agents — omit to use global models"
         }
       }
     },

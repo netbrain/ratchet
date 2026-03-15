@@ -33,6 +33,10 @@ Context:
   Plan phase output: [path to plan spec, if phase > plan]
   Test phase output: [paths to test files, if phase > test]
   Previous debate context: [any CONDITIONAL_ACCEPT conditions still open]
+  Models:
+    generative: [opus|sonnet|haiku]
+    adversarial: [opus|sonnet|haiku]
+    tiebreaker: [opus|sonnet|haiku]
 ```
 
 ## What You Produce
@@ -99,7 +103,7 @@ For each round (1 to max_rounds):
 
 Read the generative agent definition from `.ratchet/pairs/<name>/generative.md`.
 
-Spawn an Agent with the phase-specific prompt:
+Spawn an Agent with `model` set to the generative model from the task context (e.g., `model: "opus"`). Use the phase-specific prompt:
 
 **Phase: plan**
 ```
@@ -223,7 +227,7 @@ Track any files the generative agent created or modified — these go into `file
 
 Read the adversarial agent definition from `.ratchet/pairs/<name>/adversarial.md`.
 
-Spawn an Agent with:
+Spawn an Agent with `model` set to the adversarial model from the task context (e.g., `model: "sonnet"`). Use:
 
 ```
 You are in the [PHASE] phase (round [N]) of a debate.
@@ -283,7 +287,7 @@ If the loop completes all rounds without a verdict:
    - If "Apply settled pattern": write verdict matching the settled direction, set `status: "resolved"`, `decided_by: "precedent"`. Break.
 
 3. Based on escalation policy:
-   - **tiebreaker**: Spawn tiebreaker agent (from `agents/tiebreaker.md`) with the full debate transcript. Map tiebreaker verdict:
+   - **tiebreaker**: Spawn tiebreaker agent (from `agents/tiebreaker.md`) with `model` set to the tiebreaker model from the task context. Provide the full debate transcript. Map tiebreaker verdict:
      - Tiebreaker ACCEPT → `status: "resolved"`, `decided_by: "tiebreaker"`
      - Tiebreaker MODIFY → `status: "resolved"`, `decided_by: "tiebreaker"`, log `required_changes` as conditions
      - Tiebreaker REJECT → `status: "resolved"`, `decided_by: "tiebreaker"`, `verdict: "REJECT"`

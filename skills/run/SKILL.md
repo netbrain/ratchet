@@ -295,6 +295,8 @@ For each matched pair, prepare the context that the **debate-runner** agent need
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions from previous debates
 
+5. **Resolve models**: Read `models` from workflow.yaml (global defaults). For each pair, check if the pair has a `models` override — pair-level overrides take precedence over global defaults. If no `models` section exists at all, all agents inherit the parent conversation's model. Pass the resolved `generative`, `adversarial`, and `tiebreaker` models to the debate-runner.
+
 ### Step 6b: Static Analysis Pre-Gate
 
 Before starting debates, run any configured static analysis commands from `project.yaml`.
@@ -312,6 +314,8 @@ If all pass (or none configured), proceed silently.
 ### Step 7: Run Debates
 
 Spawn a **debate-runner** agent (from `agents/debate-runner.md`) for each matched pair. When multiple pairs match the current phase, spawn them **in parallel** using separate Agent calls.
+
+Use `model` set to the resolved `debate_runner` model from Step 6a.5 (defaults to `sonnet` if no `models` config exists).
 
 Each debate-runner receives:
 
@@ -333,6 +337,10 @@ Context:
   Plan phase output: [path, if phase > plan]
   Test phase output: [paths, if phase > test]
   Previous debate context: [unresolved conditions, if any]
+  Models:
+    generative: [resolved model from Step 6a.5]
+    adversarial: [resolved model from Step 6a.5]
+    tiebreaker: [resolved model from Step 6a.5]
 ```
 
 The debate-runner handles all round management, generative/adversarial agent spawning, verdict parsing, escalation, and artifact persistence. See `agents/debate-runner.md` for the full protocol.
@@ -508,7 +516,7 @@ After PR is created, use `AskUserQuestion`:
 
 **8f. Post-Milestone Analyst Assessment:**
 
-After commit or PR (regardless of which packaging option the user chose), spawn the analyst agent for a brief post-milestone assessment. The analyst reviews the milestone's debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
+After commit or PR (regardless of which packaging option the user chose), spawn the analyst agent (with `model` set to the resolved `analyst` model from workflow.yaml, defaults to `opus`) for a brief post-milestone assessment. The analyst reviews the milestone's debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
 - Pair effectiveness observations (any pairs that always fast-path? always escalate?)
 - Scope coverage gaps discovered during this milestone
 - Guard recommendations (missing checks, overly strict guards)

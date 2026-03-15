@@ -279,6 +279,13 @@ escalation: human       # human | tiebreaker | both
 max_regressions: 2      # integer (all phases) or object (per-phase)
 pr_scope: debate        # debate | phase | milestone | issue
 
+models:                  # optional — omit to inherit parent model
+  debate_runner: sonnet  # protocol orchestration
+  generative: opus       # writes code
+  adversarial: sonnet    # reviews code
+  tiebreaker: sonnet     # resolves escalations
+  analyst: opus          # deep analysis
+
 progress:
   adapter: none          # none | markdown | github-issues
 
@@ -298,6 +305,9 @@ pairs:
     scope: "src/api/**"     # or "auto" to inherit component scope
     max_rounds: 2            # optional per-pair override
     enabled: true
+    models:                  # optional per-pair override
+      generative: opus
+      adversarial: sonnet
 
 guards:
   - name: lint
