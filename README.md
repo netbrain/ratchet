@@ -5,11 +5,12 @@ Ratchet turns AI code generation into a structured development process. Every ph
 ## How It Works
 
 1. **Initialize** — Ratchet scans your project (or interviews you for greenfield), debates the approach internally, and presents 2-3 strategy options with tradeoffs
-2. **Phase-gated debates** — work proceeds through ordered phases: `plan → test → build → review → harden`. Each phase must pass before the next begins
-3. **Agent pairs debate** — a builder (generative) and critic (adversarial) argue each phase. The critic runs real validation commands as evidence
-4. **Guards gate advancement** — deterministic checks (lint, tests, security scans) run at phase boundaries. Blocking guards must pass to advance
-5. **Commit or PR** — when a milestone completes, Ratchet packages the work as a local commit or pull request
-6. **Learn from feedback** — CI failures and PR review comments feed back into the system via retrospectives, improving agents and guards over time
+2. **Milestones decompose into issues** — each milestone is broken into independently executable issues. Independent issues run **in parallel**, each in an isolated git worktree
+3. **Phase-gated debates** — each issue progresses through ordered phases: `plan → test → build → review → harden`. Phases are gated — each must pass before the next begins
+4. **Agent pairs debate** — a builder (generative) and critic (adversarial) argue each phase. The critic runs real validation commands as evidence
+5. **Guards gate advancement** — deterministic checks (lint, tests, security scans) run at phase boundaries. Blocking guards must pass to advance
+6. **Issue → PR** — each issue produces its own PR when complete. Dependent issues state their merge order
+7. **Learn from feedback** — CI failures and PR review comments feed back into the system via retrospectives, improving agents and guards over time
 
 ## Installation
 
@@ -248,41 +249,49 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
                         └──────────┬──────────────────┘
                                    │
                         ┌──────────▼──────────────────┐
-                        │     Phase Gate Loop          │
-                        │  plan → test → build →       │
-                        │  review → harden             │
-                        │  (REGRESS can send backward) │
+                        │      Milestone Orchestrator  │
+                        │  Dependency graph → layers   │
                         └──────────┬──────────────────┘
-                                   │ (per phase)
-                        ┌──────────▼──────────────────┐
-                        │  Pre-debate Guards           │
-                        │  fmt ✓  lint ✓  (fail fast)  │
-                        └──────────┬──────────────────┘
-                                   │ (all pre-debate guards pass)
-              ┌────────────────────▼───────────────────┐
-              │           Debate Runner Agent           │
-              │   (orchestrates — cannot write code)    │
-              │                                        │
-              │  ┌───────────┐       ┌──────────────┐  │
-              │  │Generative │◄─────►│ Adversarial  │  │
-              │  │  (builds) │debate │  (critiques)  │  │
-              │  └───────────┘       └──────────────┘  │
-              │                                        │
-              │  ACCEPT / TRIVIAL_ACCEPT → consensus   │
-              │  REJECT → next round                   │
-              │  REGRESS → return to earlier phase      │
-              │  Max rounds → check precedent/escalate  │
-              └────────────────────┬───────────────────┘
-                                   │ (consensus reached)
-                        ┌──────────▼──────────────────┐
-                        │  Post-debate Guards          │
-                        │  tests ✓  security ✓         │
-                        └──────────┬──────────────────┘
-                                   │ (all blocking guards pass)
-                        ┌──────────▼──────────────────┐
-                        │  Advance / analyst assess    │
-                        │  or complete milestone       │
-                        └─────────────────────────────┘
+                                   │
+            ┌──────────────────────┼──────────────────────┐
+            │ (parallel)           │ (parallel)            │ (waits for deps)
+   ┌────────▼─────────┐  ┌────────▼─────────┐  ┌─────────▼────────┐
+   │  Issue A Pipeline │  │  Issue B Pipeline │  │  Issue C Pipeline │
+   │  (git worktree)   │  │  (git worktree)   │  │  (git worktree)   │
+   │                   │  │                   │  │  depends_on: [A]  │
+   │  plan → test →    │  │  plan → test →    │  │                   │
+   │  build → review → │  │  build → review → │  │  (starts when A   │
+   │  harden → PR      │  │  harden → PR      │  │   completes)      │
+   └───────────────────┘  └───────────────────┘  └───────────────────┘
+            │                                              │
+            │  Each issue pipeline runs per-phase:         │
+            │                                              │
+            │  ┌──────────────────────────────────┐        │
+            │  │  Pre-debate Guards (fail fast)    │        │
+            │  └──────────┬───────────────────────┘        │
+            │             │                                │
+            │  ┌──────────▼───────────────────────┐        │
+            │  │       Debate Runner Agent         │        │
+            │  │  (orchestrates — no code access)  │        │
+            │  │                                   │        │
+            │  │  Generative ◄──debate──► Adversarial      │
+            │  │                                   │        │
+            │  │  ACCEPT / TRIVIAL_ACCEPT → next   │        │
+            │  │  REJECT → next round              │        │
+            │  │  REGRESS → earlier phase           │        │
+            │  └──────────┬───────────────────────┘        │
+            │             │                                │
+            │  ┌──────────▼───────────────────────┐        │
+            │  │  Post-debate Guards + advance     │        │
+            │  └──────────────────────────────────┘        │
+            │                                              │
+            └──────────────┬───────────────────────────────┘
+                           │ (all issues done)
+                ┌──────────▼──────────────────┐
+                │  Milestone complete          │
+                │  Analyst assessment          │
+                │  Context clear → next        │
+                └─────────────────────────────┘
 ```
 
 ### Key Agents
@@ -349,7 +358,7 @@ guards:
 .ratchet/
 ├── workflow.yaml        # Workflow config (v2) — components, phases, pairs, guards
 ├── project.yaml         # Project profile (stack, architecture, validation commands)
-├── plan.yaml            # Epic roadmap with milestone/phase tracking
+├── plan.yaml            # Epic roadmap — milestones, issues, per-issue phase tracking
 ├── pairs/               # Generated agent pair definitions
 │   └── <pair-name>/
 │       ├── generative.md

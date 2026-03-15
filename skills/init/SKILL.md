@@ -235,9 +235,11 @@ Wait for approval before proceeding.
 Based on everything learned, propose a development roadmap:
 - **For greenfield projects, Milestone 1 is always "Workflow Validation"** — a minimal vertical slice that proves the Ratchet pipeline works end-to-end. Pick the simplest possible feature that exercises all configured pairs and guards. The acceptance criteria should focus on the workflow functioning correctly (debates reach consensus, guards pass, phases gate properly), not on feature completeness. Real project work starts at Milestone 2.
 - Break remaining milestones by dependency and priority
-- Each milestone has: name, description, which pairs are relevant, what "done" looks like
+- **Every milestone must have at least one issue.** Decompose milestones into issues that are independently executable and parallelizable. A simple milestone has one issue that IS the milestone. Complex milestones have 2-5 issues.
+- Each issue has: ref, title, which pairs are relevant, dependencies on other issues
+- Mark dependencies with `depends_on` — dependent issues wait for their dependencies to complete, then branch from the dependency's branch
 - Present the epic to the human using `AskUserQuestion` for approval:
-  - Question: "Proposed roadmap: [formatted milestone list]. Approve this epic?"
+  - Question: "Proposed roadmap: [formatted milestone list with issues]. Approve this epic?"
   - Options: `"Approve (Recommended)"`, `"Modify milestones"`, `"Start over"`
 - The epic is a living document — it evolves as the project develops
 
@@ -250,27 +252,40 @@ epic:
     - id: 1
       name: "<milestone name>"
       description: "<what this milestone delivers>"
-      pairs: [<relevant-pair-names>]
       status: pending        # pending | in_progress | done
-      phase_status:           # tracks progress through phases
-        plan: pending         # pending | in_progress | done
-        test: pending
-        build: pending
-        review: pending
-        harden: pending
       done_when: "<concrete acceptance criteria>"
       progress_ref: null     # set by progress adapter when milestone starts
-      issues:                # optional — tracks individual issues within this milestone
-        - ref: "<issue reference, e.g. #480>"
+      regressions: 0         # regression counter for budget tracking
+      issues:                # required — at least 1 issue per milestone
+        - ref: "<issue reference, e.g. issue-1 or #480>"
           title: "<issue title>"
           pairs: [<pairs relevant to this issue>]
-          files: []           # populated during debates — files changed for this issue
-          debates: []         # populated during debates — debate IDs for this issue
-          status: pending     # pending | in_progress | done
+          depends_on: []     # refs of issues this depends on (within same milestone)
+          phase_status:      # per-issue phase tracking
+            plan: pending    # pending | in_progress | done
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []          # populated during debates — files changed for this issue
+          debates: []        # populated during debates — debate IDs for this issue
+          branch: null       # git branch for this issue's worktree
+          status: pending    # pending | in_progress | done
   current_focus: null
 ```
 
-When a milestone has an `issues` array, each issue tracks its own subset of pairs, changed files, and debate IDs. This enables `pr_scope: issue` to produce one PR per issue with exactly the right files.
+**Every milestone must have at least one issue.** A simple milestone with a single coherent deliverable has one issue that IS the milestone. This unifies the execution model — there are no special cases. Phase tracking lives on issues, not milestones. Milestone status is derived: `pending` (no issues started), `in_progress` (any issue started), `done` (all issues done).
+
+**Parallel execution.** Independent issues (no `depends_on` relationships) run their full phase pipelines in parallel, each in an isolated git worktree. Each issue produces its own PR when complete. This means a milestone with 3 independent issues launches 3 parallel pipelines, each progressing through plan → test → build → review → harden independently.
+
+**Dependencies.** When an issue has `depends_on: ["issue-A"]`, it waits until issue-A reaches `done` before starting. The dependent issue's worktree branches from issue-A's branch (not main), so it builds on top of the dependency's changes. The PR body states "Depends on [issue-A PR] being merged first."
+
+**Issue decomposition guidance for the analyst.** When building the epic, decompose milestones into issues that are:
+- Small enough to be independently reviewable (one PR each)
+- Parallelizable where possible (minimize `depends_on`)
+- Scoped to specific pairs (each issue lists which pairs are relevant)
+
+For a simple milestone, create a single issue with the same name and description. For complex milestones, break into 2-5 issues. Never create issues so fine-grained that each one is a single file change — that defeats the purpose of structured debate.
 
 If a progress adapter is configured, issues are populated during init by querying the tracker. For `github-issues`, the analyst can import existing issues that match the milestone's scope. Issues can also be added manually.
 

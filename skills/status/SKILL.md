@@ -65,16 +65,21 @@ Progress: [completed]/[total] milestones
 
 ┌─────────────────────────────────────────────────────────┐
 │ Milestone 1: [name]                              [DONE] │
-│   plan ✓  test ✓  build ✓  review ✓  harden ✓          │
+│   Issues: [N]/[N] complete                              │
 │   Debates: [N] total, [N] consensus, [N] escalated     │
 │                                                         │
 │ Milestone 2: [name]                       [IN PROGRESS] │
-│   plan ✓  test ✓  build ●  review ○  harden ○          │
+│   Issues:                                               │
+│     [ref]: [title]                              [DONE]  │
+│       plan ✓  test ✓  build ✓  review ✓  harden ✓      │
+│     [ref]: [title]                       [IN PROGRESS]  │
+│       plan ✓  test ✓  build ●  review ○  harden ○      │
+│     [ref]: [title]              [PENDING — dep: [ref]]  │
+│       plan ○  test ○  build ○  review ○  harden ○      │
 │   Debates: [N] active, [N] resolved                    │
-│   Current phase: build — [N] pairs queued               │
 │                                                         │
 │ Milestone 3: [name]                           [PENDING] │
-│   plan ○  test ○  build ○  review ○  harden ○          │
+│   Issues: [N] total                                     │
 └─────────────────────────────────────────────────────────┘
 
 ✓ = done  ● = in progress  ○ = pending  ✗ = failed/blocked
@@ -94,23 +99,24 @@ Milestone [id]: [name]
 Status: [status]
 Description: [description]
 Done when: [acceptance criteria]
+Regressions: [N]/[max]
 
-Phase Progress:
-  plan:    [done]        — [N] pairs, all consensus
-  test:    [done]        — [N] pairs, all consensus
-  build:   [in_progress] — [N] pairs ([N] consensus, [N] active)
-  review:  [pending]     — [N] pairs queued
-  harden:  [pending]     — [N] pairs queued
+Issues:
+  [ref]: [title]                                        [status]
+    Depends on: [dep-refs or "none"]
+    Branch: [branch name or "not started"]
+    PR: [URL or "none"]
+    Phase Progress:
+      plan ✓  test ✓  build ●  review ○  harden ○
+    Pairs:
+      [pair-name] — [phase] — last debate: [debate-id]
+    Debates: [N] total ([N] consensus, [N] active)
 
-Pairs:
-  [pair-name] — phase: [phase] — [status] — last debate: [debate-id]
-  [pair-name] — phase: [phase] — [status] — no debates yet
+  [ref]: [title]                                        [status]
+    ...
 
 Guards:
   [guard-name] — phase: [phase] — blocking: [yes/no] — last result: [pass/fail/not run]
-
-Active Debates:
-  [debate-id] — [pair-name] — round [N]/[max] — [status]
 
 Unresolved Conditions:
   [condition from CONDITIONAL_ACCEPT, if any]
