@@ -305,7 +305,39 @@ If the loop completes all rounds without a verdict:
    }
    ```
 
-### 4. Finalize
+### 4. Generate Post-Debate Reviews
+
+After the debate resolves (consensus, resolved, or escalated with verdict), generate performance reviews while the full transcript is still in context.
+
+For both agents in the pair, write a review to `.ratchet/reviews/<pair-name>/review-<timestamp>.json`:
+
+```json
+{
+  "debate_id": "<id>",
+  "reviewer": "<pair-name>-<role>",
+  "self_assessment": {
+    "effectiveness": <1-10>,
+    "missed_issues": ["issues this agent should have caught but didn't"],
+    "wasted_effort": ["time spent on non-issues or false positives"]
+  },
+  "partner_assessment": {
+    "effectiveness": <1-10>,
+    "strengths": ["what the other agent did well"],
+    "weaknesses": ["where the other agent fell short"]
+  },
+  "suggestions": ["concrete improvements for future debates"]
+}
+```
+
+Assess based on the actual debate transcript:
+- Did the generative address critiques thoroughly or deflect?
+- Did the adversarial raise valid concerns or nitpick?
+- Were validation commands run as evidence, or were claims unsupported?
+- How many rounds were needed — could consensus have been reached sooner?
+
+Skip reviews only if the debate was escalated to human with no verdict (status: "escalated" with no resolution).
+
+### 5. Finalize
 
 Update `meta.json` with final state:
 - `resolved`: ISO timestamp
@@ -335,4 +367,4 @@ Return the result object to the caller.
 - Advance phases (the caller handles phase transitions)
 - Commit code or create PRs (the caller handles packaging)
 - Update plan.yaml (the caller handles plan state — except for issue file tracking, which you report back via `files_modified`)
-- Update scores or reviews (the caller handles post-debate bookkeeping)
+- Update scores (the caller handles score bookkeeping)
