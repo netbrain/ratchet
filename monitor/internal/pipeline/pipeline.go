@@ -56,6 +56,9 @@ func (p *Pipeline) Run(ctx context.Context) {
 // enrich parses the file referenced by the event and classifies it into
 // a domain event type. On parse failure, the raw file event is returned
 // as a fallback.
+//
+// V2 enhancement: extracts workspace and issue context from the file path
+// and parsed data.
 func (p *Pipeline) enrich(ev events.Event) events.Event {
 	// Compute the relative path within the .ratchet directory for classification.
 	relPath := ev.Path
@@ -66,6 +69,10 @@ func (p *Pipeline) enrich(ev events.Event) events.Event {
 	}
 	// Normalize to forward slashes for the classifier.
 	relPath = strings.ReplaceAll(relPath, "\\", "/")
+
+	// Extract workspace from path if present.
+	// Workspace paths contain "workspaces/<name>/.ratchet/" pattern.
+	ev.Workspace = extractWorkspace(relPath)
 
 	// Don't try to parse deleted files.
 	if ev.Type == events.FileDeleted {
@@ -84,7 +91,33 @@ func (p *Pipeline) enrich(ev events.Event) events.Event {
 	parsed := p.parseFile(relPath, data)
 	ev.Type = p.classifier.Classify(relPath, parsed, ev.Type)
 	ev.Data = parsed
+
+	// Extract issue context from debate metadata (if applicable).
+	if meta, ok := parsed.(*parser.DebateMeta); ok && meta != nil {
+		// Debate IDs often include issue refs in v2 (format: pair-YYYYMMDDTHHMMSS-issue-ref)
+		// For now, we leave this empty - will be populated when debates include issue field.
+		ev.Issue = ""
+	}
+
 	return ev
+}
+
+// extractWorkspace attempts to extract workspace name from a file path.
+// Returns empty string if not in a workspace-specific path.
+// Example: "workspaces/monitor/.ratchet/plan.yaml" -> "monitor"
+func extractWorkspace(path string) string {
+	// Check if path contains workspaces/ prefix
+	if !strings.Contains(path, "workspaces/") {
+		return ""
+	}
+
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "workspaces" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
 }
 
 // parseFile attempts to parse a file based on its relative path.
