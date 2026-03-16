@@ -306,14 +306,15 @@ func (f *FileDataSource) Plan() (any, error) {
 	return plan, nil
 }
 
-// StatusInfo summarizes the current milestone and phase.
+// StatusInfo summarizes the current milestone, issue, and phase.
 type StatusInfo struct {
 	MilestoneID   int    `json:"milestone_id"`
 	MilestoneName string `json:"milestone_name"`
+	IssueRef      string `json:"issue_ref"`
 	Phase         string `json:"phase"`
 }
 
-// Status derives the current milestone and phase from plan.yaml.
+// Status derives the current milestone, issue, and phase from plan.yaml.
 // Returns a zero-value StatusInfo when plan.yaml is missing.
 // Real I/O errors (e.g., permission denied) are still propagated.
 func (f *FileDataSource) Status() (any, error) {
@@ -334,6 +335,7 @@ func (f *FileDataSource) Status() (any, error) {
 
 	if plan.Epic.CurrentFocus != nil {
 		info.MilestoneID = plan.Epic.CurrentFocus.MilestoneID
+		info.IssueRef = plan.Epic.CurrentFocus.IssueRef
 		info.Phase = plan.Epic.CurrentFocus.Phase
 		// Find milestone name.
 		for _, m := range plan.Epic.Milestones {
