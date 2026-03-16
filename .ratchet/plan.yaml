@@ -1,0 +1,308 @@
+epic:
+  name: "engine-quality-review"
+  description: "Review and improve Ratchet engine skills, scripts, and agents"
+  milestones:
+    - id: 1
+      name: "Skill Quality Review"
+      description: "Review all 12 skills for clarity, consistency, completeness, and v2 spec compliance"
+      status: done
+      done_when: "All skills documented clearly, internally consistent, follow v2 conventions. No contradictions, steps complete, examples present."
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      completed: "2026-03-16T09:59:00Z"
+      issues:
+        - ref: "issue-1-1"
+          title: "Core workflow skills"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [skills/init/SKILL.md, skills/run/SKILL.md, skills/pair/SKILL.md, skills/debate/SKILL.md]
+          debates: [debate-1773654828-skill-coherence-review]
+          branch: ratchet/skill-quality-review/issue-1-1
+          status: done
+
+        - ref: "issue-1-2"
+          title: "Analysis skills"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [skills/status/SKILL.md, skills/score/SKILL.md, skills/advise/SKILL.md, skills/tighten/SKILL.md]
+          debates: [debate-20260316-095906-skill-coherence-review]
+          branch: ratchet/skill-quality-review/issue-1-2
+          status: done
+
+        - ref: "issue-1-3"
+          title: "Support skills"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [skills/guard/SKILL.md, skills/verdict/SKILL.md, skills/gen-tests/SKILL.md, skills/retro/SKILL.md]
+          debates: [issue-1-3-skill-coherence-review]
+          branch: ratchet/skill-quality-review/issue-1-3
+          status: done
+
+    - id: 2
+      name: "Script Robustness Review"
+      description: "Review all bash scripts for correctness, error handling, portability"
+      status: done
+      done_when: "All scripts pass shellcheck. Error handling present (set -e, exit codes). Portability verified (Linux/macOS)."
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      completed: "2026-03-16T12:46:00Z"
+      issues:
+        - ref: "issue-2-1"
+          title: "Runtime scripts"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/cache-check.sh, scripts/cache-update.sh, scripts/check-active-debates.sh, scripts/check-consensus.sh, scripts/run-guards.sh, scripts/update-scores.sh]
+          debates: [issue-2-1-script-robustness-review-20260316]
+          branch: ratchet/script-robustness-review/issue-2-1
+          status: done
+
+        - ref: "issue-2-2"
+          title: "Git integration"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/git-pre-commit.sh]
+          debates: [issue-2-2-script-robustness-review]
+          branch: ratchet/script-robustness-review/issue-2-2
+          status: done
+
+        - ref: "issue-2-3"
+          title: "Installer"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [install.sh]
+          debates: [issue-2-3-script-robustness-review]
+          branch: ratchet/script-robustness-review/issue-2-3
+          status: done
+
+        - ref: "issue-2-4"
+          title: "Progress adapter: github-issues"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/progress/github-issues/add-comment.sh, scripts/progress/github-issues/close-item.sh, scripts/progress/github-issues/create-item.sh, scripts/progress/github-issues/update-status.sh]
+          debates: [issue-2-4-script-robustness-review]
+          branch: null
+          status: done
+
+        - ref: "issue-2-5"
+          title: "Progress adapter: markdown"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/progress/markdown/add-comment.sh, scripts/progress/markdown/close-item.sh, scripts/progress/markdown/create-item.sh, scripts/progress/markdown/update-status.sh]
+          debates: [issue-2-5-script-robustness-review-20260316]
+          branch: null
+          status: done
+
+        - ref: "issue-2-6"
+          title: "Progress adapter: none"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/progress/none/add-comment.sh, scripts/progress/none/close-item.sh, scripts/progress/none/create-item.sh, scripts/progress/none/update-status.sh]
+          debates: [issue-2-6-script-robustness-review]
+          branch: ratchet/script-robustness-review/issue-2-6
+          status: done
+
+    - id: 3
+      name: "Agent Effectiveness Review"
+      description: "Review agent definitions for prompt quality, tool usage, protocol adherence"
+      status: done
+      done_when: "All agents have clear prompts, correct tool specs (allowed/disallowed), match skill expectations. Protocol adherence verified."
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      completed: "2026-03-16T10:15:00Z"
+      issues:
+        - ref: "issue-3-1"
+          title: "Analyst agent"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [agents/analyst.md]
+          debates: [debate-agent-effectiveness-review-analyst]
+          branch: ratchet/agent-effectiveness-review/issue-3-1
+          status: done
+
+        - ref: "issue-3-2"
+          title: "Debate-runner agent"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [agents/debate-runner.md]
+          debates: [agent-effectiveness-20260316T100908]
+          branch: ratchet/agent-effectiveness-review/issue-3-2
+          status: done
+
+        - ref: "issue-3-3"
+          title: "Tiebreaker agent"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [agents/tiebreaker.md]
+          debates: [debate-tiebreaker-agent-effectiveness-review]
+          branch: ratchet/agent-effectiveness-review/issue-3-3
+          status: done
+
+    - id: 4
+      name: "Schema Quality Review"
+      description: "Review JSON schema for completeness, correctness, and edge case coverage"
+      status: done
+      done_when: "workflow.schema.json validates correctly, all v2 fields present, constraints accurate, edge cases handled"
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      completed: "2026-03-16T10:30:00Z"
+      issues:
+        - ref: "issue-4-1"
+          title: "workflow.schema.json review"
+          pairs: [schema-correctness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [schemas/workflow.schema.json]
+          debates: [issue-4-1-schema-correctness-review]
+          branch: ratchet/schema-correctness-review/issue-4-1
+          status: done
+
+    - id: 5
+      name: "Apply Quality Improvements"
+      description: "Apply all fixes identified in M1-M4 debates to the framework code"
+      status: done
+      completed: "2026-03-16T18:40:00Z"
+      done_when: "All critical, high, and medium severity issues from debates fixed. Framework passes all guards. No regressions."
+      depends_on: [1, 2, 3, 4]
+      progress_ref: "1"
+      regressions: 0
+      issues:
+        - ref: "issue-5-1"
+          title: "Apply skill improvements (36+ fixes from M1)"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [skills/verdict/SKILL.md, skills/guard/SKILL.md]
+          debates_source: [debate-1773654828-skill-coherence-review, debate-20260316-095906-skill-coherence-review, issue-1-3-skill-coherence-review]
+          fixes_summary: "Error handling docs, cross-reference fixes, complete examples, vague instruction clarity"
+          severity: medium
+          progress_ref: "2"
+          debates: [skill-coherence-20260316T140219]
+          branch: null
+          status: done
+          conditions: "Apply remaining 24+ fixes across 10 skill files (documented in debate transcript)"
+
+        - ref: "issue-5-2"
+          title: "Apply script improvements (20+ fixes from M2) [SPLIT]"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: blocked
+          files: [install.sh, scripts/run-guards.sh, scripts/cache-update.sh, scripts/update-scores.sh, scripts/progress/markdown/close-item.sh, scripts/progress/markdown/update-status.sh]
+          debates_source: [issue-2-1-script-robustness-review-20260316, issue-2-3-script-robustness-review, issue-2-5-script-robustness-review-20260316]
+          fixes_summary: "Split into 5-2a, 5-2b, 5-2c due to debate failure"
+          severity: critical
+          progress_ref: "3"
+          debates: [issue-5-2-script-robustness-20260316T141849]
+          branch: null
+          status: split
+
+        - ref: "issue-5-2a"
+          title: "Fix markdown adapter sed -i portability bug (CRITICAL)"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/progress/markdown/close-item.sh, scripts/progress/markdown/update-status.sh]
+          debates_source: [issue-2-5-script-robustness-review-20260316]
+          fixes_summary: "sed -i portability: GNU vs BSD incompatibility breaks macOS"
+          severity: critical
+          progress_ref: null
+          debates: [issue-5-2a-script-robustness-20260316T183419]
+          branch: null
+          status: done
+
+        - ref: "issue-5-2b"
+          title: "Fix installer temp file leak and error messages"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [install.sh]
+          debates_source: [issue-2-3-script-robustness-review]
+          fixes_summary: "Temp file leak (HIGH), missing error messages, Python exit code handling"
+          severity: high
+          progress_ref: null
+          debates: [issue-5-2b-script-robustness-20260316T183609]
+          branch: ratchet/apply-quality-improvements/issue-5-2b
+          status: done
+          pr: "https://github.com/netbrain/ratchet/pull/6"
+
+        - ref: "issue-5-2c"
+          title: "Fix runtime script JSON and atomicity issues"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [scripts/run-guards.sh, scripts/cache-update.sh, scripts/update-scores.sh]
+          debates_source: [issue-2-1-script-robustness-review-20260316]
+          fixes_summary: "set -e bug, incomplete JSON escaping, non-atomic writes, command escaping"
+          severity: medium
+          progress_ref: null
+          debates: [issue-5-2c-script-robustness-20260316T183423]
+          branch: null
+          status: done
+
+        - ref: "issue-5-3"
+          title: "Apply agent improvements (10+ fixes from M3)"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [agents/analyst.md, agents/debate-runner.md, agents/tiebreaker.md]
+          debates_source: [debate-agent-effectiveness-review-analyst, agent-effectiveness-20260316T100908, debate-tiebreaker-agent-effectiveness-review]
+          fixes_summary: "Remove unused tools, add Edit tool to debate-runner, add error handling sections, add examples"
+          severity: medium
+          progress_ref: "4"
+          debates: [agent-effectiveness-20260316T140445]
+          branch: null
+          status: done
+
+        - ref: "issue-5-4"
+          title: "Apply schema improvements (6 fixes from M4)"
+          pairs: [schema-correctness]
+          depends_on: []
+          phase_status:
+            review: done
+          files: [schemas/workflow.schema.json, .ratchet/pairs/schema-correctness/generative.md, .ratchet/pairs/schema-correctness/adversarial.md]
+          debates_source: [issue-4-1-schema-correctness-review]
+          fixes_summary: "CRITICAL: Add 'none' to escalation enum, add 'custom' to workflow_preset enum, add progress.options field"
+          severity: critical
+          progress_ref: "5"
+          debates: [issue-5-4-schema-correctness-20260316T140414]
+          branch: main
+          status: done
+
+  current_focus:
+    milestone: 5
+    name: "Apply Quality Improvements"
+    started: "2026-03-16T14:00:00Z"

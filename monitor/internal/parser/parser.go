@@ -69,7 +69,6 @@ type EpicConfig struct {
 	Description  string        `yaml:"description" json:"description"`
 	Milestones   []Milestone   `yaml:"milestones" json:"milestones"`
 	CurrentFocus *CurrentFocus `yaml:"current_focus" json:"current_focus"`
-	Discoveries  []Discovery   `yaml:"discoveries" json:"discoveries"`
 }
 
 // Milestone represents one milestone in the plan.
@@ -89,21 +88,6 @@ type CurrentFocus struct {
 	MilestoneID int    `yaml:"milestone_id" json:"milestone_id"`
 	Phase       string `yaml:"phase" json:"phase"`
 	Started     string `yaml:"started" json:"started"`
-}
-
-// Discovery represents a sidequest or issue discovered during epic execution.
-type Discovery struct {
-	Ref            string   `yaml:"ref" json:"ref"`
-	Title          string   `yaml:"title" json:"title"`
-	DiscoveredAt   string   `yaml:"discovered_at" json:"discovered_at"`
-	DiscoveredBy   string   `yaml:"discovered_by" json:"discovered_by"`
-	DiscoveredDuring string `yaml:"discovered_during" json:"discovered_during"`
-	Description    string   `yaml:"description" json:"description"`
-	Severity       string   `yaml:"severity" json:"severity"`
-	Scope          string   `yaml:"scope" json:"scope"`
-	AffectedPRs    []string `yaml:"affected_prs" json:"affected_prs"`
-	ProgressRef    *string  `yaml:"progress_ref" json:"progress_ref"`
-	Status         string   `yaml:"status" json:"status"`
 }
 
 // ProjectConfig represents the parsed project.yaml file.
