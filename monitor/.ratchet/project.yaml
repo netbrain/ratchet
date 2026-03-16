@@ -1,0 +1,62 @@
+name: ratchet-monitor
+description: Real-time observability dashboard for Ratchet workflows
+version: 2.0.0
+
+stack:
+  languages:
+    - go
+  version: "1.25.7"
+  framework: none
+  frontend: alpine.js (vendored)
+  transport: sse (server-sent events)
+  database: none
+  build: go build
+
+architecture:
+  pattern: event-driven
+  description: >
+    File watcher detects .ratchet/ changes, pipeline enriches events with parsed
+    content, broker fans out to SSE clients. REST API provides on-demand data access.
+    Two binaries: web monitor (HTTP + SSE) and TUI monitor (terminal dashboard).
+  components:
+    - name: parser
+      description: "Parsers for workflow.yaml, plan.yaml, project.yaml, meta.json, scores.jsonl"
+      scope: "internal/parser/**/*.go"
+    - name: classifier
+      description: "Maps file paths to domain event types"
+      scope: "internal/classifier/**/*.go"
+    - name: datasource
+      description: "File-backed read-only data source for API handlers"
+      scope: "internal/datasource/**/*.go"
+    - name: handler
+      description: "HTTP handlers (REST, SSE, health, static, index)"
+      scope: "internal/handler/**/*.go"
+    - name: tui
+      description: "Terminal UI components, views, state management"
+      scope: "internal/tui/**/*.go"
+    - name: watcher
+      description: "fsnotify wrapper with debouncing and recursive watching"
+      scope: "internal/watcher/**/*.go"
+    - name: sse
+      description: "Pub/sub broker with ring buffer and Last-Event-ID replay"
+      scope: "internal/sse/**/*.go"
+    - name: pipeline
+      description: "Event enrichment (parse + classify)"
+      scope: "internal/pipeline/**/*.go"
+  data_flow: >
+    Watcher → Pipeline → Broker → SSE clients (real-time path).
+    FileDataSource → API handlers → REST clients (on-demand path).
+
+testing:
+  framework: go test
+  strategy: unit + integration + race detection
+  commands:
+    unit: "go test ./..."
+    race: "go test -race ./..."
+    bench: "go test -bench=. -benchmem ./..."
+    integration: "go test -tags=integration ./..."
+  coverage:
+    target: 80%
+    exclude:
+      - "**/*_test.go"
+      - "cmd/**"

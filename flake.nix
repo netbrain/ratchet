@@ -39,6 +39,19 @@
           type = "app";
           program = "${ratchet}/bin/ratchet-install";
         };
+
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            shellcheck
+            jq
+            git
+            bash
+          ];
+          shellHook = ''
+            echo "Ratchet development environment loaded"
+            echo "Available tools: shellcheck, jq, git"
+          '';
+        };
       }
     );
 }

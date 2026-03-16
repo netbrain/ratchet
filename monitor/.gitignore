@@ -1,2 +1,12 @@
 /tui
 /monitor
+
+# Ratchet runtime artifacts (regenerable, environment-specific)
+.ratchet/debates/
+.ratchet/reviews/
+.ratchet/scores/
+.ratchet/retros/
+.ratchet/escalations/
+.ratchet/guards/
+.ratchet/reports/
+.ratchet/progress/

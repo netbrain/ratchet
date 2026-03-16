@@ -14,7 +14,9 @@ if [ ! -f "$FILEPATH" ]; then
     exit 1
 fi
 
-# Update the status line
-sed -i "s/^\*\*Status:\*\* .*/\*\*Status:\*\* $STATUS/" "$FILEPATH"
+# Update the status line (portable temp file approach for macOS/Linux compatibility)
+TMP_FILE=$(mktemp)
+trap 'rm -f "$TMP_FILE"' EXIT
+sed "s/^\*\*Status:\*\* .*/\*\*Status:\*\* $STATUS/" "$FILEPATH" > "$TMP_FILE" && mv "$TMP_FILE" "$FILEPATH"
 
 echo "Updated $ITEM_REF status to: $STATUS"

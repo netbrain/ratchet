@@ -1,0 +1,109 @@
+version: 2
+max_rounds: 3
+escalation: human
+
+progress:
+  adapter: github-issues
+
+pr_scope: issue
+
+models:
+  generative: opus
+  adversarial: sonnet
+
+components:
+  - name: parser
+    scope: "internal/parser/**/*.go"
+    workflow: tdd
+
+  - name: classifier
+    scope: "internal/classifier/**/*.go"
+    workflow: tdd
+
+  - name: datasource
+    scope: "internal/datasource/**/*.go"
+    workflow: tdd
+
+  - name: handler
+    scope: "internal/handler/**/*.go"
+    workflow: tdd
+
+  - name: tui
+    scope: "internal/tui/**/*.go"
+    workflow: traditional
+
+  - name: cmd
+    scope: "cmd/**/*.go"
+    workflow: traditional
+
+  - name: tests
+    scope: "**/*_test.go"
+    workflow: review-only
+
+pairs:
+  - name: parser-correctness
+    component: parser
+    phase: test
+    scope: "internal/parser/**/*.go"
+    enabled: true
+
+  - name: api-contracts
+    component: handler
+    phase: review
+    scope: "internal/handler/**/*.go,internal/datasource/**/*.go"
+    enabled: true
+
+  - name: tui-visualization
+    component: tui
+    phase: review
+    scope: "internal/tui/**/*.go"
+    enabled: true
+
+  - name: concurrency-safety
+    component: parser
+    phase: harden
+    scope: "internal/**/*.go"
+    enabled: true
+
+guards:
+  - name: format
+    command: "gofmt -l ."
+    phase: build
+    blocking: true
+    timing: pre-debate
+    components: []
+
+  - name: vet
+    command: "go vet ./..."
+    phase: build
+    blocking: true
+    timing: pre-debate
+    components: []
+
+  - name: build
+    command: "go build ./..."
+    phase: build
+    blocking: true
+    timing: post-debate
+    components: []
+
+  - name: test
+    command: "go test ./..."
+    phase: test
+    blocking: true
+    timing: post-debate
+    components: []
+
+  - name: race
+    command: "go test -race ./..."
+    phase: harden
+    blocking: true
+    timing: post-debate
+    components: []
+
+  - name: lint
+    command: "golangci-lint run ./..."
+    phase: review
+    blocking: false
+    timing: post-debate
+    components: []

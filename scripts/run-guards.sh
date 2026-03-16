@@ -26,11 +26,19 @@ echo "Running guard: $GUARD_NAME ($GUARD_COMMAND)"
 
 output=""
 exit_code=0
-output=$(eval "$GUARD_COMMAND" 2>&1) || exit_code=$?
+# Temporarily disable set -e to capture exit code correctly
+# Without this, command substitution failure causes immediate exit
+set +e
+output=$(eval "$GUARD_COMMAND" 2>&1)
+exit_code=$?
+set -e
 
 # Write result JSON
 # Escape special characters in output for JSON embedding
-escaped_output=$(printf '%s' "$output" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')
+# Complete JSON escaping: backslash, quotes, tabs, and control characters (\r, \f, \b, \n)
+escaped_output=$(printf '%s' "$output" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\f/\\f/g' | sed 's/\x08/\\b/g' | tr '\n' ' ')
+# Escape the command string for JSON embedding
+escaped_command=$(printf '%s' "$GUARD_COMMAND" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\f/\\f/g' | sed 's/\x08/\\b/g' | tr '\n' ' ')
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 if [ "$BLOCKING" = "true" ]; then blocking_json="true"; else blocking_json="false"; fi
 
@@ -38,7 +46,7 @@ cat > "$GUARDS_DIR/$GUARD_NAME.json" <<JSON_EOF
 {
   "guard": "$GUARD_NAME",
   "phase": "$PHASE",
-  "command": "$GUARD_COMMAND",
+  "command": "$escaped_command",
   "exit_code": $exit_code,
   "output": "$escaped_output",
   "blocking": $blocking_json,

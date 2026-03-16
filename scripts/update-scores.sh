@@ -81,9 +81,16 @@ fi
 
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 
-# Append score as JSONL
+# Append score as JSONL using atomic write pattern
+# Write to temp file first, then append atomically to prevent partial writes on crash
+tmp_score=$(mktemp "${SCORES_FILE}.XXXXXX")
+trap 'rm -f "$tmp_score"' EXIT
+
 printf '{"timestamp":"%s","debate_id":"%s","pair":"%s","milestone":%s,"rounds_to_consensus":%s,"escalated":%s,"issues_found":%s,"issues_resolved":%s,"fast_path":%s}\n' \
     "$timestamp" "$meta_id" "$meta_pair" "$milestone_json" "$meta_rounds" "$escalated" "$issues_found" "$issues_resolved" "${meta_fast_path:-false}" \
-    >> "$SCORES_FILE"
+    > "$tmp_score"
+
+# Atomic append: cat the complete line to the scores file
+cat "$tmp_score" >> "$SCORES_FILE"
 
 echo "Score recorded for $meta_id: $issues_found found, $issues_resolved resolved"

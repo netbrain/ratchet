@@ -12,6 +12,9 @@ models:
   generative: opus
   adversarial: sonnet
 
+progress:
+  adapter: github-issues
+
 components:
   - name: skills
     scope: "skills/*/SKILL.md"
@@ -22,29 +25,49 @@ components:
     workflow: review-only
 
   - name: scripts
-    scope: "scripts/*.sh,install.sh"
-    workflow: traditional
+    scope: "scripts/**/*.sh,install.sh"
+    workflow: review-only
 
   - name: schemas
     scope: "schemas/*.json"
-    workflow: traditional
+    workflow: review-only
 
 pairs:
-  - name: prompt-coherence
+  - name: skill-coherence
     component: skills
     phase: review
-    scope: "skills/*/SKILL.md,agents/*.md"
+    scope: "skills/*/SKILL.md"
     enabled: true
 
-  - name: script-integrity
+  - name: script-robustness
     component: scripts
     phase: review
-    scope: "scripts/*.sh,install.sh"
+    scope: "scripts/**/*.sh,install.sh"
+    enabled: true
+
+  - name: agent-effectiveness
+    component: agents
+    phase: review
+    scope: "agents/*.md"
+    enabled: true
+
+  - name: schema-correctness
+    component: schemas
+    phase: review
+    scope: "schemas/*.json"
     enabled: true
 
 guards:
-  - name: schema-valid
-    command: "jq empty schemas/workflow.schema.json"
-    phase: build
+  - name: shellcheck
+    command: "nix develop --command shellcheck scripts/**/*.sh install.sh"
+    phase: review
     blocking: true
+    timing: pre-debate
+    components: [scripts]
+
+  - name: schema-valid
+    command: "nix develop --command jq empty schemas/workflow.schema.json"
+    phase: review
+    blocking: true
+    timing: post-debate
     components: [schemas]

@@ -30,7 +30,7 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["human", "tiebreaker", "both", "none"],
+      "enum": ["human", "tiebreaker", "both"],
       "default": "human",
       "description": "Escalation policy when max_rounds reached without consensus"
     },
@@ -43,10 +43,6 @@
           "enum": ["none", "markdown", "github-issues", "linear", "jira"],
           "default": "none",
           "description": "Work tracking adapter — failures never block debates"
-        },
-        "options": {
-          "type": "object",
-          "description": "Adapter-specific configuration options (e.g., repo owner, project ID)"
         }
       },
       "required": ["adapter"]
@@ -182,7 +178,7 @@
     },
     "workflow_preset": {
       "type": "string",
-      "enum": ["tdd", "traditional", "review-only", "custom"],
+      "enum": ["tdd", "traditional", "review-only"],
       "description": "Workflow preset selecting phase subsets. tdd: plan→test→build→review→harden. traditional: plan→build→review→harden. review-only: review only."
     },
     "component": {

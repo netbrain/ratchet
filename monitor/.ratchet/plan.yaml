@@ -1,0 +1,217 @@
+epic:
+  name: "monitor-v2-support"
+  description: "Update monitor to support Ratchet v2 spec"
+  milestones:
+    - id: 1
+      name: "Parser v2 Support"
+      description: "Update parsers to understand complete v2 spec (workspaces, models, issues, dependencies, guards)"
+      status: pending
+      done_when: "All v2 testdata files parse without errors. Parser tests encode v2 schema requirements."
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "issue-1-1"
+          title: "workflow.yaml v2 parser"
+          pairs: [parser-correctness]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-1-2"
+          title: "plan.yaml v2 parser"
+          pairs: [parser-correctness]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-1-3"
+          title: "Guard/Pair extended fields"
+          pairs: [parser-correctness]
+          depends_on: ["issue-1-1"]
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 2
+      name: "API v2 Support"
+      description: "Update handlers and datasource to serve v2 data structures"
+      status: pending
+      done_when: "All API endpoints return v2 data. SSE events include workspace/issue context."
+      depends_on: [1]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "issue-2-1"
+          title: "Datasource v2"
+          pairs: [api-contracts]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-2-2"
+          title: "API handlers v2"
+          pairs: [api-contracts]
+          depends_on: ["issue-2-1"]
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-2-3"
+          title: "SSE events v2"
+          pairs: [api-contracts]
+          depends_on: ["issue-2-1"]
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 3
+      name: "TUI v2 Visualization"
+      description: "Update TUI to display v2 features (workspaces, issues, parallel milestones, regression budgets)"
+      status: pending
+      done_when: "TUI displays all v2 fields correctly. Workspace switching, issue navigation, and DAG visualization work."
+      depends_on: [2]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "issue-3-1"
+          title: "Workspace selector and switcher UI"
+          pairs: [tui-visualization]
+          depends_on: []
+          phase_status:
+            plan: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-3-2"
+          title: "Issue-level progress display"
+          pairs: [tui-visualization]
+          depends_on: []
+          phase_status:
+            plan: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-3-3"
+          title: "Milestone DAG visualization"
+          pairs: [tui-visualization]
+          depends_on: []
+          phase_status:
+            plan: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-3-4"
+          title: "Regression budget display"
+          pairs: [tui-visualization]
+          depends_on: []
+          phase_status:
+            plan: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 4
+      name: "Integration & Hardening"
+      description: "End-to-end testing and concurrency validation"
+      status: pending
+      done_when: "All tests pass with race detector. End-to-end flow (file watch → parse → API → client) works correctly."
+      depends_on: [3]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "issue-4-1"
+          title: "End-to-end integration tests"
+          pairs: [concurrency-safety]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+        - ref: "issue-4-2"
+          title: "Race detection and concurrency fixes"
+          pairs: [concurrency-safety]
+          depends_on: ["issue-4-1"]
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+  current_focus: null

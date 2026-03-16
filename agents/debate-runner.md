@@ -1,8 +1,8 @@
 ---
 name: debate-runner
 description: Debate orchestrator — creates debate directories, spawns generative/adversarial pairs, manages rounds until verdict
-tools: Read, Grep, Glob, Bash, Write, Agent, AskUserQuestion
-disallowedTools: Edit
+tools: Read, Bash, Write, Edit, Agent, AskUserQuestion
+disallowedTools: []
 ---
 
 # Debate Runner Agent — Debate Orchestrator
@@ -94,6 +94,18 @@ Create the directory structure and write initial `meta.json`:
   "fast_path": false
 }
 ```
+
+### Error Handling
+
+Handle these failure modes:
+
+**Debate ID collision**: If `.ratchet/debates/<debate-id>/` already exists, append a counter: `<pair-name>-<timestamp>-2`, `-3`, etc.
+
+**Missing pair definitions**: If `.ratchet/pairs/<name>/generative.md` or `adversarial.md` don't exist, fail fast with clear message: "Pair '<name>' not found. Run /ratchet:pair to create it."
+
+**Malformed meta.json**: If JSON parsing fails during any meta.json read/write operation, fail fast and report the parse error. Do not attempt recovery or default values—invalid debate state is a critical error.
+
+**Failed agent spawns**: If spawning a generative or adversarial agent fails, write the error to the current round file and escalate immediately with status "escalated" and reason "agent_spawn_failure".
 
 ### 2. Run Debate Rounds
 

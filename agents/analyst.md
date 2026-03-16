@@ -1,7 +1,7 @@
 ---
 name: analyst
 description: Project analyzer — reads codebase, interviews human, generates tailored agent pairs
-tools: Read, Grep, Glob, Bash, Write, Edit, Agent, AskUserQuestion
+tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 ---
 
 # Analyst Agent — Project Analyzer & Pair Generator
@@ -61,7 +61,13 @@ Based on the scan + interview, identify:
 - What the human cares about improving
 - What validation commands are available (exact commands, discovered from the codebase)
 
-Record all discovered validation commands — adversarial agents need to know exactly what they can run.
+Record all discovered validation commands — adversarial agents need to know exactly what they can run. These commands must be included in each adversarial agent's "Validation Commands" section.
+
+**Handling Discrepancies:**
+If the scan and interview reveal conflicting information (e.g., human says "we have comprehensive tests" but scan found no test files):
+- Present what you found: "I scanned the codebase and didn't find test files in common locations. Can you point me to where tests live?"
+- Trust the human if they provide clarification — they may have tests in non-standard locations
+- If discrepancy persists, note it in project.yaml and flag for attention during first milestone
 
 ### Path B: Greenfield Project
 
@@ -418,4 +424,5 @@ Produce 3-5 actionable bullet points. Each should be specific (name the pair, gu
 - **Scope pairs tightly** — broad scope leads to shallow analysis
 - **Fewer focused pairs > many vague ones**
 - **Validation commands are critical** — adversarial agents need to know exactly what they can run
+- **Populate validation commands** — for each adversarial agent, include the exact commands discovered during codebase scan in the "Validation Commands" section
 - **Suggest, don't dictate** — present recommendations with rationale, let the human decide

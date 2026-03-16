@@ -78,7 +78,9 @@ Use `AskUserQuestion` to gather guard details interactively:
    - Options: `"Blocking (must pass to advance)"`, `"Advisory (log and continue)"`
 
 6. **Components** — which components:
-   - Options: list component names from workflow.yaml + `"All components"`
+   - Read `components` array from workflow.yaml
+   - If components exist: Options are component names + `"All components"`
+   - If no components configured: Options are `"All files (no components configured)"`
 
 7. **Confirm** — present the guard definition:
    - Use `AskUserQuestion`: "[guard summary]. Add this guard?"
@@ -89,6 +91,17 @@ On approval, append to the `guards` array in `.ratchet/workflow.yaml`.
 ### run — Execute Guards
 
 Run guards for the specified phase (or all phases if none specified).
+
+**Script validation**: First, check that the guard execution script exists:
+```bash
+test -f .claude/ratchet-scripts/run-guards.sh || echo "MISSING"
+```
+
+If missing:
+- Inform user: "Guard execution script not found. This may indicate an incomplete Ratchet installation."
+- Use `AskUserQuestion`:
+  - Options: `"Re-install Ratchet (./install.sh)"`, `"Run guards manually (I'll show you the format)"`, `"Cancel"`
+- If "Run manually": show guard result JSON schema (see Guard Results section below) and let user execute commands and record results
 
 For each matching guard:
 ```bash
@@ -113,6 +126,27 @@ Guard Results: [phase] phase
 
 If any blocking guards failed, use `AskUserQuestion`:
 - Options: `"Fix and re-run (Recommended)"`, `"View full output of [name]"`, `"Override [name]"`, `"Done for now"`
+
+#### Guard Results
+
+Guard results are stored as JSON in `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard-name>.json` with this structure:
+
+```json
+{
+  "guard": "<guard-name>",
+  "command": "<command that was executed>",
+  "exit_code": 0,
+  "stdout": "<command output>",
+  "stderr": "<error output if any>",
+  "passed": true,
+  "blocking": true,
+  "timestamp": "<ISO timestamp>",
+  "overridden": false,
+  "override_reason": null
+}
+```
+
+When a guard is overridden, `overridden` becomes `true` and `override_reason` contains the human's justification.
 
 ### override — Override a Failed Guard
 

@@ -13,8 +13,10 @@ if [ ! -f "$FILEPATH" ]; then
     exit 1
 fi
 
-# Update status to closed
-sed -i "s/^\*\*Status:\*\* .*/\*\*Status:\*\* closed/" "$FILEPATH"
+# Update status to closed (portable temp file approach for macOS/Linux compatibility)
+TMP_FILE=$(mktemp)
+trap 'rm -f "$TMP_FILE"' EXIT
+sed "s/^\*\*Status:\*\* .*/\*\*Status:\*\* closed/" "$FILEPATH" > "$TMP_FILE" && mv "$TMP_FILE" "$FILEPATH"
 
 # Add closing note
 cat >> "$FILEPATH" <<EOF

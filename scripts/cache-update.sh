@@ -65,6 +65,11 @@ NEW_ENTRY=$(cat <<ENTRY_EOF
 ENTRY_EOF
 )
 
+# Use atomic write pattern: temp file + mv
+# This prevents corruption if the process crashes or disk fills during write
+tmp_cache=$(mktemp "${CACHE_FILE}.XXXXXX")
+trap 'rm -f "$tmp_cache"' EXIT
+
 if [ -f "$CACHE_FILE" ] && [ -s "$CACHE_FILE" ]; then
     # Remove existing entry for this pair (from key line to next key or closing brace)
     # Then remove the outer braces, trim, and rebuild
@@ -72,10 +77,13 @@ if [ -f "$CACHE_FILE" ] && [ -s "$CACHE_FILE" ]; then
     # Remove trailing comma from existing if present
     existing=$(echo "$existing" | sed '$ s/,$//')
     if [ -n "$existing" ]; then
-        printf '{\n%s,\n%s\n}\n' "$existing" "$NEW_ENTRY" > "$CACHE_FILE"
+        printf '{\n%s,\n%s\n}\n' "$existing" "$NEW_ENTRY" > "$tmp_cache"
     else
-        printf '{\n%s\n}\n' "$NEW_ENTRY" > "$CACHE_FILE"
+        printf '{\n%s\n}\n' "$NEW_ENTRY" > "$tmp_cache"
     fi
 else
-    printf '{\n%s\n}\n' "$NEW_ENTRY" > "$CACHE_FILE"
+    printf '{\n%s\n}\n' "$NEW_ENTRY" > "$tmp_cache"
 fi
+
+# Atomic move: only replace the cache file if tmp write succeeded
+mv "$tmp_cache" "$CACHE_FILE"
