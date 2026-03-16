@@ -36,9 +36,10 @@ resolve it directly.
 Your job is to:
 
 1. Read state (plan.yaml, workflow.yaml)
-2. Build dependency graph of issues within the current milestone
-3. Launch **issue pipelines** in parallel (each in an isolated worktree)
-4. Process their results (milestone completion, next milestone)
+2. Build dependency graphs — milestones (if DAG mode) and issues within each milestone
+3. Launch **milestone pipelines** in parallel (DAG mode) or sequentially
+4. Within each milestone, launch **issue pipelines** in parallel (each in an isolated worktree)
+5. Process their results (milestone completion, next milestone layer, epic completion)
 
 Issue pipelines spawn debate-runner agents. Debate-runners spawn generative
 and adversarial agents. The generative agent writes code. You do none of this.
@@ -52,19 +53,25 @@ The core Ratchet workflow. Operates at four levels:
 - **Issue** — an independently executable unit of work with its own phase pipeline and PR
 - **Phase** — the current stage within an issue (`plan → test → build → review → harden`)
 
-Issues within a milestone run **in parallel** (unless they have explicit dependencies). Each issue progresses through its own phase pipeline independently, in an isolated git worktree. Phases within an issue are ordered and gated: phase N must complete before phase N+1 begins.
+Parallelism exists at two levels:
+
+- **Milestones** run in parallel when they have `depends_on` declarations forming a DAG. Milestones without dependencies are Layer 0 and run concurrently. If no milestones declare `depends_on`, they run sequentially (backward compatible).
+- **Issues** within a milestone run in parallel (unless they have explicit dependencies). Each issue progresses through its own phase pipeline independently, in an isolated git worktree.
+
+Phases within an issue are ordered and gated: phase N must complete before phase N+1 begins.
 
 ## Usage
 ```
-/ratchet:run                # Resume from epic — propose next focus or run against changes
-/ratchet:run [pair-name]    # Run a specific pair against its scoped files
-/ratchet:run [workspace]    # Target a specific workspace
-/ratchet:run --issue <ref>  # Run a single issue's pipeline (used by parallel spawning)
-/ratchet:run --all-files    # Run all pairs against all files in scope
-/ratchet:run --no-cache     # Force re-debate even if files haven't changed
-/ratchet:run --dry-run      # Preview what would run without executing anything
-/ratchet:run --unsupervised           # Run the full plan end-to-end without human intervention
-/ratchet:run --unsupervised --auto-pr # Same, but auto-create PRs per issue
+/ratchet:run                    # Resume from epic — propose next focus or run against changes
+/ratchet:run [pair-name]        # Run a specific pair against its scoped files
+/ratchet:run [workspace]        # Target a specific workspace
+/ratchet:run --milestone <id>   # Run a single milestone's pipeline (used by parallel milestone spawning)
+/ratchet:run --issue <ref>      # Run a single issue's pipeline (used by parallel issue spawning)
+/ratchet:run --all-files        # Run all pairs against all files in scope
+/ratchet:run --no-cache         # Force re-debate even if files haven't changed
+/ratchet:run --dry-run          # Preview what would run without executing anything
+/ratchet:run --unsupervised              # Run the full plan end-to-end without human intervention
+/ratchet:run --unsupervised --auto-pr    # Same, but auto-create PRs per issue
 ```
 
 ## Unsupervised Mode
@@ -74,7 +81,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 ### Behavior
 
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
-- **Step 2 (focus)**: Auto-select "Run all ready issues in parallel" for the current milestone. When a milestone completes, auto-advance to the next.
+- **Step 2 (focus)**: Auto-select "Run all ready issues in parallel" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
 - **Step 4 (issue pipelines)**: Launch all ready issues in parallel. Each issue pipeline runs autonomously.
 - **Step 5-dry (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
 - **Step 5c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, that issue **halts** (other issues continue).
@@ -186,8 +193,10 @@ Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the re
 
 Build a picture of:
 - Which milestones are **completed** (status: done)
-- Which milestone is **current** (status: in_progress)
-- For the current milestone: which **issues** exist, their `phase_status`, `depends_on` relationships, and current status
+- Which milestones are **current** (status: in_progress)
+- **Milestone parallelism mode**: if ANY milestone has a `depends_on` field → DAG mode (parallel milestones). Otherwise → sequential mode (backward compatible).
+- In DAG mode: which milestones are **ready** (all dependencies done, status not done)
+- For each relevant milestone: which **issues** exist, their `phase_status`, `depends_on` relationships, and current status
 - Which issues can run in **parallel** (no unmet dependencies) vs which must wait
 - Any unresolved conditions from previous CONDITIONAL_ACCEPT verdicts
 - Which **phases** apply based on component workflows
@@ -199,6 +208,9 @@ If no `plan.yaml` exists, skip epic tracking and fall through to file-based dete
 ### Step 2: Determine Focus
 
 There are five modes, checked in order:
+
+#### Mode M: Single-milestone pipeline (--milestone <id>)
+If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3** to build the issue dependency graph for this single milestone. This mode is used when the orchestrator launches parallel milestones — each agent re-enters the run skill scoped to one milestone. Execute Steps 3 → 4 → 8 for this milestone, then return the result.
 
 #### Mode S: Single-issue pipeline (--issue <ref>)
 If `--issue` is set, skip all focus negotiation. Find the issue by ref in the current milestone's `issues` array. Jump directly to **Step 5** (Issue Pipeline) for this single issue. This mode is used when the orchestrator spawns parallel agents — each agent re-enters the run skill scoped to one issue. Do NOT spawn further issue-level agents; execute the pipeline directly.
@@ -250,11 +262,26 @@ Match changed files to pairs by `scope` globs. For each changed file, match agai
 #### Mode D: Greenfield (no plan.yaml, no code)
 Use `AskUserQuestion` to ask what to build first.
 
-### Step 3: Set Focus and Build Dependency Graph
+### Step 3: Set Focus and Build Dependency Graphs
 
-If using epic mode, update `plan.yaml`:
-- Set the chosen milestone to `status: in_progress`
-- Record `current_focus` with milestone id and timestamp
+#### 3a. Milestone-Level DAG (parallel milestones)
+
+Check if milestone parallelism is active: **if ANY milestone in plan.yaml has a `depends_on` field → DAG mode**.
+
+**DAG mode** — build milestone dependency layers:
+1. **Layer 0**: milestones with `depends_on: []` (or no `depends_on`) whose status is not `done`
+2. **Layer 1**: milestones whose `depends_on` entries are all `done`
+3. **Layer N**: milestones whose dependencies are all in earlier layers
+
+If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step 3c** to launch them in parallel.
+
+**Sequential mode** (no milestone has `depends_on`) — select a single milestone:
+- If Mode B selected a specific milestone, use that
+- Otherwise, pick the first milestone with `status != done`
+- Set it to `status: in_progress`, record `current_focus` with milestone id and timestamp
+- Proceed to **Step 3b**
+
+#### 3b. Issue-Level DAG (within a single milestone)
 
 **Build dependency layers** from the milestone's issues:
 1. **Layer 0**: issues with no `depends_on` (or all dependencies already `done`)
@@ -274,6 +301,39 @@ Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. 
 - Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
 - Only set `status: in_progress` if the user explicitly confirms re-opening.
 
+#### 3c. Launch Parallel Milestones (DAG mode only)
+
+When multiple milestones are ready, launch them in parallel. Each milestone runs as a separate agent with its own issue DAG:
+
+```
+Launching [N] milestones in parallel:
+  M[id]: [name] — [N] issues
+  M[id]: [name] — [N] issues
+
+[If later layers exist: "[N] more milestones waiting for dependencies"]
+```
+
+For each ready milestone, spawn an Agent with:
+```
+/ratchet:run --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]
+```
+
+The spawned agent enters Mode M (Step 2), builds the issue DAG for its milestone, and runs Steps 3b → 4 → 8 independently. Each milestone agent handles its own issue parallelism internally.
+
+**Processing milestone results** (same pattern as issue results in Step 4c):
+1. Read each milestone agent's output
+2. **Update plan.yaml** with milestone status (done, blocked, halted) and all issue statuses within it
+3. Check if any dependent milestones are now unblocked → launch next batch
+4. Report overall epic progress
+
+**When all milestones across all layers are done** → epic complete, proceed to Step 10.
+
+**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with other milestones if possible — a halted milestone only blocks milestones that depend on it.
+
+**Context clearing**: each milestone agent starts with fresh context (separate Agent invocation), achieving the same context isolation as sequential milestone execution.
+
+Proceed to **Step 8** for each completed milestone, then **Step 10** for epic-level next steps.
+
 ### Step 4: Launch Issue Pipelines
 
 **CHECKPOINT**: You are about to launch issue pipelines. Your ONLY action here is spawning Agent calls. If you are tempted to "quickly fix" something, write a test, or implement a feature before launching — STOP. That work belongs inside the issue pipeline's debate-runner, not here.
@@ -282,7 +342,7 @@ This is the core execution step. The orchestrator launches parallel pipelines fo
 
 #### 4a. Identify Ready Issues
 
-From the dependency graph built in Step 3, identify **ready issues** — issues whose status is not `done` and whose `depends_on` entries are all `done` (or empty).
+From the dependency graph built in Step 3b, identify **ready issues** — issues whose status is not `done` and whose `depends_on` entries are all `done` (or empty).
 
 **For explicit pair / --all-files modes:** Skip issue-based execution. Run the specified pairs directly using the single-issue flow (Step 5) without worktree isolation.
 
@@ -720,15 +780,41 @@ Present via `AskUserQuestion`:
 
 Score updates are handled within issue pipelines (Step 5h). The orchestrator does not need to run score updates separately.
 
-**Resource teardown**: after all issue pipelines for the milestone complete, tear down shared resources:
+**Resource teardown**: tear down shared resources when no more pipelines need them:
+- **Sequential mode**: after all issue pipelines for the milestone complete
+- **DAG mode**: after ALL milestones across all layers complete (the top-level orchestrator handles teardown, not individual milestone agents)
+
+For teardown:
 1. For each resource in `workflow.yaml` that has a `stop` command, run it
 2. Clean up `.ratchet/locks/` directory (remove `resources.json` and any stale lock directories)
 
-Resources are torn down regardless of whether the milestone succeeded, halted, or had errors — always clean up.
+Resources are torn down regardless of whether milestones succeeded, halted, or had errors — always clean up.
 
 ### Step 10: Propose Next Focus
 
-**If `--unsupervised`**: Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+**If `--milestone` (Mode M)**: This is a milestone sub-agent. Output a structured milestone completion summary (analogous to issue summaries in Step 5h) and return. The top-level orchestrator handles next steps.
+
+```
+Milestone [id] complete:
+  status: done
+  issues: [N] complete, [N] blocked/escalated
+  prs: [N] created
+  debates: [N] total
+```
+
+Or if halted:
+```
+Milestone [id] [blocked|halted]:
+  status: [blocked|halted]
+  issues: [N] complete, [N] blocked/escalated, [N] pending
+  halted_because: [reason]
+```
+
+---
+
+**If `--unsupervised`** (sequential mode): Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+
+**If `--unsupervised`** (DAG mode): The top-level orchestrator processes milestone results from Step 3c. If newly unblocked milestones exist, launch them. If all milestones are done, present the epic completion summary and halt.
 
 **Otherwise**, use `AskUserQuestion` to let the user choose what to do next.
 
@@ -742,7 +828,7 @@ Resources are torn down regardless of whether the milestone succeeded, halted, o
 
 **If milestone complete, more milestones remain:**
 
-**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. A fresh context forces re-reading actual files, preventing drift from auto-compaction summaries.
+**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. In sequential mode, persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. A fresh context forces re-reading actual files, preventing drift from auto-compaction summaries. In DAG mode, context clearing happens naturally — each milestone agent is a separate Agent invocation with fresh context.
 
 - Summary: `"Milestone [name] complete! [N] issues, [N] PRs created. Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone — all state is persisted to disk."`
 - Options:

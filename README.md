@@ -5,7 +5,7 @@ Ratchet turns AI code generation into a structured development process. Every ph
 ## How It Works
 
 1. **Initialize** — Ratchet scans your project (or interviews you for greenfield), debates the approach internally, and presents 2-3 strategy options with tradeoffs
-2. **Milestones decompose into issues** — each milestone is broken into independently executable issues. Independent issues run **in parallel**, each in an isolated git worktree
+2. **Milestones decompose into issues** — each milestone is broken into independently executable issues. Independent issues run **in parallel**, each in an isolated git worktree. Independent milestones can also run in parallel when they declare `depends_on`
 3. **Phase-gated debates** — each issue progresses through ordered phases: `plan → test → build → review → harden`. Phases are gated — each must pass before the next begins
 4. **Agent pairs debate** — a builder (generative) and critic (adversarial) argue each phase. The critic runs real validation commands as evidence
 5. **Guards gate advancement** — deterministic checks (lint, tests, security scans) run at phase boundaries. Blocking guards must pass to advance
@@ -235,12 +235,39 @@ resources:
     start: "docker compose up -d redis"
     singleton: false      # shared freely
 
+  - name: playwright
+    start: "npx playwright install --with-deps"
+    singleton: true       # never run more than one playwright process
+
 guards:
   - name: integration-tests
     command: "npm run test:integration"
     phase: build
     blocking: true
     requires: [postgres, redis]
+
+  - name: e2e-tests
+    command: "npx playwright test"
+    phase: harden
+    blocking: true
+    requires: [playwright]
+```
+
+**Parallel milestones** — Milestones can declare `depends_on` to form a dependency graph. Independent milestones (no dependencies) run in parallel, each handling its own issue DAG. If no milestones declare `depends_on`, they run sequentially (backward compatible).
+
+```yaml
+milestones:
+  - id: 1
+    name: "Auth System"
+    depends_on: []          # Layer 0 — parallel with M2
+
+  - id: 2
+    name: "Data Layer"
+    depends_on: []          # Layer 0 — parallel with M1
+
+  - id: 3
+    name: "API Integration"
+    depends_on: [1, 2]      # Layer 1 — waits for both
 ```
 
 **Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs across retros, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
@@ -266,53 +293,51 @@ debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tig
 ```
                         ┌─────────────────────────────┐
                         │         Epic Roadmap         │
-                        │   milestone → milestone →    │
+                        │      Milestone DAG           │
                         └──────────┬──────────────────┘
                                    │
-                        ┌──────────▼──────────────────┐
-                        │      Milestone Orchestrator  │
-                        │  Dependency graph → layers   │
-                        └──────────┬──────────────────┘
-                                   │
-            ┌──────────────────────┼──────────────────────┐
-            │ (parallel)           │ (parallel)            │ (waits for deps)
-   ┌────────▼─────────┐  ┌────────▼─────────┐  ┌─────────▼────────┐
-   │  Issue A Pipeline │  │  Issue B Pipeline │  │  Issue C Pipeline │
-   │  (git worktree)   │  │  (git worktree)   │  │  (git worktree)   │
-   │                   │  │                   │  │  depends_on: [A]  │
-   │  plan → test →    │  │  plan → test →    │  │                   │
-   │  build → review → │  │  build → review → │  │  (starts when A   │
-   │  harden → PR      │  │  harden → PR      │  │   completes)      │
-   └───────────────────┘  └───────────────────┘  └───────────────────┘
-            │                                              │
-            │  Each issue pipeline runs per-phase:         │
-            │                                              │
-            │  ┌──────────────────────────────────┐        │
-            │  │  Pre-debate Guards (fail fast)    │        │
-            │  └──────────┬───────────────────────┘        │
-            │             │                                │
-            │  ┌──────────▼───────────────────────┐        │
-            │  │       Debate Runner Agent         │        │
-            │  │  (orchestrates — no code access)  │        │
-            │  │                                   │        │
-            │  │  Generative ◄──debate──► Adversarial      │
-            │  │                                   │        │
-            │  │  ACCEPT / TRIVIAL_ACCEPT → next   │        │
-            │  │  REJECT → next round              │        │
-            │  │  REGRESS → earlier phase           │        │
-            │  └──────────┬───────────────────────┘        │
-            │             │                                │
-            │  ┌──────────▼───────────────────────┐        │
-            │  │  Post-debate Guards + advance     │        │
-            │  └──────────────────────────────────┘        │
-            │                                              │
-            └──────────────┬───────────────────────────────┘
-                           │ (all issues done)
-                ┌──────────▼──────────────────┐
-                │  Milestone complete          │
-                │  Analyst assessment          │
-                │  Context clear → next        │
-                └─────────────────────────────┘
+         ┌─────────────────────────┼─────────────────────────┐
+         │ (parallel)              │ (parallel)               │ (waits for deps)
+┌────────▼──────────┐   ┌─────────▼─────────┐   ┌───────────▼───────────┐
+│  Milestone 1       │   │  Milestone 2       │   │  Milestone 3           │
+│  (own agent)       │   │  (own agent)       │   │  depends_on: [1, 2]    │
+│                    │   │                    │   │  (starts when both     │
+│  ┌──────────────┐  │   │  ┌──────────────┐  │   │   complete)            │
+│  │ Issue DAG    │  │   │  │ Issue DAG    │  │   └────────────────────────┘
+│  │              │  │   │  │              │  │
+│  │  A ──┐      │  │   │  │  D ──┐      │  │
+│  │  B ──┤→ C   │  │   │  │  E ──┘      │  │
+│  │      │      │  │   │  │              │  │
+│  └──────────────┘  │   │  └──────────────┘  │
+└────────────────────┘   └────────────────────┘
+
+Each issue pipeline runs per-phase:
+
+  ┌──────────────────────────────────┐
+  │  Pre-debate Guards (fail fast)    │
+  └──────────┬───────────────────────┘
+             │
+  ┌──────────▼───────────────────────┐
+  │       Debate Runner Agent         │
+  │  (orchestrates — no code access)  │
+  │                                   │
+  │  Generative ◄──debate──► Adversarial
+  │                                   │
+  │  ACCEPT / TRIVIAL_ACCEPT → next   │
+  │  REJECT → next round              │
+  │  REGRESS → earlier phase          │
+  └──────────┬───────────────────────┘
+             │
+  ┌──────────▼───────────────────────┐
+  │  Post-debate Guards + advance     │
+  └──────────────────────────────────┘
+
+  Shared resources (singleton):
+  ┌──────────────────────────────────┐
+  │  postgres 🔒  playwright 🔒      │
+  │  redis (shared)                   │
+  │  File locks serialize access      │
+  └──────────────────────────────────┘
 ```
 
 ### Key Agents

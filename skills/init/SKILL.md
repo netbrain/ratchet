@@ -254,6 +254,7 @@ epic:
       description: "<what this milestone delivers>"
       status: pending        # pending | in_progress | done
       done_when: "<concrete acceptance criteria>"
+      depends_on: []         # milestone IDs this depends on (empty = Layer 0, runs in parallel with other Layer 0 milestones)
       progress_ref: null     # set by progress adapter when milestone starts
       regressions: 0         # regression counter for budget tracking
       issues:                # required — at least 1 issue per milestone
@@ -286,6 +287,10 @@ epic:
 - Scoped to specific pairs (each issue lists which pairs are relevant)
 
 For a simple milestone, create a single issue with the same name and description. For complex milestones, break into 2-5 issues. Never create issues so fine-grained that each one is a single file change — that defeats the purpose of structured debate.
+
+**Milestone parallelism.** Milestones can declare `depends_on: [milestone-id]` to express inter-milestone dependencies. Milestones with no dependencies (or `depends_on: []`) are Layer 0 and run in parallel. Milestones whose dependencies are all complete become ready and run in the next batch. If no milestone has `depends_on`, milestones run sequentially (backward compatible — the default).
+
+When decomposing the epic, consider which milestones are truly independent. For example, "Auth System" and "Data Layer" can often run in parallel, while "API Integration" depends on both. Use milestone dependencies to express this — the orchestrator will parallelize automatically.
 
 If a progress adapter is configured, issues are populated during init by querying the tracker. For `github-issues`, the analyst can import existing issues that match the milestone's scope. Issues can also be added manually.
 
