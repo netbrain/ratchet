@@ -14,7 +14,9 @@ type MilestoneStatus struct {
 	Status      string
 	PhaseStatus map[string]string
 	DoneWhen    string
+	DependsOn   []int
 	Regressions int
+	Layer       int // DAG layer (0 = no dependencies, 1+ = dependent on earlier layers)
 }
 
 // EpicViewModel is the view model for the epic status tab.
@@ -202,6 +204,33 @@ func (vm *EpicViewModel) Refresh() {
 	vm.adjustScrollOffset()
 }
 
+// MilestonesByLayer groups milestones by their DAG layer for rendering.
+// Returns a map of layer number to milestones in that layer.
+func (vm *EpicViewModel) MilestonesByLayer() map[int][]MilestoneStatus {
+	if vm == nil {
+		return nil
+	}
+	byLayer := make(map[int][]MilestoneStatus)
+	for _, m := range vm.milestones {
+		byLayer[m.Layer] = append(byLayer[m.Layer], m)
+	}
+	return byLayer
+}
+
+// MaxLayer returns the highest DAG layer number, or -1 if no milestones.
+func (vm *EpicViewModel) MaxLayer() int {
+	if vm == nil || len(vm.milestones) == 0 {
+		return -1
+	}
+	maxLayer := 0
+	for _, m := range vm.milestones {
+		if m.Layer > maxLayer {
+			maxLayer = m.Layer
+		}
+	}
+	return maxLayer
+}
+
 func (vm *EpicViewModel) clampSelection() {
 	n := len(vm.milestones)
 	if n == 0 {
@@ -233,17 +262,75 @@ func (vm *EpicViewModel) loadPlan() {
 	}
 	vm.plan = vm.store.Plan()
 	vm.milestones = nil
+
+	// Build milestones with DAG layer calculation
+	layers := vm.calculateDAGLayers(vm.plan.Epic.Milestones)
+
 	for _, m := range vm.plan.Epic.Milestones {
 		// Deep copy PhaseStatus to avoid sharing the map with the store.
 		ps := make(map[string]string, len(m.PhaseStatus))
 		maps.Copy(ps, m.PhaseStatus)
+
+		// Deep copy DependsOn
+		deps := make([]int, len(m.DependsOn))
+		copy(deps, m.DependsOn)
+
 		vm.milestones = append(vm.milestones, MilestoneStatus{
 			ID:          m.ID,
 			Name:        m.Name,
 			Status:      m.Status,
 			PhaseStatus: ps,
 			DoneWhen:    m.DoneWhen,
+			DependsOn:   deps,
 			Regressions: m.Regressions,
+			Layer:       layers[m.ID],
 		})
 	}
+}
+
+// calculateDAGLayers computes the DAG layer for each milestone based on dependencies.
+// Layer 0: milestones with no dependencies or empty depends_on
+// Layer N: milestones whose dependencies are all in layers < N
+func (vm *EpicViewModel) calculateDAGLayers(milestones []client.Milestone) map[int]int {
+	layers := make(map[int]int)
+
+	// Iteratively assign layers until all milestones are assigned
+	assigned := make(map[int]bool)
+	maxIterations := len(milestones) * 2 // prevent infinite loops
+
+	for iteration := 0; iteration < maxIterations && len(assigned) < len(milestones); iteration++ {
+		for _, m := range milestones {
+			if assigned[m.ID] {
+				continue
+			}
+
+			// If no dependencies, assign to layer 0
+			if len(m.DependsOn) == 0 {
+				layers[m.ID] = 0
+				assigned[m.ID] = true
+				continue
+			}
+
+			// Check if all dependencies are assigned
+			allDepsAssigned := true
+			maxDepLayer := -1
+			for _, depID := range m.DependsOn {
+				if !assigned[depID] {
+					allDepsAssigned = false
+					break
+				}
+				if layers[depID] > maxDepLayer {
+					maxDepLayer = layers[depID]
+				}
+			}
+
+			// If all dependencies assigned, assign this milestone to maxDepLayer + 1
+			if allDepsAssigned {
+				layers[m.ID] = maxDepLayer + 1
+				assigned[m.ID] = true
+			}
+		}
+	}
+
+	return layers
 }
