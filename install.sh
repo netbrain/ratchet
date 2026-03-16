@@ -81,6 +81,7 @@ remove_git_hook() {
 
     local tmp_file
     tmp_file="$(mktemp)"
+    trap 'rm -f "$tmp_file"' EXIT
     sed '/^# BEGIN RATCHET$/,/^# END RATCHET$/d' "$hook_file" > "$tmp_file"
 
     local content
@@ -118,13 +119,13 @@ do_install() {
     fi
 
     # Copy commands (skills -> commands)
-    mkdir -p "$commands_dir"
+    mkdir -p "$commands_dir" || die "Failed to create commands directory: $commands_dir"
     for skill_dir in "$SCRIPT_DIR"/skills/*/; do
         local skill_name
         skill_name="$(basename "$skill_dir")"
         local skill_file="$skill_dir/SKILL.md"
         [ -f "$skill_file" ] || continue
-        cp "$skill_file" "$commands_dir/$skill_name.md"
+        cp "$skill_file" "$commands_dir/$skill_name.md" || die "Failed to copy skill: $skill_name"
     done
     echo "  Installed commands to $commands_dir/"
 
@@ -137,7 +138,7 @@ do_install() {
 
     # Copy scripts
     if [ -d "$SCRIPT_DIR/scripts" ] && ls "$SCRIPT_DIR"/scripts/*.sh >/dev/null 2>&1; then
-        mkdir -p "$scripts_dir"
+        mkdir -p "$scripts_dir" || die "Failed to create scripts directory: $scripts_dir"
         cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/"
         chmod +x "$scripts_dir"/*.sh
         echo "  Installed scripts to $scripts_dir/"
@@ -221,7 +222,7 @@ do_uninstall() {
         if ! command -v python3 >/dev/null 2>&1; then
             echo "  Warning: python3 not found, skipping settings.json cleanup" >&2
         else
-        python3 -c "
+            if python3 -c "
 import json, sys
 path = sys.argv[1]
 try:
@@ -229,7 +230,7 @@ try:
         data = json.load(f)
 except json.JSONDecodeError:
     print(f'  Warning: {path} contains malformed JSON, skipping cleanup', file=sys.stderr)
-    sys.exit(0)
+    sys.exit(1)
 plugins = data.get('enabledPlugins', {})
 plugins.pop('ratchet@local', None)
 if not plugins:
@@ -237,8 +238,10 @@ if not plugins:
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
-" "$settings_file"
-        echo "  Cleaned settings.json"
+" "$settings_file"; then
+                echo "  Cleaned settings.json"
+            # else: warning already printed by Python, continue silently
+            fi
         fi
     fi
 
@@ -290,11 +293,11 @@ fi
 case "$MODE" in
     global)
         TARGET="$HOME/.claude"
-        mkdir -p "$TARGET"
+        mkdir -p "$TARGET" || die "Failed to create global install directory: $TARGET"
         ;;
     local)
         TARGET=".claude"
-        mkdir -p "$TARGET"
+        mkdir -p "$TARGET" || die "Failed to create local install directory: $TARGET"
         ;;
 esac
 
