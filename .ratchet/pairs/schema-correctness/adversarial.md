@@ -112,33 +112,48 @@ Verify:
 - [ ] Enum values explained if non-obvious
 
 ### Settled Law (Patterns from Prior Debates)
+- [ ] **Enum completeness (CRITICAL)**: Missing enum values cause schema to reject valid configs - verify EVERY enum against actual usage
 - [ ] **Error handling gaps**: Check that validation error messages would be clear for common failures
 - [ ] **Cross-reference verification**: Verify all `$ref` pointers resolve correctly via bash/jq
-- [ ] **Missing examples**: Ensure complex schema structures have example values in descriptions
+- [ ] **Concrete examples in descriptions**: Ensure complex schema structures have example values in descriptions
 
-## Enum Completeness Verification (Critical Check)
+## Enum Completeness Verification (CRITICAL - Priority 1)
 
-For every enum field in the schema, verify against actual usage:
+**This is the highest priority validation.** Missing enum values cause schema to reject valid configs.
 
-**Step 1**: Extract enum from schema:
+For EVERY enum field in the schema:
+
+**Step 1: Extract enum from schema**
 ```bash
-jq '.properties.escalation.enum' schemas/workflow.schema.json
+field="escalation"  # Replace with field name
+jq ".properties.$field.enum // .\"\\$defs\".*.$field.enum" schemas/workflow.schema.json
 # Output: ["human", "tiebreaker", "both"]
 ```
 
-**Step 2**: Check actual config files for values used:
+**Step 2: Find all actual usage in codebase**
 ```bash
-grep -r 'escalation:' .ratchet/ | grep -v 'json\|debates' | grep -oE 'escalation: [a-z]+'
-# Example output: escalation: none  ← NOT IN ENUM!
+# Search all YAML configs
+grep -r "$field:" .ratchet/ | grep -v 'json\|debates' | grep -oE "$field: [a-z-]+"
+
+# Search documentation
+grep -r "$field.*value\|$field.*option" agents/ skills/ pairs/
 ```
 
-**Step 3**: Check documentation for documented values:
+**Step 3: Compare and flag gaps**
 ```bash
-grep -r 'escalation.*none\|escalation.*skip' agents/ skills/ pairs/
-# If value is documented but not in schema → CRITICAL MISSING VALUE
+# If any value is used but not in enum → CRITICAL SEVERITY
+# Schema will REJECT valid configs
+# Example: config uses "escalation: none" but enum only has ["human", "tiebreaker", "both"]
 ```
 
-**If mismatch found**: This is a CRITICAL severity issue - schema rejects valid configs
+**Common enum fields to check:**
+- escalation (expect: human, tiebreaker, both, none)
+- workflow (expect: traditional, tdd, review-only, custom)
+- phase (expect: plan, test, build, review, harden)
+- timing (expect: pre-debate, post-debate)
+- adapter (expect: github-issues, markdown, none)
+
+**REJECT immediately if any enum is incomplete.** This is non-negotiable.
 
 ## Validation Commands
 

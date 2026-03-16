@@ -47,9 +47,17 @@ The user prioritized ALL of:
 - [ ] Success criteria clear
 
 ### Settled Law (Patterns from Prior Debates)
-- [ ] **Error handling gaps**: Check that error handling is explicit (parse errors, missing files, failed commands)
-- [ ] **Cross-reference verification**: Verify all file paths exist via bash (`ls`, `test -f`)
-- [ ] **Missing examples**: Flag abstract instructions without concrete examples (e.g., "configure settings" needs YAML snippet)
+- [ ] **Error handling completeness (9 occurrences - 69% of M1-M4 debates)**: Every skill must document what happens when:
+  - Required files don't exist (.ratchet/workflow.yaml, .ratchet/plan.yaml)
+  - YAML/JSON parsing fails (invalid syntax, missing fields)
+  - External commands fail (git, jq, gh)
+  - Must show concrete error handling code with clear stderr messages, not just "handle errors"
+- [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
+- [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Any instruction involving:
+  - File format manipulation → Must show YAML/JSON snippet
+  - Tool usage → Must show exact command syntax
+  - Conditional logic → Must show if/then/else pattern
+  - No abstract "do X" without showing HOW
 
 ## Cross-Reference Validation (Always Run)
 
@@ -115,6 +123,16 @@ For each skill reviewed by the generative agent:
 4. **Tool misuse** — Write without Read, Task without subagent_type
 5. **Outdated references** — mentioning v1 fields or removed concepts
 6. **Incomplete error handling** — only covering happy path
+
+## Pre-Review Batching Check (For Large Fix Sets)
+
+For implementation tasks with 10+ changes, verify generative agent batched similar fixes:
+```bash
+# Count fixes applied by category
+grep -E "Add error handling|Fix cross-reference|Add example" <generative-response>
+```
+
+Expected: At least 50% of similar fixes applied per round for efficiency. If generative only applied 5/29 fixes (17%), challenge the batching strategy.
 
 ## Tools Available
 

@@ -63,14 +63,34 @@ For each script, verify:
 - [ ] Idempotent (can run multiple times)
 
 ### Settled Law (Patterns from Prior Debates)
-- [ ] **Error handling gaps**: Verify explicit error handling for all critical operations (parse errors, missing files, failed commands)
-- [ ] **Cross-reference verification**: Verify all referenced files/scripts exist via bash (`test -f`, `ls`)
-- [ ] **Missing examples**: Ensure usage examples are concrete and runnable, not abstract
+
+**JSON Operations (Critical - 5 occurrences in M1-M2, severity: critical):**
 - [ ] **JSON generation must use jq or complete escaping**: Any bash script generating JSON must either:
   1. Use `jq` for construction, OR
   2. Implement complete JSON escaping (backslash, quotes, control chars: \t, \n, \r, \f, \b)
 - [ ] **JSON writes must be atomic**: Use temp file + mv pattern for all JSON file writes (`tmp=$(mktemp); ... > "$tmp" && mv "$tmp" "$target"`)
 - [ ] **JSON reads must handle parse errors**: Check for malformed JSON before attempting to parse (`jq empty "$file" 2>/dev/null || handle_error`)
+
+**Error Message Quality (7 occurrences, severity: major):**
+- [ ] User-facing error messages must be clear and actionable
+- [ ] File existence checks must print the path that was checked
+  ```bash
+  # GOOD
+  if [ ! -f "$CONSENSUS_SCRIPT" ]; then
+      echo "Error: check-consensus.sh not found at $CONSENSUS_SCRIPT" >&2
+      exit 1
+  fi
+
+  # BAD (generic bash error)
+  exec bash "$CONSENSUS_SCRIPT"  # No existence check
+  ```
+
+**Cross-reference verification (7 occurrences - 54% of debates):**
+- [ ] All referenced scripts verified to exist
+- [ ] All external commands documented as requirements
+
+**Examples must be runnable (8 occurrences - 62% of debates):**
+- [ ] Ensure usage examples are concrete and runnable, not abstract
 
 ## Pre-Debate Verification (Run FIRST)
 

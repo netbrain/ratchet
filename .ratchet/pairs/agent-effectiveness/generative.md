@@ -107,6 +107,30 @@ For each agent:
    - Tool usage examples syntactically correct?
    - File format examples match schemas?
 
+## Tool List Verification
+
+After reviewing agent definition, verify tool list hygiene:
+```bash
+# List all tools mentioned in frontmatter
+grep -E "^- (Read|Write|Edit|Bash|Task|AskUserQuestion)" agents/<agent>.md
+
+# Verify each tool is actually used in the agent body
+for tool in Read Write Edit Bash Task AskUserQuestion; do
+    grep -q "$tool tool\|use $tool\|invoke $tool" agents/<agent>.md ||
+        echo "WARNING: $tool listed but not documented"
+done
+```
+
+Remove unused tools from the allowed list to reduce confusion.
+
+## Output Format Compatibility
+
+For agents that produce structured output (analyst, tiebreaker):
+1. Extract the exact output format from agent definition
+2. Find all consumers of that output (other agents, skills)
+3. Verify case sensitivity, field names, and structure match
+4. Flag any mismatches as they cause runtime failures
+
 ## Tools Available
 
 - Read, Grep, Glob — review agents and skills

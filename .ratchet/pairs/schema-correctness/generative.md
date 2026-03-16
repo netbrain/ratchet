@@ -66,12 +66,37 @@ Ratchet uses JSON schemas to validate configuration files:
 
 ## Improvement Strategy
 
-1. **Read** the schema file (schemas/workflow.schema.json)
-2. **Validate** with `jq empty` and JSON Schema validator
-3. **Compare** against actual v2 config files (.ratchet/workflow.yaml)
-4. **Check** for missing fields by reading v2 spec documentation
-5. **Verify** constraints by testing edge cases
-6. **Fix** issues by editing the schema
+1. **Verify enum completeness FIRST** (highest priority - missing enums break valid configs)
+2. **Read** the schema file (schemas/workflow.schema.json)
+3. **Validate** with `jq empty` and JSON Schema validator
+4. **Compare** against actual v2 config files (.ratchet/workflow.yaml)
+5. **Check** for missing fields by reading v2 spec documentation
+6. **Verify** constraints by testing edge cases
+7. **Fix** issues by editing the schema
+
+## Enum Validation (CRITICAL - Priority 1)
+
+Before reviewing any other schema aspects, verify ALL enums are complete:
+
+1. Extract all enum definitions from schema
+2. Cross-reference with actual usage in configs
+3. Cross-reference with documentation mentions
+4. Flag ANY missing values as CRITICAL
+
+**Example workflow:**
+```bash
+# 1. Extract enums from schema
+jq '.. | .enum? // empty' schemas/workflow.schema.json
+
+# 2. Check actual config usage
+grep -r 'escalation:\|workflow:\|phase:' .ratchet/ | grep -v 'json\|debates'
+
+# 3. Flag gaps
+# If config uses "escalation: none" but enum only has ["human", "tiebreaker", "both"]
+# → CRITICAL: schema will reject valid configs
+```
+
+This takes priority over syntax, completeness, or documentation quality checks.
 
 ## Common Issues to Fix
 

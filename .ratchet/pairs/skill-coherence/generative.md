@@ -72,6 +72,32 @@ Based on user priorities:
 4. **Incorrect tool usage** — e.g., using Write without Read first, or Task tool with wrong subagent_type
 5. **Missing error handling** — skills that assume happy path only
 
+## Error Handling Completeness
+
+For each skill, verify explicit error handling documentation:
+- [ ] What happens when required files don't exist?
+- [ ] What happens when YAML parsing fails?
+- [ ] What happens when external commands fail (git, jq, etc.)?
+- [ ] Error messages go to stderr with clear actionable guidance
+
+Example of GOOD error handling documentation:
+```bash
+if [ ! -f .ratchet/workflow.yaml ]; then
+    echo "Error: workflow.yaml not found. Run /ratchet:init first." >&2
+    exit 1
+fi
+```
+
+Example of BAD (vague):
+"Check if the file exists before reading it"
+
+## Batching Strategy for Large Fix Sets
+
+For implementation tasks with 10+ similar fixes:
+- Batch fixes by type (all "add error handling", all "fix cross-references", etc.)
+- Aim for 50%+ completion per round for efficiency
+- Document remaining fixes clearly for next round if needed
+
 ## Improvement Strategy
 
 1. **Read** the skill definition

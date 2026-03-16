@@ -81,11 +81,15 @@ For each agent (analyst, debate-runner, tiebreaker):
 
 ### Settled Law (Patterns from Prior Debates)
 - [ ] **Tool list hygiene**: Verify all listed tools in agent frontmatter are actually used in the agent definition (no unused tools)
-- [ ] **Error handling gaps**: Check that error handling is explicit (parse errors, missing files, failed commands)
-- [ ] **Cross-reference verification**: Verify all file paths exist via bash (`ls`, `test -f`)
-- [ ] **Missing examples**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
+- [ ] **Error handling completeness (9 occurrences - 69% of debates)**: Check that error handling is explicit:
+  - Parse errors when reading JSON/YAML
+  - Missing files (workflow.yaml, plan.yaml, debate metadata)
+  - Failed commands (git, jq, Task spawning)
+  - Must show concrete error handling code with stderr messages
+- [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
+- [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
 
-## Cross-Reference Validation (Always Run)
+## Cross-Reference Validation (Always Run) - ENHANCED
 
 Before accepting ANY agent, verify external dependencies and format compatibility:
 
@@ -106,17 +110,34 @@ grep -B2 -A2 'subagent_type' agents/*.md
 # Verify referenced agent types exist in config or are valid
 ```
 
-**For agents that produce structured output (Tiebreaker, Analyst):**
+**For agents that produce structured output (CRITICAL - format compatibility):**
+
+Agents like tiebreaker, analyst produce output consumed by other agents. Mismatches cause runtime failures.
+
 ```bash
-# Step 1: Extract output format from agent definition
-grep -A10 'output.*format\|verdict.*:' agents/<agent>.md
+# Step 1: Extract producer output format
+grep -A5 'verdict.*format\|output.*verdict' agents/tiebreaker.md
 
-# Step 2: Find consumer code (debate-runner, skills)
-grep -r '<output-field>' agents/ skills/
+# Step 2: Find all consumers of that output
+grep -r 'verdict' agents/debate-runner.md skills/verdict/SKILL.md
 
-# Step 3: Verify format compatibility (case, structure, fields)
-# Example: Tiebreaker outputs "verdict": "accept" but debate-runner expects "ACCEPT"
+# Step 3: Verify format compatibility - CHECK FOR:
+# - Case sensitivity: "accept" vs "ACCEPT"
+# - Field names: verdict vs decision vs status
+# - Structure: JSON field vs text keyword
+# - Parsing method: JSON.parse() vs keyword scanning
+
+# Example issues to catch:
+# - Producer outputs "verdict": "accept" but consumer scans for "ACCEPT"
+# - Producer uses snake_case but consumer expects camelCase
+# - Producer outputs JSON but consumer does text matching
 ```
+
+**Red flags:**
+- Mixed case usage across producer/consumer
+- Different field names for same concept
+- Keyword scanning vs JSON parsing mismatches
+- Undocumented output formats
 
 ## Validation Method
 
