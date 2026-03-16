@@ -52,6 +52,7 @@ type EpicConfig struct {
 	Description  string        `json:"description"`
 	Milestones   []Milestone   `json:"milestones"`
 	CurrentFocus *CurrentFocus `json:"current_focus"`
+	Discoveries  []Discovery   `json:"discoveries"`
 }
 
 // Milestone represents a single milestone in the plan.
@@ -71,6 +72,21 @@ type CurrentFocus struct {
 	MilestoneID int    `json:"milestone_id"`
 	Phase       string `json:"phase"`
 	Started     string `json:"started"`
+}
+
+// Discovery represents a sidequest or issue discovered during epic execution.
+type Discovery struct {
+	Ref            string   `json:"ref"`
+	Title          string   `json:"title"`
+	DiscoveredAt   string   `json:"discovered_at"`
+	DiscoveredBy   string   `json:"discovered_by"`
+	DiscoveredDuring string `json:"discovered_during"`
+	Description    string   `json:"description"`
+	Severity       string   `json:"severity"`
+	Scope          string   `json:"scope"`
+	AffectedPRs    []string `json:"affected_prs"`
+	ProgressRef    *string  `json:"progress_ref"`
+	Status         string   `json:"status"`
 }
 
 // StatusInfo represents the current system status.
