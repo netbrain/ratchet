@@ -1,0 +1,4 @@
+: this is not valid yaml [
+  unclosed bracket
+  - bad: indentation
+ key without value:

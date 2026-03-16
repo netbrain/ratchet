@@ -1,0 +1,13 @@
+{
+  "id": "sse-correctness-20260314T120000",
+  "pair": "sse-correctness",
+  "phase": "test",
+  "milestone": 2,
+  "files": ["internal/sse/broker.go"],
+  "status": "initiated",
+  "round_count": 0,
+  "max_rounds": 3,
+  "started": "2026-03-14T12:00:00Z",
+  "resolved": null,
+  "verdict": null
+}

@@ -1,0 +1,36 @@
+epic:
+  name: "ratchet-monitor"
+  description: "Real-time observability dashboard for Ratchet"
+  milestones:
+    - id: 1
+      name: "Spike & Contract"
+      description: "Define the event model and data contracts."
+      pairs: [api-design, file-watching, sse-correctness]
+      status: done
+      phase_status:
+        plan: done
+        test: done
+        build: done
+        review: done
+        harden: done
+      done_when: "go run . starts server"
+      progress_ref: null
+
+    - id: 2
+      name: "Solid Backend"
+      description: "Replace spike internals with production-quality implementations."
+      pairs: [api-design, file-watching, sse-correctness]
+      status: in_progress
+      phase_status:
+        plan: done
+        test: in_progress
+        build: pending
+        review: pending
+        harden: pending
+      done_when: "File watcher handles rapid changes without duplicates"
+      progress_ref: null
+
+  current_focus:
+    milestone_id: 2
+    phase: test
+    started: "2026-03-14T00:00:00Z"

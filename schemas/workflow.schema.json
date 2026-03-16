@@ -10,8 +10,7 @@
     "required": ["workspaces"]
   },
   "then": {
-    "required": ["version", "workspaces"],
-    "not": { "required": ["pairs"] }
+    "required": ["version", "workspaces"]
   },
   "else": {
     "required": ["version", "max_rounds", "escalation", "pairs"]

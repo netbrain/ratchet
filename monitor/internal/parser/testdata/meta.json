@@ -1,0 +1,13 @@
+{
+  "id": "api-design-20260313T164500",
+  "pair": "api-design",
+  "phase": "review",
+  "milestone": 1,
+  "files": [],
+  "status": "consensus",
+  "round_count": 1,
+  "max_rounds": 3,
+  "started": "2026-03-13T16:45:00Z",
+  "resolved": "2026-03-13T16:55:00Z",
+  "verdict": "ACCEPT"
+}

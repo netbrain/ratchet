@@ -1,0 +1,50 @@
+version: 2
+max_rounds: 3
+escalation: human
+
+workspaces:
+  - path: .
+    name: engine
+  - path: monitor
+    name: monitor
+
+models:
+  generative: opus
+  adversarial: sonnet
+
+components:
+  - name: skills
+    scope: "skills/*/SKILL.md"
+    workflow: review-only
+
+  - name: agents
+    scope: "agents/*.md"
+    workflow: review-only
+
+  - name: scripts
+    scope: "scripts/*.sh,install.sh"
+    workflow: traditional
+
+  - name: schemas
+    scope: "schemas/*.json"
+    workflow: traditional
+
+pairs:
+  - name: prompt-coherence
+    component: skills
+    phase: review
+    scope: "skills/*/SKILL.md,agents/*.md"
+    enabled: true
+
+  - name: script-integrity
+    component: scripts
+    phase: review
+    scope: "scripts/*.sh,install.sh"
+    enabled: true
+
+guards:
+  - name: schema-valid
+    command: "jq empty schemas/workflow.schema.json"
+    phase: build
+    blocking: true
+    components: [schemas]

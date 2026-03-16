@@ -1,0 +1,41 @@
+version: 2
+max_rounds: 3
+escalation: human
+
+progress:
+  adapter: none
+
+components:
+  - name: backend
+    scope: "**/*.go"
+    workflow: tdd
+
+  - name: frontend
+    scope: "templates/**,static/**"
+    workflow: traditional
+
+pairs:
+  - name: api-design
+    component: backend
+    phase: review
+    scope: "**/*.go"
+    enabled: true
+
+  - name: sse-correctness
+    component: backend
+    phase: test
+    scope: "internal/sse/**/*.go"
+    enabled: true
+
+guards:
+  - name: format
+    command: "gofmt -l ."
+    expect: empty
+    phase: build
+    description: "All Go files must be gofmt-formatted"
+
+  - name: test
+    command: "go test -race ./..."
+    expect: success
+    phase: test
+    description: "All tests pass with race detector enabled"

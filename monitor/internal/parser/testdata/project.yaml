@@ -1,0 +1,30 @@
+name: ratchet-monitor
+description: Real-time observability dashboard for the Ratchet quality framework.
+
+stack:
+  language: go
+  version: "1.22+"
+  frontend: alpine.js
+  transport: sse
+  templates: go-html-template
+  build: make
+
+architecture:
+  pattern: single-binary-web-server
+  components:
+    - name: backend
+      description: Go HTTP server, filesystem watcher, SSE event pipeline, REST API
+      scope: "**/*.go"
+    - name: frontend
+      description: Server-rendered HTML templates with Alpine.js reactivity
+      scope: "templates/**,static/**"
+
+  data_flow: |
+    .ratchet/ files -> fsnotify watcher -> internal event bus -> SSE endpoint -> Alpine.js -> DOM updates
+
+testing:
+  framework: go-test
+  strategy: tdd-for-backend
+  commands:
+    unit: go test -race ./...
+    bench: go test -bench=. ./...
