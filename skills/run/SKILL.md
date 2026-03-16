@@ -458,30 +458,29 @@ Guards can declare `requires: [resource-name]` referencing shared resources defi
 
 **Resource lifecycle:**
 1. **Provision** — before a guard runs, start any required resources that aren't already running
-2. **Lock** — if a resource is `singleton: true`, acquire a file lock before the guard runs
-3. **Release** — after the guard completes, release singleton locks
-4. **Teardown** — after all pipelines in a milestone complete, run `stop` commands for resources that have them
+2. **Lock + Run** — if a resource is `singleton: true`, wrap the guard command with `flock` so the lock auto-releases when the command finishes (or crashes)
+3. **Teardown** — after all pipelines complete, run `stop` commands for resources that have them
 
 **Provisioning**: run the resource's `start` command. Start commands must be idempotent (e.g., `docker compose up -d postgres` is safe to run multiple times). Track started resources in `.ratchet/locks/resources.json`:
 ```json
 {"postgres": {"started": true, "pid": "$$", "at": "<ISO>"}}
 ```
 
-**Singleton locking**: file-based locks in `.ratchet/locks/` (shared across worktrees since they share the same host filesystem).
+**Singleton locking**: uses `flock` — kernel-level file locking in `.ratchet/locks/` (shared across worktrees since they share the same host filesystem). The lock is tied to the file descriptor, so the kernel automatically releases it when the process exits — even on crash or SIGKILL. No stale locks, no timeouts, no cleanup needed.
+
 ```bash
-# Acquire singleton lock — waits if another pipeline holds it
-while ! mkdir .ratchet/locks/<resource-name>.lock 2>/dev/null; do
-  sleep 2
-done
-echo '{"issue": "<ref>", "pid": "$$", "acquired": "<ISO timestamp>"}' > .ratchet/locks/<resource-name>.lock/info.json
+# Create lock file (once, idempotent)
+mkdir -p .ratchet/locks
+touch .ratchet/locks/<resource-name>.lock
+
+# Run the guard command under flock — blocks until lock acquired, auto-releases on exit
+flock .ratchet/locks/<resource-name>.lock bash -c '<guard-command>'
 ```
 
-After the guard completes:
+When multiple singleton resources are required, acquire all locks in alphabetical order to prevent deadlocks:
 ```bash
-rm -rf .ratchet/locks/<resource-name>.lock
+flock .ratchet/locks/db.lock flock .ratchet/locks/playwright.lock bash -c '<guard-command>'
 ```
-
-If a lock is held for more than 10 minutes, consider it stale (crashed pipeline) and force-acquire.
 
 **Example config:**
 ```yaml
@@ -500,22 +499,24 @@ guards:
     command: "npm run test:integration"
     phase: build
     blocking: true
-    requires: [postgres, redis]    # postgres locks, redis just starts
+    requires: [postgres, redis]    # postgres is flock'd, redis just starts
 ```
 
-When multiple singleton resources are required, acquire all locks in alphabetical order to prevent deadlocks.
-
-**Teardown** (Step 9 — after milestone completes): for each resource with a `stop` command, run it. Clean up `.ratchet/locks/` directory.
+**Teardown** (Step 9 — after all pipelines complete): for each resource with a `stop` command, run it. Remove `.ratchet/locks/` directory.
 
 #### 5c. Pre-Debate Guards
 
 Run guards where `timing: "pre-debate"` for the current phase. Guards without a `timing` field are treated as `post-debate` (backward compatible).
 
-**If the guard has `requires`**: provision required resources (run `start` if not already running), acquire singleton locks, run the guard, release locks (regardless of pass/fail).
+**If the guard has `requires`**: provision required resources (run `start` if not already running). For singleton resources, wrap the guard command with `flock` — the lock auto-releases when the command exits.
 
 For each pre-debate guard assigned to the current phase:
 ```bash
+# Without singleton resources:
 bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+
+# With singleton resources (e.g., requires: [postgres]):
+flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
 ```
 
 - If a **blocking** pre-debate guard fails:
@@ -602,7 +603,7 @@ Process each debate-runner result:
 
 **Run post-debate guards:**
 
-**If the guard has `requires`**: provision required resources and acquire singleton locks (same as pre-debate guards).
+**If the guard has `requires`**: provision required resources. For singleton resources, wrap with `flock` (same as pre-debate guards).
 
 For each guard where `timing: "post-debate"` (or no timing field) assigned to the current phase:
 ```bash
