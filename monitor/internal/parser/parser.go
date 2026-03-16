@@ -122,22 +122,22 @@ type Milestone struct {
 	DoneWhen    string            `yaml:"done_when" json:"done_when"`
 	ProgressRef *string           `yaml:"progress_ref" json:"progress_ref"`
 	// v2 fields
-	DependsOn   []int             `yaml:"depends_on" json:"depends_on"`         // milestone IDs this depends on
-	Regressions int               `yaml:"regressions" json:"regressions"`       // regression budget counter
-	Issues      []Issue           `yaml:"issues" json:"issues"`                 // issues within this milestone
+	DependsOn   []int   `yaml:"depends_on" json:"depends_on"`   // milestone IDs this depends on
+	Regressions int     `yaml:"regressions" json:"regressions"` // regression budget counter
+	Issues      []Issue `yaml:"issues" json:"issues"`           // issues within this milestone
 }
 
 // Issue represents a single issue within a milestone (v2 only).
 type Issue struct {
-	Ref         string            `yaml:"ref" json:"ref"`                     // unique reference like "issue-1-1"
-	Title       string            `yaml:"title" json:"title"`                 // human-readable title
-	Pairs       []string          `yaml:"pairs" json:"pairs"`                 // pair names for this issue
-	DependsOn   []string          `yaml:"depends_on" json:"depends_on"`       // issue refs this depends on
-	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`   // status per phase
-	Files       []string          `yaml:"files" json:"files"`                 // modified files
-	Debates     []string          `yaml:"debates" json:"debates"`             // debate IDs
-	Branch      *string           `yaml:"branch" json:"branch"`               // git branch name
-	Status      string            `yaml:"status" json:"status"`               // overall status
+	Ref         string            `yaml:"ref" json:"ref"`                   // unique reference like "issue-1-1"
+	Title       string            `yaml:"title" json:"title"`               // human-readable title
+	Pairs       []string          `yaml:"pairs" json:"pairs"`               // pair names for this issue
+	DependsOn   []string          `yaml:"depends_on" json:"depends_on"`     // issue refs this depends on
+	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"` // status per phase
+	Files       []string          `yaml:"files" json:"files"`               // modified files
+	Debates     []string          `yaml:"debates" json:"debates"`           // debate IDs
+	Branch      *string           `yaml:"branch" json:"branch"`             // git branch name
+	Status      string            `yaml:"status" json:"status"`             // overall status
 }
 
 // CurrentFocus describes the current working focus.

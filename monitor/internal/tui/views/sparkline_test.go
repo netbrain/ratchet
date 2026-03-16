@@ -118,7 +118,7 @@ func TestSparklineNegativeValues(t *testing.T) {
 func TestSparklineLargeIntegerRange(t *testing.T) {
 	// Values that would overflow int multiplication in 64-bit: max-min = large.
 	// (v-min) * 7 could overflow int if using pure integer arithmetic.
-	const big = 1<<50
+	const big = 1 << 50
 	result := views.Sparkline([]int{-big, 0, big}, 3)
 	runes := []rune(result)
 	if len(runes) != 3 {
