@@ -302,7 +302,38 @@ epic:
           branch: main
           status: done
 
-  current_focus:
-    milestone: 5
-    name: "Apply Quality Improvements"
-    started: "2026-03-16T14:00:00Z"
+    - id: 6
+      name: "Discovery Implementation"
+      description: "Implement discoveries found during engine-quality-review epic"
+      status: pending
+      done_when: "Both discoveries implemented and validated through debate pairs"
+      depends_on: [5]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "issue-6-1"
+          title: "Fix .gitignore to exclude runtime Ratchet state files"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status: {}
+          files: [.gitignore]
+          severity: medium
+          source: "discovery-1"
+          description: "plan.yaml and runtime state files should not be committed. Only config files (workflow.yaml, project.yaml, pairs/) should be versioned."
+          affected_scope: "All monitor PRs (#7-#14)"
+          progress_ref: "15"
+          status: pending
+
+        - ref: "issue-6-2"
+          title: "Add discovery tracking to parser and TUI"
+          pairs: [parser-correctness, tui-visualization]
+          depends_on: []
+          phase_status: {}
+          files: [monitor/internal/parser/parser.go, monitor/internal/tui/client/types.go]
+          severity: high
+          source: "discovery-2"
+          description: "Add Discovery type to data model. Support discoveries field in EpicConfig for tracking sidequests found during execution."
+          progress_ref: "16"
+          status: pending
+
+  current_focus: null
