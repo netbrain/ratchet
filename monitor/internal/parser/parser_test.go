@@ -153,6 +153,87 @@ func TestParsePlan_Empty(t *testing.T) {
 	}
 }
 
+// --- Plan v2 tests ---
+
+func TestParsePlan_V2WithIssues(t *testing.T) {
+	data := readTestdata(t, "plan_v2_with_issues.yaml")
+	plan, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("ParsePlan returned error: %v", err)
+	}
+
+	if plan.Epic.Name != "test-epic-v2" {
+		t.Errorf("Epic.Name: got %q, want %q", plan.Epic.Name, "test-epic-v2")
+	}
+
+	if len(plan.Epic.Milestones) != 2 {
+		t.Fatalf("Milestones: got %d, want 2", len(plan.Epic.Milestones))
+	}
+
+	// Test milestone 1
+	m1 := plan.Epic.Milestones[0]
+	if m1.ID != 1 {
+		t.Errorf("Milestones[0].ID: got %d, want 1", m1.ID)
+	}
+	if len(m1.DependsOn) != 0 {
+		t.Errorf("Milestones[0].DependsOn: got %d items, want 0", len(m1.DependsOn))
+	}
+	if m1.Regressions != 0 {
+		t.Errorf("Milestones[0].Regressions: got %d, want 0", m1.Regressions)
+	}
+	if len(m1.Issues) != 2 {
+		t.Fatalf("Milestones[0].Issues: got %d, want 2", len(m1.Issues))
+	}
+
+	// Test issue 1-1
+	issue11 := m1.Issues[0]
+	if issue11.Ref != "issue-1-1" {
+		t.Errorf("Issue[0].Ref: got %q, want %q", issue11.Ref, "issue-1-1")
+	}
+	if issue11.Title != "First issue" {
+		t.Errorf("Issue[0].Title: got %q, want %q", issue11.Title, "First issue")
+	}
+	if len(issue11.Pairs) != 2 {
+		t.Errorf("Issue[0].Pairs: got %d, want 2", len(issue11.Pairs))
+	}
+	if len(issue11.DependsOn) != 0 {
+		t.Errorf("Issue[0].DependsOn: got %d, want 0", len(issue11.DependsOn))
+	}
+	if issue11.Status != "in_progress" {
+		t.Errorf("Issue[0].Status: got %q, want %q", issue11.Status, "in_progress")
+	}
+	if issue11.PhaseStatus["test"] != "in_progress" {
+		t.Errorf("Issue[0].PhaseStatus[test]: got %q, want %q", issue11.PhaseStatus["test"], "in_progress")
+	}
+	if issue11.Branch != nil {
+		t.Errorf("Issue[0].Branch: got %v, want nil", *issue11.Branch)
+	}
+
+	// Test issue 1-2 with dependencies
+	issue12 := m1.Issues[1]
+	if issue12.Ref != "issue-1-2" {
+		t.Errorf("Issue[1].Ref: got %q, want %q", issue12.Ref, "issue-1-2")
+	}
+	if len(issue12.DependsOn) != 1 || issue12.DependsOn[0] != "issue-1-1" {
+		t.Errorf("Issue[1].DependsOn: got %v, want [issue-1-1]", issue12.DependsOn)
+	}
+
+	// Test milestone 2 with dependencies
+	m2 := plan.Epic.Milestones[1]
+	if m2.ID != 2 {
+		t.Errorf("Milestones[1].ID: got %d, want 2", m2.ID)
+	}
+	if len(m2.DependsOn) != 1 || m2.DependsOn[0] != 1 {
+		t.Errorf("Milestones[1].DependsOn: got %v, want [1]", m2.DependsOn)
+	}
+	if m2.Regressions != 1 {
+		t.Errorf("Milestones[1].Regressions: got %d, want 1", m2.Regressions)
+	}
+	if len(m2.Issues) != 1 {
+		t.Fatalf("Milestones[1].Issues: got %d, want 1", len(m2.Issues))
+	}
+}
+
 // --- ProjectConfig tests ---
 
 func TestParseProject_Valid(t *testing.T) {
