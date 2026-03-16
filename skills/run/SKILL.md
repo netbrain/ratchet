@@ -323,10 +323,18 @@ When all agents in a batch return, process the results. **Do NOT fix, debug, or 
 
 1. Read the issue's completion summary (the agent's final output — see Step 5h)
 2. Present all summaries to the user
-3. Read updated `plan.yaml` for each issue's final state (status, branch, files, debates, phase_status)
+3. **Update the MAIN repo's `plan.yaml`** based on each issue runner's output. Issue pipelines run in worktrees — their plan.yaml updates are lost when the worktree is cleaned up. The orchestrator MUST write these updates:
+   - Set `status` (done, blocked, escalated, failed)
+   - Set `phase_status` for all phases
+   - Set `branch` (the branch name created by the pipeline)
+   - Set `files` (list of modified files)
+   - Set `debates` (debate IDs created)
+   - Parse these from the issue runner's structured completion summary (Step 5h)
 4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
 5. If newly unblocked issues exist → launch them as a new parallel batch (back to 4b)
 6. Report overall progress: `"[N]/[total] issues complete"`
+
+**CRITICAL**: This plan.yaml update is not optional. Without it, milestone completion state is lost at context boundaries. The orchestrator is the authoritative writer — issue pipelines output results, the orchestrator persists them.
 
 **When all issues across all layers are done** → milestone is complete, proceed to Step 8.
 
@@ -384,9 +392,66 @@ bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
 
 Use `--no-cache` flag to skip this check and force re-debate.
 
+#### Shared Resources
+
+Guards can declare `requires: [resource-name]` referencing shared resources defined in workflow.yaml. Resources are infrastructure dependencies (databases, test servers, etc.) that need provisioning and optionally singleton access.
+
+**Resource lifecycle:**
+1. **Provision** — before a guard runs, start any required resources that aren't already running
+2. **Lock** — if a resource is `singleton: true`, acquire a file lock before the guard runs
+3. **Release** — after the guard completes, release singleton locks
+4. **Teardown** — after all pipelines in a milestone complete, run `stop` commands for resources that have them
+
+**Provisioning**: run the resource's `start` command. Start commands must be idempotent (e.g., `docker compose up -d postgres` is safe to run multiple times). Track started resources in `.ratchet/locks/resources.json`:
+```json
+{"postgres": {"started": true, "pid": "$$", "at": "<ISO>"}}
+```
+
+**Singleton locking**: file-based locks in `.ratchet/locks/` (shared across worktrees since they share the same host filesystem).
+```bash
+# Acquire singleton lock — waits if another pipeline holds it
+while ! mkdir .ratchet/locks/<resource-name>.lock 2>/dev/null; do
+  sleep 2
+done
+echo '{"issue": "<ref>", "pid": "$$", "acquired": "<ISO timestamp>"}' > .ratchet/locks/<resource-name>.lock/info.json
+```
+
+After the guard completes:
+```bash
+rm -rf .ratchet/locks/<resource-name>.lock
+```
+
+If a lock is held for more than 10 minutes, consider it stale (crashed pipeline) and force-acquire.
+
+**Example config:**
+```yaml
+resources:
+  - name: postgres
+    start: "docker compose up -d postgres"
+    stop: "docker compose down postgres"
+    singleton: true       # only one pipeline's tests hit the DB at a time
+
+  - name: redis
+    start: "docker compose up -d redis"
+    singleton: false      # shared freely — no locking
+
+guards:
+  - name: integration-tests
+    command: "npm run test:integration"
+    phase: build
+    blocking: true
+    requires: [postgres, redis]    # postgres locks, redis just starts
+```
+
+When multiple singleton resources are required, acquire all locks in alphabetical order to prevent deadlocks.
+
+**Teardown** (Step 9 — after milestone completes): for each resource with a `stop` command, run it. Clean up `.ratchet/locks/` directory.
+
 #### 5c. Pre-Debate Guards
 
 Run guards where `timing: "pre-debate"` for the current phase. Guards without a `timing` field are treated as `post-debate` (backward compatible).
+
+**If the guard has `requires`**: provision required resources (run `start` if not already running), acquire singleton locks, run the guard, release locks (regardless of pass/fail).
 
 For each pre-debate guard assigned to the current phase:
 ```bash
@@ -477,6 +542,8 @@ Process each debate-runner result:
 
 **Run post-debate guards:**
 
+**If the guard has `requires`**: provision required resources and acquire singleton locks (same as pre-debate guards).
+
 For each guard where `timing: "post-debate"` (or no timing field) assigned to the current phase:
 ```bash
 bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
@@ -532,29 +599,41 @@ When an adversarial issues REGRESS targeting an earlier phase:
 #### 5h. Issue Complete
 
 When all phases are done:
-- Set issue status to `done` in plan.yaml
+- Set issue status to `done` in local plan.yaml (worktree copy — useful for crash recovery, but the orchestrator will write the authoritative update in Step 4c)
 - Run score updates for all debates in this issue
 
-**Output a completion summary as your final message.** This is critical for visibility — the orchestrator and the user need to see what happened. Use this format:
+**Output a structured completion summary as your final message.** This is critical — the orchestrator parses this to update the main repo's plan.yaml (Step 4c). The worktree is cleaned up after the agent returns, so this output is the only way results survive.
 
 ```
 Issue [ref] complete:
-  [phase] ✓ ([N] debate(s), [verdict type])
-  [phase] ✓ ([N] debate(s), [verdict type])
-  [phase] — skipped ([reason, e.g. traditional workflow])
-  ...
-  Files modified: [N]
-  Branch: [branch name]
-  PR: [URL or "local commit only"]
+  status: done
+  phase_status:
+    [phase]: done
+    [phase]: done
+    [phase]: skipped ([reason, e.g. traditional workflow])
+    ...
+  debates: [debate-id-1, debate-id-2, ...]
+  files: [file1, file2, ...]
+  branch: [branch name]
+  pr: [URL or "none"]
 ```
 
 **If the pipeline exits early** (escalation, guard failure, regression budget exhausted), output:
 
 ```
 Issue [ref] [blocked|escalated|failed]:
-  [phase] ✓
-  [phase] — [reason for halt]
-  Halted at: [phase] phase, [halt reason]
+  status: [blocked|escalated|failed]
+  phase_status:
+    [phase]: done
+    [phase]: [failed|blocked] — [reason for halt]
+    [phase]: pending
+    ...
+  halted_at: [phase]
+  halt_reason: [reason]
+  debates: [debate-id-1, ...]
+  files: [file1, ...]
+  branch: [branch name or "none"]
+  pr: [URL or "none"]
 ```
 
 This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
@@ -637,9 +716,15 @@ Present via `AskUserQuestion`:
 
 **CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request" within an issue pipeline. Local commits are the default safe action.**
 
-### Step 9: Update Scores
+### Step 9: Update Scores & Teardown Resources
 
 Score updates are handled within issue pipelines (Step 5h). The orchestrator does not need to run score updates separately.
+
+**Resource teardown**: after all issue pipelines for the milestone complete, tear down shared resources:
+1. For each resource in `workflow.yaml` that has a `stop` command, run it
+2. Clean up `.ratchet/locks/` directory (remove `resources.json` and any stale lock directories)
+
+Resources are torn down regardless of whether the milestone succeeded, halted, or had errors — always clean up.
 
 ### Step 10: Propose Next Focus
 

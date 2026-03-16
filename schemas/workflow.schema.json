@@ -109,6 +109,13 @@
         "$ref": "#/$defs/guard"
       },
       "description": "Deterministic checks at phase boundaries"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resource"
+      },
+      "description": "Shared resources that guards may need exclusive access to (databases, test servers, etc.)"
     }
   },
   "$defs": {
@@ -272,6 +279,36 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Components this guard applies to (empty = all components)"
+        },
+        "requires": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Resources this guard needs (must match resource names). Singleton resources are locked before running and released after."
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "required": ["name", "start"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique resource identifier"
+        },
+        "start": {
+          "type": "string",
+          "description": "Shell command to start/provision this resource (must be idempotent)"
+        },
+        "stop": {
+          "type": "string",
+          "description": "Shell command to stop/teardown this resource (optional — runs when all pipelines complete)"
+        },
+        "singleton": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, only one pipeline at a time may use this resource. A file lock serializes access."
         }
       }
     }

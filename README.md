@@ -222,6 +222,27 @@ max_regressions:                            # or per-phase limits
   # unspecified phases fall back to 2
 ```
 
+**Shared resources** — Guards can declare resource dependencies (`requires: [postgres]`). Resources are defined with start/stop commands and an optional `singleton` flag. Singleton resources are file-locked so only one pipeline uses them at a time. Non-singleton resources are started once and shared freely. Resources are torn down when the milestone completes.
+
+```yaml
+resources:
+  - name: postgres
+    start: "docker compose up -d postgres"
+    stop: "docker compose down postgres"
+    singleton: true       # one pipeline at a time
+
+  - name: redis
+    start: "docker compose up -d redis"
+    singleton: false      # shared freely
+
+guards:
+  - name: integration-tests
+    command: "npm run test:integration"
+    phase: build
+    blocking: true
+    requires: [postgres, redis]
+```
+
 **Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs across retros, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
 
 **Cross-cutting scope** — Changed files are matched against all component scopes, not just the first match. Multi-component changes automatically trigger pairs from all relevant components. Pairs can use `scope: "auto"` to inherit their parent component's scope.
@@ -350,6 +371,18 @@ guards:
     blocking: true
     timing: pre-debate       # pre-debate | post-debate (default)
     components: [backend, frontend]
+
+  - name: integration-tests
+    command: "npm run test:integration"
+    phase: build
+    blocking: true
+    requires: [postgres]     # needs singleton resource
+
+resources:
+  - name: postgres
+    start: "docker compose up -d postgres"
+    stop: "docker compose down postgres"
+    singleton: true          # one pipeline at a time
 ```
 
 ### Project Runtime (`.ratchet/`)
