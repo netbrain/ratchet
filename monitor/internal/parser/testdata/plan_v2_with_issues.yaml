@@ -65,4 +65,7 @@ epic:
           branch: null
           status: pending
 
-  current_focus: null
+  current_focus:
+    milestone_id: 1
+    phase: test
+    started: "2026-03-16T00:00:00Z"
