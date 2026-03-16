@@ -144,6 +144,11 @@ func (r *Root) KeyMap() tui.KeyMap {
 		}
 	})))
 
+	// Workspace switcher (v2)
+	km = append(km, tui.On(tui.Rune('w'), dirty(func(ke tui.KeyEvent) {
+		r.app.CycleWorkspace()
+	})))
+
 	// Number keys: direct tab selection, generated from AllTabs()
 	// so bindings stay in sync if tabs are reordered or added.
 	for i, tab := range app.AllTabs() {
@@ -173,6 +178,7 @@ func (r *Root) buildHelpOverlay() *tui.Element {
 	bindings := []struct{ key, desc string }{
 		{"1-4", "Switch to tab"},
 		{"Tab / Shift+Tab", "Cycle tabs"},
+		{"w", "Switch workspace"},
 		{"j / k", "Navigate list"},
 		{"G", "Jump to last"},
 		{"g g", "Jump to first"},

@@ -21,6 +21,10 @@ type Store struct {
 	connState    client.ConnectionState
 	lastEventID  string
 	dirty        map[string]bool // resource -> needs refresh
+
+	// Workspace support (v2)
+	currentWorkspace string
+	workspaces       []string
 }
 
 // NewStore returns an initialised Store.
@@ -197,4 +201,33 @@ func resourceForEvent(eventType string) string {
 	default:
 		return ""
 	}
+}
+
+// ── Workspace (v2) ────────────────────────────────────────────────────
+
+func (s *Store) SetCurrentWorkspace(ws string) {
+	s.mu.Lock()
+	s.currentWorkspace = ws
+	s.mu.Unlock()
+}
+
+func (s *Store) CurrentWorkspace() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.currentWorkspace
+}
+
+func (s *Store) SetWorkspaces(workspaces []string) {
+	s.mu.Lock()
+	s.workspaces = make([]string, len(workspaces))
+	copy(s.workspaces, workspaces)
+	s.mu.Unlock()
+}
+
+func (s *Store) Workspaces() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, len(s.workspaces))
+	copy(out, s.workspaces)
+	return out
 }
