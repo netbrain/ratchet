@@ -1,0 +1,52 @@
+version: 2
+max_rounds: 3
+escalation: tiebreaker
+pr_scope: issue
+max_regressions: 5
+
+workspaces:
+  - path: "packages/frontend"
+    name: "frontend"
+  - path: "packages/backend"
+    name: "backend"
+
+models:
+  debate_runner: sonnet
+  generative: opus
+  adversarial: sonnet
+  tiebreaker: opus
+  analyst: opus
+
+progress:
+  adapter: github-issues
+
+components:
+  - name: api
+    scope: "internal/api/**/*.go"
+    workflow: tdd
+
+pairs:
+  - name: api-safety
+    component: api
+    phase: review
+    scope: "internal/api/**/*.go"
+    enabled: true
+    max_rounds: 5
+    models:
+      generative: opus
+      adversarial: opus
+
+guards:
+  - name: format
+    command: "gofmt -l ."
+    phase: build
+    blocking: true
+    timing: pre-debate
+    components: []
+    requires: []
+
+resources:
+  - name: postgres
+    start: "docker compose up -d postgres"
+    stop: "docker compose down postgres"
+    singleton: true

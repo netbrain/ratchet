@@ -19,18 +19,46 @@ var ErrEmptyInput = errors.New("empty input")
 
 // WorkflowConfig represents the parsed workflow.yaml file.
 type WorkflowConfig struct {
-	Version    int               `yaml:"version" json:"version"`
-	MaxRounds  int               `yaml:"max_rounds" json:"max_rounds"`
-	Escalation string            `yaml:"escalation" json:"escalation"`
-	Progress   ProgressConfig    `yaml:"progress" json:"progress"`
-	Components []ComponentConfig `yaml:"components" json:"components"`
-	Pairs      []PairConfig      `yaml:"pairs" json:"pairs"`
-	Guards     []GuardConfig     `yaml:"guards" json:"guards"`
+	Version        int               `yaml:"version" json:"version"`
+	MaxRounds      int               `yaml:"max_rounds" json:"max_rounds"`
+	Escalation     string            `yaml:"escalation" json:"escalation"`
+	PRScope        string            `yaml:"pr_scope" json:"pr_scope"`
+	MaxRegressions int               `yaml:"max_regressions" json:"max_regressions"`
+	Progress       ProgressConfig    `yaml:"progress" json:"progress"`
+	Workspaces     []WorkspaceConfig `yaml:"workspaces" json:"workspaces"`
+	Models         ModelsConfig      `yaml:"models" json:"models"`
+	Components     []ComponentConfig `yaml:"components" json:"components"`
+	Pairs          []PairConfig      `yaml:"pairs" json:"pairs"`
+	Guards         []GuardConfig     `yaml:"guards" json:"guards"`
+	Resources      []ResourceConfig  `yaml:"resources" json:"resources"`
 }
 
 // ProgressConfig describes the progress adapter settings.
 type ProgressConfig struct {
 	Adapter string `yaml:"adapter" json:"adapter"`
+}
+
+// WorkspaceConfig describes a workspace in workflow.yaml.
+type WorkspaceConfig struct {
+	Path string `yaml:"path" json:"path"`
+	Name string `yaml:"name" json:"name"`
+}
+
+// ModelsConfig describes model assignments in workflow.yaml.
+type ModelsConfig struct {
+	DebateRunner string `yaml:"debate_runner" json:"debate_runner"`
+	Generative   string `yaml:"generative" json:"generative"`
+	Adversarial  string `yaml:"adversarial" json:"adversarial"`
+	Tiebreaker   string `yaml:"tiebreaker" json:"tiebreaker"`
+	Analyst      string `yaml:"analyst" json:"analyst"`
+}
+
+// ResourceConfig describes a shared resource in workflow.yaml.
+type ResourceConfig struct {
+	Name      string `yaml:"name" json:"name"`
+	Start     string `yaml:"start" json:"start"`
+	Stop      string `yaml:"stop" json:"stop"`
+	Singleton bool   `yaml:"singleton" json:"singleton"`
 }
 
 // ComponentConfig describes a workflow component.
@@ -42,20 +70,32 @@ type ComponentConfig struct {
 
 // PairConfig describes a pair definition in workflow.yaml.
 type PairConfig struct {
-	Name      string `yaml:"name" json:"name"`
-	Component string `yaml:"component" json:"component"`
-	Phase     string `yaml:"phase" json:"phase"`
-	Scope     string `yaml:"scope" json:"scope"`
-	Enabled   bool   `yaml:"enabled" json:"enabled"`
+	Name      string           `yaml:"name" json:"name"`
+	Component string           `yaml:"component" json:"component"`
+	Phase     string           `yaml:"phase" json:"phase"`
+	Scope     string           `yaml:"scope" json:"scope"`
+	Enabled   bool             `yaml:"enabled" json:"enabled"`
+	MaxRounds int              `yaml:"max_rounds" json:"max_rounds"`
+	Models    PairModelsConfig `yaml:"models" json:"models"`
+}
+
+// PairModelsConfig describes per-pair model overrides.
+type PairModelsConfig struct {
+	Generative  string `yaml:"generative" json:"generative"`
+	Adversarial string `yaml:"adversarial" json:"adversarial"`
 }
 
 // GuardConfig describes a guard in workflow.yaml.
 type GuardConfig struct {
-	Name        string `yaml:"name" json:"name"`
-	Command     string `yaml:"command" json:"command"`
-	Expect      string `yaml:"expect" json:"expect"`
-	Phase       string `yaml:"phase" json:"phase"`
-	Description string `yaml:"description" json:"description"`
+	Name        string   `yaml:"name" json:"name"`
+	Command     string   `yaml:"command" json:"command"`
+	Expect      string   `yaml:"expect" json:"expect"`
+	Phase       string   `yaml:"phase" json:"phase"`
+	Description string   `yaml:"description" json:"description"`
+	Blocking    bool     `yaml:"blocking" json:"blocking"`
+	Timing      string   `yaml:"timing" json:"timing"`
+	Components  []string `yaml:"components" json:"components"`
+	Requires    []string `yaml:"requires" json:"requires"`
 }
 
 // Plan represents the parsed plan.yaml file.
@@ -81,6 +121,22 @@ type Milestone struct {
 	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`
 	DoneWhen    string            `yaml:"done_when" json:"done_when"`
 	ProgressRef *string           `yaml:"progress_ref" json:"progress_ref"`
+	DependsOn   []int             `yaml:"depends_on" json:"depends_on"`
+	Regressions int               `yaml:"regressions" json:"regressions"`
+	Issues      []Issue           `yaml:"issues" json:"issues"`
+}
+
+// Issue represents a single issue within a milestone.
+type Issue struct {
+	Ref         string            `yaml:"ref" json:"ref"`
+	Title       string            `yaml:"title" json:"title"`
+	Pairs       []string          `yaml:"pairs" json:"pairs"`
+	DependsOn   []string          `yaml:"depends_on" json:"depends_on"`
+	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`
+	Files       []string          `yaml:"files" json:"files"`
+	Debates     []string          `yaml:"debates" json:"debates"`
+	Branch      string            `yaml:"branch" json:"branch"`
+	Status      string            `yaml:"status" json:"status"`
 }
 
 // CurrentFocus describes the current working focus.
@@ -172,6 +228,22 @@ func ParseWorkflow(data []byte) (*WorkflowConfig, error) {
 	if err := yaml.Unmarshal(data, &wf); err != nil {
 		return nil, fmt.Errorf("parse workflow: %w", err)
 	}
+
+	// Apply defaults
+	if wf.PRScope == "" {
+		wf.PRScope = "issue"
+	}
+	if wf.MaxRegressions == 0 {
+		wf.MaxRegressions = 2
+	}
+
+	// Apply guard timing defaults
+	for i := range wf.Guards {
+		if wf.Guards[i].Timing == "" {
+			wf.Guards[i].Timing = "post-debate"
+		}
+	}
+
 	return &wf, nil
 }
 

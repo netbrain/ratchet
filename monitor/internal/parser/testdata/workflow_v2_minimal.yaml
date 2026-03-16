@@ -1,0 +1,7 @@
+version: 2
+max_rounds: 3
+escalation: human
+
+components: []
+pairs: []
+guards: []
