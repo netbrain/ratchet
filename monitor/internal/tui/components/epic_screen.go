@@ -109,12 +109,27 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 	)
 	root.AddChild(progressEl)
 
+	// DAG layer summary
+	maxLayer := es.vm.MaxLayer()
+	if maxLayer >= 0 {
+		layerText := fmt.Sprintf("Milestone layers: %d (Layer 0 = no dependencies)", maxLayer+1)
+		layerEl := tui.New(
+			tui.WithText(layerText),
+			tui.WithTextStyle(tui.NewStyle().Foreground(tui.ANSIColor(243))),
+			tui.WithHeight(1),
+		)
+		root.AddChild(layerEl)
+	}
+
 	// Spacer
 	spacer := tui.New(tui.WithHeight(1))
 	root.AddChild(spacer)
 
-	// Set viewport height: subtract root chrome (3) + epic header (1) + progress (1) + spacer (1) + table header (1) + focus (1).
+	// Set viewport height: subtract root chrome (3) + epic header (1) + progress (1) + layer summary (1, if shown) + spacer (1) + table header (1) + focus (1).
 	overhead := 8
+	if maxLayer >= 0 {
+		overhead = 9 // Add 1 for layer summary
+	}
 	es.vm.SetViewportHeight(height - overhead)
 
 	// Milestone table with fixed height to prevent overflow.
@@ -170,10 +185,11 @@ func (es *EpicScreen) buildHeaderRow(cols int) *tui.Element {
 	style := tui.NewStyle().Bold()
 
 	idEl := tui.New(tui.WithText("#"), tui.WithTextStyle(style), tui.WithWidth(4))
+	layerEl := tui.New(tui.WithText("L"), tui.WithTextStyle(style), tui.WithWidth(3))
 	nameEl := tui.New(tui.WithText("Milestone"), tui.WithTextStyle(style), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText("Status"), tui.WithTextStyle(style), tui.WithWidth(14))
 
-	row.AddChild(idEl, nameEl, statusEl)
+	row.AddChild(idEl, layerEl, nameEl, statusEl)
 
 	if cols >= 6 {
 		for _, phase := range []string{"plan", "test", "build"} {
@@ -213,6 +229,13 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 
 	idEl := tui.New(tui.WithText(fmt.Sprintf("%d", num)), tui.WithTextStyle(baseStyle), tui.WithWidth(4))
 
+	// Layer indicator with dependency arrow
+	layerSymbol := fmt.Sprintf("%d", m.Layer)
+	if len(m.DependsOn) > 0 && m.Layer > 0 {
+		layerSymbol = fmt.Sprintf("%d↑", m.Layer) // Arrow indicates it depends on earlier layers
+	}
+	layerEl := tui.New(tui.WithText(layerSymbol), tui.WithTextStyle(baseStyle), tui.WithWidth(3))
+
 	// Add regression indicator to milestone name if regressions > 0
 	nameText := m.Name
 	if m.Regressions > 0 {
@@ -221,7 +244,7 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText(m.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
-	row.AddChild(idEl, nameEl, statusEl)
+	row.AddChild(idEl, layerEl, nameEl, statusEl)
 
 	if cols >= 6 {
 		for _, phase := range phases[:3] {

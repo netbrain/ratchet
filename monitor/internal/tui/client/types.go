@@ -74,6 +74,7 @@ type Milestone struct {
 	PhaseStatus map[string]string `json:"phase_status"`
 	DoneWhen    string            `json:"done_when"`
 	ProgressRef *string           `json:"progress_ref"`
+	DependsOn   []int             `json:"depends_on"`
 	Regressions int               `json:"regressions"`
 }
 
