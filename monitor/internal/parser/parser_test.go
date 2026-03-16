@@ -1246,3 +1246,66 @@ epic:
 		t.Errorf("PhaseStatus should have 5 phases, got %d", len(issue.PhaseStatus))
 	}
 }
+// --- Discovery Tracking tests ---
+
+func TestParsePlan_WithDiscoveries(t *testing.T) {
+	data := readTestdata(t, "plan_with_discoveries.yaml")
+	plan, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("ParsePlan returned error: %v", err)
+	}
+
+	if len(plan.Epic.Discoveries) != 2 {
+		t.Fatalf("Discoveries: got %d, want 2", len(plan.Epic.Discoveries))
+	}
+
+	d1 := plan.Epic.Discoveries[0]
+	if d1.Ref != "discovery-1" {
+		t.Errorf("Discovery[0].Ref: got %q, want %q", d1.Ref, "discovery-1")
+	}
+	if d1.Title != "Add workspace isolation" {
+		t.Errorf("Discovery[0].Title: got %q", d1.Title)
+	}
+	if d1.Source != "debate-parser-correctness-20260315T100000" {
+		t.Errorf("Discovery[0].Source: got %q", d1.Source)
+	}
+
+	d2 := plan.Epic.Discoveries[1]
+	if d2.Ref != "discovery-2" {
+		t.Errorf("Discovery[1].Ref: got %q, want %q", d2.Ref, "discovery-2")
+	}
+	if d2.Title != "Add discovery tracking to parser and TUI" {
+		t.Errorf("Discovery[1].Title: got %q", d2.Title)
+	}
+}
+
+func TestParsePlan_EmptyDiscoveries(t *testing.T) {
+	data := readTestdata(t, "plan_empty_discoveries.yaml")
+	plan, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("ParsePlan returned error: %v", err)
+	}
+
+	if plan.Epic.Discoveries == nil {
+		t.Error("Discoveries should not be nil for empty array")
+	}
+	if len(plan.Epic.Discoveries) != 0 {
+		t.Errorf("Discoveries: got %d, want 0", len(plan.Epic.Discoveries))
+	}
+}
+
+func TestParsePlan_MissingDiscoveries(t *testing.T) {
+	// Use existing plan.yaml which doesn't have discoveries field
+	data := readTestdata(t, "plan.yaml")
+	plan, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("ParsePlan returned error: %v", err)
+	}
+
+	// Missing discoveries field should default to nil or empty
+	if plan.Epic.Discoveries == nil {
+		// nil is acceptable
+	} else if len(plan.Epic.Discoveries) != 0 {
+		t.Errorf("Discoveries: got %d, want 0 for missing field", len(plan.Epic.Discoveries))
+	}
+}

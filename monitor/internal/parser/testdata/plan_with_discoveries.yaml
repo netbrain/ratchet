@@ -1,0 +1,25 @@
+epic:
+  name: "test-epic"
+  description: "Test epic with discoveries"
+  milestones:
+    - id: 1
+      name: "Milestone 1"
+      description: "First milestone"
+      status: "done"
+      phase_status:
+        plan: "done"
+        test: "done"
+      done_when: "Tests pass"
+      progress_ref: null
+  current_focus: null
+  discoveries:
+    - ref: "discovery-1"
+      title: "Add workspace isolation"
+      description: "Found during parser-correctness debate that workspace isolation is needed"
+      source: "debate-parser-correctness-20260315T100000"
+      created_at: "2026-03-15T10:00:00Z"
+    - ref: "discovery-2"
+      title: "Add discovery tracking to parser and TUI"
+      description: "Need to track discoveries in the data model"
+      source: "issue-1-1"
+      created_at: "2026-03-16T08:00:00Z"

@@ -1,0 +1,17 @@
+epic:
+  name: "test-epic"
+  description: "Test epic with partial discovery"
+  milestones:
+    - id: 1
+      name: "Milestone 1"
+      description: "First milestone"
+      status: "in_progress"
+      phase_status:
+        plan: "done"
+      done_when: "Tests pass"
+      progress_ref: null
+  current_focus: null
+  discoveries:
+    - ref: "discovery-partial"
+      title: "Partially populated discovery"
+      # Missing description, source, created_at
