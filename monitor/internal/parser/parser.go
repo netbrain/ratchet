@@ -143,6 +143,7 @@ type Issue struct {
 // CurrentFocus describes the current working focus.
 type CurrentFocus struct {
 	MilestoneID int    `yaml:"milestone_id" json:"milestone_id"`
+	IssueRef    string `yaml:"issue_ref" json:"issue_ref"`
 	Phase       string `yaml:"phase" json:"phase"`
 	Started     string `yaml:"started" json:"started"`
 }
