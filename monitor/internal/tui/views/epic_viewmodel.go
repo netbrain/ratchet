@@ -14,6 +14,7 @@ type MilestoneStatus struct {
 	Status      string
 	PhaseStatus map[string]string
 	DoneWhen    string
+	Regressions int
 }
 
 // EpicViewModel is the view model for the epic status tab.
@@ -242,6 +243,7 @@ func (vm *EpicViewModel) loadPlan() {
 			Status:      m.Status,
 			PhaseStatus: ps,
 			DoneWhen:    m.DoneWhen,
+			Regressions: m.Regressions,
 		})
 	}
 }
