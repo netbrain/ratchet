@@ -52,6 +52,16 @@ type EpicConfig struct {
 	Description  string        `json:"description"`
 	Milestones   []Milestone   `json:"milestones"`
 	CurrentFocus *CurrentFocus `json:"current_focus"`
+	Discoveries  []Discovery   `json:"discoveries"`
+}
+
+// Discovery represents a sidequest or discovery found during execution.
+type Discovery struct {
+	Ref         string `json:"ref"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	CreatedAt   string `json:"created_at"`
 }
 
 // Milestone represents a single milestone in the plan.

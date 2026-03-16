@@ -109,6 +109,16 @@ type EpicConfig struct {
 	Description  string        `yaml:"description" json:"description"`
 	Milestones   []Milestone   `yaml:"milestones" json:"milestones"`
 	CurrentFocus *CurrentFocus `yaml:"current_focus" json:"current_focus"`
+	Discoveries  []Discovery   `yaml:"discoveries" json:"discoveries"`
+}
+
+// Discovery represents a sidequest or discovery found during execution.
+type Discovery struct {
+	Ref         string `yaml:"ref" json:"ref"`
+	Title       string `yaml:"title" json:"title"`
+	Description string `yaml:"description" json:"description"`
+	Source      string `yaml:"source" json:"source"`
+	CreatedAt   string `yaml:"created_at" json:"created_at"`
 }
 
 // Milestone represents one milestone in the plan.
