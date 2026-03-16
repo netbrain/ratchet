@@ -212,7 +212,13 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 	)
 
 	idEl := tui.New(tui.WithText(fmt.Sprintf("%d", num)), tui.WithTextStyle(baseStyle), tui.WithWidth(4))
-	nameEl := tui.New(tui.WithText(m.Name), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
+
+	// Add regression indicator to milestone name if regressions > 0
+	nameText := m.Name
+	if m.Regressions > 0 {
+		nameText = fmt.Sprintf("%s [↻%d]", m.Name, m.Regressions)
+	}
+	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText(m.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
 	row.AddChild(idEl, nameEl, statusEl)

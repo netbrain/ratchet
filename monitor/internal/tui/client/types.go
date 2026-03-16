@@ -64,6 +64,7 @@ type Milestone struct {
 	PhaseStatus map[string]string `json:"phase_status"`
 	DoneWhen    string            `json:"done_when"`
 	ProgressRef *string           `json:"progress_ref"`
+	Regressions int               `json:"regressions"`
 }
 
 // CurrentFocus indicates what the system is currently working on.
