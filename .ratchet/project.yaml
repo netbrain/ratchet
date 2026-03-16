@@ -1,0 +1,52 @@
+name: ratchet
+description: Debate-driven quality plugin for Claude Code
+version: 0.1.0
+
+stack:
+  languages:
+    - bash
+    - python3 (inline JSON manipulation)
+    - nix
+    - markdown (agent/skill definitions)
+  runtime: CLI plugin (installed into Claude Code's discovery directories)
+  framework: none — script-based, no server/daemon
+  database: none
+  distribution:
+    - nix flake (flake.nix)
+    - manual install (install.sh)
+
+architecture:
+  pattern: plugin
+  description: >
+    Skills (markdown prompts) are expanded inline by Claude Code.
+    Bash scripts handle runtime operations (caching, consensus gating, scoring).
+    Python3 is used inline within bash for JSON parsing.
+    Agents (analyst, orchestrator) are spawned as subagents during debates.
+  key_directories:
+    skills: "skills/*/SKILL.md — skill definitions expanded by Claude Code"
+    agents: "agents/*.md — agent definitions spawned during debates"
+    scripts: "scripts/*.sh — runtime bash scripts"
+    runtime: ".ratchet/ — per-project runtime data (created by /ratchet:init)"
+
+testing:
+  layers:
+    1_static_analysis:
+      status: planned
+      tool: shellcheck
+      command: "shellcheck scripts/*.sh install.sh"
+      ci: false
+    2_unit_tests:
+      status: not_applicable
+      notes: "No compiled code — scripts are integration-tested by nature"
+    3_fuzz_testing:
+      status: not_applicable
+    4_e2e_tests:
+      status: planned
+      notes: "Install/uninstall cycle, debate flow end-to-end"
+    5_visual_regression:
+      status: not_applicable
+    6_uat_validation:
+      status: applicable
+      notes: "Agent reads milestone acceptance criteria, verifies each is met"
+    7_security_gate:
+      status: not_applicable
