@@ -1,0 +1,68 @@
+epic:
+  name: "Test Epic"
+  description: "A test epic for v2 parsing"
+  milestones:
+    - id: 1
+      name: "Milestone 1"
+      description: "First milestone"
+      status: in_progress
+      done_when: "All tests pass"
+      depends_on: []
+      progress_ref: null
+      regressions: 1
+      issues:
+        - ref: "issue-1-1"
+          title: "First issue"
+          pairs: ["parser-correctness"]
+          depends_on: []
+          phase_status:
+            plan: done
+            test: in_progress
+            build: pending
+            review: pending
+            harden: pending
+          files: ["internal/parser/parser.go"]
+          debates: ["debate-123"]
+          branch: "ratchet/milestone-1/issue-1-1"
+          status: in_progress
+
+        - ref: "issue-1-2"
+          title: "Second issue"
+          pairs: ["api-contracts"]
+          depends_on: ["issue-1-1"]
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 2
+      name: "Milestone 2"
+      description: "Second milestone"
+      status: pending
+      done_when: "Integration complete"
+      depends_on: [1]
+      progress_ref: "ISSUE-42"
+      regressions: 0
+      issues:
+        - ref: "issue-2-1"
+          title: "Integration work"
+          pairs: ["integration-safety"]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+  current_focus: null

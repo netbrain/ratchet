@@ -2,9 +2,11 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -603,5 +605,563 @@ func TestParseScoreEntry_ExtraFields(t *testing.T) {
 	}
 	if entry.Pair != "p1" {
 		t.Errorf("Pair: got %q, want %q", entry.Pair, "p1")
+	}
+}
+
+// --- Workflow v2 tests ---
+
+func TestParseWorkflow_V2_Valid(t *testing.T) {
+	data := readTestdata(t, "workflow_v2_valid.yaml")
+	wf, err := ParseWorkflow(data)
+	if err != nil {
+		t.Fatalf("ParseWorkflow returned error: %v", err)
+	}
+
+	// Test v2-specific fields
+	if wf.PRScope != "issue" {
+		t.Errorf("PRScope: got %q, want %q", wf.PRScope, "issue")
+	}
+	if wf.MaxRegressions != 5 {
+		t.Errorf("MaxRegressions: got %d, want 5", wf.MaxRegressions)
+	}
+
+	// Test workspaces
+	if len(wf.Workspaces) != 2 {
+		t.Fatalf("Workspaces: got %d, want 2", len(wf.Workspaces))
+	}
+	if wf.Workspaces[0].Path != "packages/frontend" {
+		t.Errorf("Workspaces[0].Path: got %q, want %q", wf.Workspaces[0].Path, "packages/frontend")
+	}
+	if wf.Workspaces[0].Name != "frontend" {
+		t.Errorf("Workspaces[0].Name: got %q, want %q", wf.Workspaces[0].Name, "frontend")
+	}
+
+	// Test models
+	if wf.Models.DebateRunner != "sonnet" {
+		t.Errorf("Models.DebateRunner: got %q, want %q", wf.Models.DebateRunner, "sonnet")
+	}
+	if wf.Models.Generative != "opus" {
+		t.Errorf("Models.Generative: got %q, want %q", wf.Models.Generative, "opus")
+	}
+	if wf.Models.Adversarial != "sonnet" {
+		t.Errorf("Models.Adversarial: got %q, want %q", wf.Models.Adversarial, "sonnet")
+	}
+	if wf.Models.Tiebreaker != "opus" {
+		t.Errorf("Models.Tiebreaker: got %q, want %q", wf.Models.Tiebreaker, "opus")
+	}
+	if wf.Models.Analyst != "opus" {
+		t.Errorf("Models.Analyst: got %q, want %q", wf.Models.Analyst, "opus")
+	}
+
+	// Test resources
+	if len(wf.Resources) != 1 {
+		t.Fatalf("Resources: got %d, want 1", len(wf.Resources))
+	}
+	if wf.Resources[0].Name != "postgres" {
+		t.Errorf("Resources[0].Name: got %q, want %q", wf.Resources[0].Name, "postgres")
+	}
+	if !wf.Resources[0].Singleton {
+		t.Errorf("Resources[0].Singleton: got %v, want true", wf.Resources[0].Singleton)
+	}
+
+	// Test guard extended fields
+	if len(wf.Guards) != 1 {
+		t.Fatalf("Guards: got %d, want 1", len(wf.Guards))
+	}
+	if wf.Guards[0].Timing != "pre-debate" {
+		t.Errorf("Guards[0].Timing: got %q, want %q", wf.Guards[0].Timing, "pre-debate")
+	}
+	if !wf.Guards[0].Blocking {
+		t.Errorf("Guards[0].Blocking: got %v, want true", wf.Guards[0].Blocking)
+	}
+
+	// Test pair extended fields
+	if len(wf.Pairs) != 1 {
+		t.Fatalf("Pairs: got %d, want 1", len(wf.Pairs))
+	}
+	if wf.Pairs[0].MaxRounds != 5 {
+		t.Errorf("Pairs[0].MaxRounds: got %d, want 5", wf.Pairs[0].MaxRounds)
+	}
+	if wf.Pairs[0].Models.Generative != "opus" {
+		t.Errorf("Pairs[0].Models.Generative: got %q, want %q", wf.Pairs[0].Models.Generative, "opus")
+	}
+	if wf.Pairs[0].Models.Adversarial != "opus" {
+		t.Errorf("Pairs[0].Models.Adversarial: got %q, want %q", wf.Pairs[0].Models.Adversarial, "opus")
+	}
+
+	// Test resource start/stop commands
+	if wf.Resources[0].Start != "docker compose up -d postgres" {
+		t.Errorf("Resources[0].Start: got %q, want %q", wf.Resources[0].Start, "docker compose up -d postgres")
+	}
+	if wf.Resources[0].Stop != "docker compose down postgres" {
+		t.Errorf("Resources[0].Stop: got %q, want %q", wf.Resources[0].Stop, "docker compose down postgres")
+	}
+
+	// Test guard components and requires arrays
+	if len(wf.Guards[0].Components) != 0 {
+		t.Errorf("Guards[0].Components: got %d, want 0 (empty array)", len(wf.Guards[0].Components))
+	}
+	if len(wf.Guards[0].Requires) != 0 {
+		t.Errorf("Guards[0].Requires: got %d, want 0 (empty array)", len(wf.Guards[0].Requires))
+	}
+}
+
+func TestParseWorkflow_V2_Minimal(t *testing.T) {
+	data := readTestdata(t, "workflow_v2_minimal.yaml")
+	wf, err := ParseWorkflow(data)
+	if err != nil {
+		t.Fatalf("ParseWorkflow returned error: %v", err)
+	}
+
+	// Test defaults for optional v2 fields
+	if wf.PRScope != "issue" {
+		t.Errorf("PRScope default: got %q, want %q", wf.PRScope, "issue")
+	}
+	if wf.MaxRegressions != 2 {
+		t.Errorf("MaxRegressions default: got %d, want 2", wf.MaxRegressions)
+	}
+	if len(wf.Workspaces) != 0 {
+		t.Errorf("Workspaces: got %d, want 0 (empty array)", len(wf.Workspaces))
+	}
+	if len(wf.Resources) != 0 {
+		t.Errorf("Resources: got %d, want 0 (empty array)", len(wf.Resources))
+	}
+}
+
+func TestParseWorkflow_V2_InvalidPRScope(t *testing.T) {
+	yaml := `
+version: 2
+max_rounds: 3
+escalation: human
+pr_scope: invalid_value
+components: []
+pairs: []
+guards: []
+`
+	_, err := ParseWorkflow([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for invalid pr_scope enum value, got nil")
+	}
+	// Error checking will be implemented in build phase - just verify error exists
+}
+
+func TestParseWorkflow_V2_GuardTimingDefault(t *testing.T) {
+	yaml := `
+version: 2
+max_rounds: 3
+escalation: human
+components: []
+pairs: []
+guards:
+  - name: test-guard
+    command: "go test"
+    phase: test
+`
+	wf, err := ParseWorkflow([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(wf.Guards) != 1 {
+		t.Fatalf("Guards: got %d, want 1", len(wf.Guards))
+	}
+	// Timing should default to "post-debate" when not specified
+	if wf.Guards[0].Timing != "post-debate" {
+		t.Errorf("Guard timing default: got %q, want %q", wf.Guards[0].Timing, "post-debate")
+	}
+}
+
+// --- Plan v2 tests ---
+
+func TestParsePlan_V2_WithIssues(t *testing.T) {
+	data := readTestdata(t, "plan_v2_with_issues.yaml")
+	plan, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("ParsePlan returned error: %v", err)
+	}
+
+	// Test milestone v2 fields
+	if len(plan.Epic.Milestones) != 2 {
+		t.Fatalf("Milestones: got %d, want 2", len(plan.Epic.Milestones))
+	}
+
+	m1 := plan.Epic.Milestones[0]
+
+	// Test depends_on
+	if len(m1.DependsOn) != 0 {
+		t.Errorf("Milestone 1 DependsOn: got %d, want 0", len(m1.DependsOn))
+	}
+
+	// Test regressions counter
+	if m1.Regressions != 1 {
+		t.Errorf("Milestone 1 Regressions: got %d, want 1", m1.Regressions)
+	}
+
+	// Test issues array
+	if len(m1.Issues) != 2 {
+		t.Fatalf("Milestone 1 Issues: got %d, want 2", len(m1.Issues))
+	}
+
+	issue1 := m1.Issues[0]
+	if issue1.Ref != "issue-1-1" {
+		t.Errorf("Issue ref: got %q, want %q", issue1.Ref, "issue-1-1")
+	}
+	if issue1.Title != "First issue" {
+		t.Errorf("Issue title: got %q, want %q", issue1.Title, "First issue")
+	}
+	if len(issue1.Pairs) != 1 || issue1.Pairs[0] != "parser-correctness" {
+		t.Errorf("Issue pairs: got %v, want [parser-correctness]", issue1.Pairs)
+	}
+	if len(issue1.DependsOn) != 0 {
+		t.Errorf("Issue 1 DependsOn: got %d, want 0", len(issue1.DependsOn))
+	}
+	if issue1.Branch != "ratchet/milestone-1/issue-1-1" {
+		t.Errorf("Issue branch: got %q, want %q", issue1.Branch, "ratchet/milestone-1/issue-1-1")
+	}
+	if issue1.Status != "in_progress" {
+		t.Errorf("Issue status: got %q, want %q", issue1.Status, "in_progress")
+	}
+
+	// Test issue dependencies
+	issue2 := m1.Issues[1]
+	if len(issue2.DependsOn) != 1 || issue2.DependsOn[0] != "issue-1-1" {
+		t.Errorf("Issue 2 DependsOn: got %v, want [issue-1-1]", issue2.DependsOn)
+	}
+
+	// Test milestone dependencies
+	m2 := plan.Epic.Milestones[1]
+	if len(m2.DependsOn) != 1 || m2.DependsOn[0] != 1 {
+		t.Errorf("Milestone 2 DependsOn: got %v, want [1]", m2.DependsOn)
+	}
+}
+
+func TestParsePlan_V2_EmptyIssues(t *testing.T) {
+	yaml := `
+epic:
+  name: "Test"
+  description: "Test epic"
+  milestones:
+    - id: 1
+      name: "M1"
+      description: "First"
+      status: pending
+      done_when: "Done"
+      depends_on: []
+      regressions: 0
+      issues: []
+`
+	plan, err := ParsePlan([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(plan.Epic.Milestones[0].Issues) != 0 {
+		t.Errorf("Expected empty issues array, got %d issues", len(plan.Epic.Milestones[0].Issues))
+	}
+}
+
+// --- Enum validation tests ---
+
+func TestParseWorkflow_V2_PRScopeEnumValues(t *testing.T) {
+	validValues := []string{"debate", "phase", "milestone", "issue"}
+	for _, val := range validValues {
+		yaml := fmt.Sprintf(`
+version: 2
+max_rounds: 3
+escalation: human
+pr_scope: %s
+components: []
+pairs: []
+guards: []
+`, val)
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Errorf("pr_scope=%q should be valid, got error: %v", val, err)
+		}
+		if wf.PRScope != val {
+			t.Errorf("pr_scope: got %q, want %q", wf.PRScope, val)
+		}
+	}
+}
+
+func TestParseWorkflow_V2_EscalationV2EnumValues(t *testing.T) {
+	validValues := []string{"human", "tiebreaker", "both"}
+	for _, val := range validValues {
+		yaml := fmt.Sprintf(`
+version: 2
+max_rounds: 3
+escalation: %s
+components: []
+pairs: []
+guards: []
+`, val)
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Errorf("escalation=%q should be valid, got error: %v", val, err)
+		}
+		if wf.Escalation != val {
+			t.Errorf("escalation: got %q, want %q", wf.Escalation, val)
+		}
+	}
+}
+
+// --- Boundary value tests ---
+
+func TestParseWorkflow_V2_BoundaryValues(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want struct {
+			maxRounds      int
+			maxRegressions int
+		}
+	}{
+		{
+			name: "max_rounds minimum (1)",
+			yaml: `
+version: 2
+max_rounds: 1
+escalation: human
+components: []
+pairs: []
+guards: []
+`,
+			want: struct {
+				maxRounds      int
+				maxRegressions int
+			}{maxRounds: 1, maxRegressions: 2},
+		},
+		{
+			name: "max_regressions zero",
+			yaml: `
+version: 2
+max_rounds: 3
+escalation: human
+max_regressions: 0
+components: []
+pairs: []
+guards: []
+`,
+			want: struct {
+				maxRounds      int
+				maxRegressions int
+			}{maxRounds: 3, maxRegressions: 0},
+		},
+		{
+			name: "max values",
+			yaml: `
+version: 2
+max_rounds: 10
+escalation: human
+max_regressions: 100
+components: []
+pairs: []
+guards: []
+`,
+			want: struct {
+				maxRounds      int
+				maxRegressions int
+			}{maxRounds: 10, maxRegressions: 100},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wf, err := ParseWorkflow([]byte(tt.yaml))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if wf.MaxRounds != tt.want.maxRounds {
+				t.Errorf("MaxRounds: got %d, want %d", wf.MaxRounds, tt.want.maxRounds)
+			}
+			if wf.MaxRegressions != tt.want.maxRegressions {
+				t.Errorf("MaxRegressions: got %d, want %d", wf.MaxRegressions, tt.want.maxRegressions)
+			}
+		})
+	}
+}
+
+// --- Required field validation tests ---
+
+func TestParseWorkflow_V2_RequiredFields(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want string // expected error substring
+	}{
+		{
+			name: "missing version",
+			yaml: `
+max_rounds: 3
+escalation: human
+`,
+			want: "version",
+		},
+		{
+			name: "missing max_rounds",
+			yaml: `
+version: 2
+escalation: human
+`,
+			want: "max_rounds",
+		},
+		{
+			name: "missing escalation",
+			yaml: `
+version: 2
+max_rounds: 3
+`,
+			want: "escalation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseWorkflow([]byte(tt.yaml))
+			if err == nil {
+				t.Fatal("expected error for missing required field, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("error should mention %q, got: %v", tt.want, err)
+			}
+		})
+	}
+}
+
+// --- Type mismatch tests ---
+
+func TestParseWorkflow_V2_TypeMismatch(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "string for max_rounds",
+			yaml: `
+version: 2
+max_rounds: "three"
+escalation: human
+`,
+		},
+		{
+			name: "int for escalation",
+			yaml: `
+version: 2
+max_rounds: 3
+escalation: 123
+`,
+		},
+		{
+			name: "string for max_regressions",
+			yaml: `
+version: 2
+max_rounds: 3
+escalation: human
+max_regressions: "two"
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseWorkflow([]byte(tt.yaml))
+			if err == nil {
+				t.Fatal("expected type mismatch error, got nil")
+			}
+		})
+	}
+}
+
+// --- Plan v2 focused tests (split from overly broad test) ---
+
+func TestParsePlan_V2_MilestoneDependencies(t *testing.T) {
+	yaml := `
+epic:
+  name: "Test"
+  description: "Test epic"
+  milestones:
+    - id: 1
+      name: "M1"
+      description: "First"
+      status: done
+      done_when: "Done"
+      depends_on: []
+      regressions: 0
+      issues: []
+
+    - id: 2
+      name: "M2"
+      description: "Second"
+      status: pending
+      done_when: "Done"
+      depends_on: [1]
+      regressions: 0
+      issues: []
+`
+	plan, err := ParsePlan([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(plan.Epic.Milestones[0].DependsOn) != 0 {
+		t.Errorf("M1 should have no dependencies, got %v", plan.Epic.Milestones[0].DependsOn)
+	}
+	if len(plan.Epic.Milestones[1].DependsOn) != 1 || plan.Epic.Milestones[1].DependsOn[0] != 1 {
+		t.Errorf("M2 DependsOn: got %v, want [1]", plan.Epic.Milestones[1].DependsOn)
+	}
+}
+
+func TestParsePlan_V2_IssuePhaseStatus(t *testing.T) {
+	yaml := `
+epic:
+  name: "Test"
+  description: "Test epic"
+  milestones:
+    - id: 1
+      name: "M1"
+      description: "First"
+      status: in_progress
+      done_when: "Done"
+      depends_on: []
+      regressions: 0
+      issues:
+        - ref: "issue-1"
+          title: "Test issue"
+          pairs: ["test-pair"]
+          depends_on: []
+          phase_status:
+            plan: done
+            test: done
+            build: in_progress
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          status: in_progress
+`
+	plan, err := ParsePlan([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	issue := plan.Epic.Milestones[0].Issues[0]
+	expectedPhases := map[string]string{
+		"plan":   "done",
+		"test":   "done",
+		"build":  "in_progress",
+		"review": "pending",
+		"harden": "pending",
+	}
+
+	for phase, expectedStatus := range expectedPhases {
+		gotStatus := issue.PhaseStatus[phase]
+		if gotStatus != expectedStatus {
+			t.Errorf("PhaseStatus[%s]: got %q, want %q", phase, gotStatus, expectedStatus)
+		}
+	}
+
+	if len(issue.PhaseStatus) != 5 {
+		t.Errorf("PhaseStatus should have 5 phases, got %d", len(issue.PhaseStatus))
 	}
 }
