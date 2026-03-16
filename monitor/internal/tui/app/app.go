@@ -256,8 +256,37 @@ func (a *App) StatusLine() string {
 	}
 	conn := a.Store.ConnectionState().String()
 	status := a.Store.Status()
-	if status.MilestoneName != "" {
-		return fmt.Sprintf("[%s] M%d: %s (%s)", conn, status.MilestoneID, status.MilestoneName, status.Phase)
+	ws := a.Store.CurrentWorkspace()
+	prefix := conn
+	if ws != "" {
+		prefix = fmt.Sprintf("%s | WS:%s", conn, ws)
 	}
-	return fmt.Sprintf("[%s]", conn)
+	if status.MilestoneName != "" {
+		return fmt.Sprintf("[%s] M%d: %s (%s)", prefix, status.MilestoneID, status.MilestoneName, status.Phase)
+	}
+	return fmt.Sprintf("[%s]", prefix)
+}
+
+// CycleWorkspace switches to the next workspace (wraps around).
+// If no workspaces are configured, this is a no-op.
+func (a *App) CycleWorkspace() {
+	if a.Store == nil {
+		return
+	}
+	workspaces := a.Store.Workspaces()
+	if len(workspaces) == 0 {
+		return
+	}
+	current := a.Store.CurrentWorkspace()
+	idx := -1
+	for i, ws := range workspaces {
+		if ws == current {
+			idx = i
+			break
+		}
+	}
+	// Move to next (or first if current not found)
+	next := (idx + 1) % len(workspaces)
+	a.Store.SetCurrentWorkspace(workspaces[next])
+	a.notifyUpdate()
 }
