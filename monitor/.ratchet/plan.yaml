@@ -119,15 +119,20 @@ epic:
           pairs: [api-contracts]
           depends_on: ["issue-2-1"]
           phase_status:
-            plan: pending
-            test: pending
-            build: pending
-            review: pending
-            harden: pending
-          files: []
-          debates: []
-          branch: null
-          status: pending
+            plan: done
+            test: done
+            build: done
+            review: done
+            harden: done
+          files:
+            - monitor/internal/events/events.go
+            - monitor/internal/events/events_v2_test.go
+            - monitor/internal/pipeline/pipeline.go
+            - monitor/internal/pipeline/pipeline_v2_test.go
+          debates:
+            - api-contracts-20260316T231511
+          branch: "ratchet/api-v2-support/issue-2-3"
+          status: done
 
     - id: 3
       name: "TUI v2 Visualization"
