@@ -2,8 +2,9 @@ result
 result-*
 .claude/commands/ratchet/
 .claude/ratchet-scripts/
+
+# Ratchet: Exclude all runtime state, then include config
 .ratchet/*
 !.ratchet/workflow.yaml
 !.ratchet/project.yaml
-!.ratchet/plan.yaml
 !.ratchet/pairs/
