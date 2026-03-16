@@ -116,32 +116,34 @@ type Milestone struct {
 	ID          int               `yaml:"id" json:"id"`
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description" json:"description"`
-	Pairs       []string          `yaml:"pairs" json:"pairs"`
+	Pairs       []string          `yaml:"pairs" json:"pairs"` // v1 field, deprecated in v2
 	Status      string            `yaml:"status" json:"status"`
-	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`
+	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"` // v1 field, deprecated in v2
 	DoneWhen    string            `yaml:"done_when" json:"done_when"`
 	ProgressRef *string           `yaml:"progress_ref" json:"progress_ref"`
-	DependsOn   []int             `yaml:"depends_on" json:"depends_on"`
-	Regressions int               `yaml:"regressions" json:"regressions"`
-	Issues      []Issue           `yaml:"issues" json:"issues"`
+	// v2 fields
+	DependsOn   []int             `yaml:"depends_on" json:"depends_on"`         // milestone IDs this depends on
+	Regressions int               `yaml:"regressions" json:"regressions"`       // regression budget counter
+	Issues      []Issue           `yaml:"issues" json:"issues"`                 // issues within this milestone
 }
 
-// Issue represents a single issue within a milestone.
+// Issue represents a single issue within a milestone (v2 only).
 type Issue struct {
-	Ref         string            `yaml:"ref" json:"ref"`
-	Title       string            `yaml:"title" json:"title"`
-	Pairs       []string          `yaml:"pairs" json:"pairs"`
-	DependsOn   []string          `yaml:"depends_on" json:"depends_on"`
-	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`
-	Files       []string          `yaml:"files" json:"files"`
-	Debates     []string          `yaml:"debates" json:"debates"`
-	Branch      string            `yaml:"branch" json:"branch"`
-	Status      string            `yaml:"status" json:"status"`
+	Ref         string            `yaml:"ref" json:"ref"`                     // unique reference like "issue-1-1"
+	Title       string            `yaml:"title" json:"title"`                 // human-readable title
+	Pairs       []string          `yaml:"pairs" json:"pairs"`                 // pair names for this issue
+	DependsOn   []string          `yaml:"depends_on" json:"depends_on"`       // issue refs this depends on
+	PhaseStatus map[string]string `yaml:"phase_status" json:"phase_status"`   // status per phase
+	Files       []string          `yaml:"files" json:"files"`                 // modified files
+	Debates     []string          `yaml:"debates" json:"debates"`             // debate IDs
+	Branch      *string           `yaml:"branch" json:"branch"`               // git branch name
+	Status      string            `yaml:"status" json:"status"`               // overall status
 }
 
 // CurrentFocus describes the current working focus.
 type CurrentFocus struct {
 	MilestoneID int    `yaml:"milestone_id" json:"milestone_id"`
+	IssueRef    string `yaml:"issue_ref" json:"issue_ref"`
 	Phase       string `yaml:"phase" json:"phase"`
 	Started     string `yaml:"started" json:"started"`
 }

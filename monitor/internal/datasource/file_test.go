@@ -648,3 +648,183 @@ func TestFileDataSource_Debates_SkipsMalformed(t *testing.T) {
 		t.Errorf("expected 1 debate (skipping malformed), got %d", len(debates))
 	}
 }
+
+// --- V2 Tests: verify datasource exposes v2 plan structures ---
+
+// TestFileDataSource_Plan_V2WithIssues verifies that Plan() correctly returns
+// v2 plan.yaml structure with issues, depends_on, and regressions fields.
+func TestFileDataSource_Plan_V2WithIssues(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a v2 plan.yaml with issues.
+	planV2 := `epic:
+  name: test-epic
+  description: Testing v2 plan structure
+  milestones:
+    - id: 1
+      name: "Milestone 1"
+      description: "First milestone"
+      status: done
+      done_when: "all tests pass"
+      depends_on: []
+      regressions: 0
+      issues:
+        - ref: "issue-1-1"
+          title: "First issue"
+          pairs: ["test-pair"]
+          depends_on: []
+          phase_status:
+            plan: done
+            test: done
+            build: done
+          files: ["file1.go"]
+          debates: ["debate-1"]
+          branch: "feature/issue-1-1"
+          status: done
+    - id: 2
+      name: "Milestone 2"
+      description: "Second milestone"
+      status: in_progress
+      done_when: "integration complete"
+      depends_on: [1]
+      regressions: 1
+      issues:
+        - ref: "issue-2-1"
+          title: "Second issue"
+          pairs: ["api-contracts"]
+          depends_on: []
+          phase_status:
+            plan: done
+            test: in_progress
+          files: []
+          debates: []
+          branch: ""
+          status: in_progress
+        - ref: "issue-2-2"
+          title: "Third issue"
+          pairs: ["api-contracts"]
+          depends_on: ["issue-2-1"]
+          phase_status:
+            plan: pending
+          files: []
+          debates: []
+          branch: ""
+          status: pending
+  current_focus:
+    milestone_id: 2
+    issue_ref: "issue-2-1"
+    phase: test
+    started: "2026-03-16"
+`
+	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644)
+
+	ds := NewFileDataSource(dir)
+	result, err := ds.Plan()
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	plan, ok := result.(*parser.Plan)
+	if !ok {
+		t.Fatalf("expected *parser.Plan, got %T", result)
+	}
+
+	// Verify v2 milestone fields.
+	if len(plan.Epic.Milestones) != 2 {
+		t.Fatalf("expected 2 milestones, got %d", len(plan.Epic.Milestones))
+	}
+
+	m1 := plan.Epic.Milestones[0]
+	if len(m1.DependsOn) != 0 {
+		t.Errorf("milestone 1 depends_on: got %v, want []", m1.DependsOn)
+	}
+	if m1.Regressions != 0 {
+		t.Errorf("milestone 1 regressions: got %d, want 0", m1.Regressions)
+	}
+	if len(m1.Issues) != 1 {
+		t.Fatalf("milestone 1 issues: got %d, want 1", len(m1.Issues))
+	}
+	if m1.Issues[0].Ref != "issue-1-1" {
+		t.Errorf("milestone 1 issue ref: got %q, want %q", m1.Issues[0].Ref, "issue-1-1")
+	}
+
+	m2 := plan.Epic.Milestones[1]
+	if len(m2.DependsOn) != 1 || m2.DependsOn[0] != 1 {
+		t.Errorf("milestone 2 depends_on: got %v, want [1]", m2.DependsOn)
+	}
+	if m2.Regressions != 1 {
+		t.Errorf("milestone 2 regressions: got %d, want 1", m2.Regressions)
+	}
+	if len(m2.Issues) != 2 {
+		t.Fatalf("milestone 2 issues: got %d, want 2", len(m2.Issues))
+	}
+	if m2.Issues[1].Ref != "issue-2-2" {
+		t.Errorf("milestone 2 second issue ref: got %q, want %q", m2.Issues[1].Ref, "issue-2-2")
+	}
+	if len(m2.Issues[1].DependsOn) != 1 || m2.Issues[1].DependsOn[0] != "issue-2-1" {
+		t.Errorf("issue-2-2 depends_on: got %v, want [issue-2-1]", m2.Issues[1].DependsOn)
+	}
+}
+
+// TestFileDataSource_Status_V2WithIssue verifies that Status() includes
+// the current issue reference from v2 plan.yaml current_focus.
+func TestFileDataSource_Status_V2WithIssue(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a v2 plan.yaml with issue reference in current_focus.
+	planV2 := `epic:
+  name: test-epic
+  description: Testing v2 status
+  milestones:
+    - id: 1
+      name: "API v2"
+      description: "Update to v2"
+      status: in_progress
+      done_when: "done"
+      depends_on: []
+      regressions: 0
+      issues:
+        - ref: "issue-1-1"
+          title: "Datasource v2"
+          pairs: ["api-contracts"]
+          depends_on: []
+          phase_status:
+            plan: done
+            test: in_progress
+          files: []
+          debates: []
+          branch: ""
+          status: in_progress
+  current_focus:
+    milestone_id: 1
+    issue_ref: "issue-1-1"
+    phase: test
+    started: "2026-03-16"
+`
+	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644)
+
+	ds := NewFileDataSource(dir)
+	result, err := ds.Status()
+	if err != nil {
+		t.Fatalf("Status() error: %v", err)
+	}
+
+	info, ok := result.(*StatusInfo)
+	if !ok {
+		t.Fatalf("expected *StatusInfo, got %T", result)
+	}
+
+	if info.MilestoneID != 1 {
+		t.Errorf("MilestoneID: got %d, want 1", info.MilestoneID)
+	}
+	if info.MilestoneName != "API v2" {
+		t.Errorf("MilestoneName: got %q, want %q", info.MilestoneName, "API v2")
+	}
+	if info.Phase != "test" {
+		t.Errorf("Phase: got %q, want %q", info.Phase, "test")
+	}
+	// V2 field: issue reference.
+	if info.IssueRef != "issue-1-1" {
+		t.Errorf("IssueRef: got %q, want %q", info.IssueRef, "issue-1-1")
+	}
+}
