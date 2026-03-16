@@ -9,6 +9,8 @@ Feed external signals back into Ratchet. When a PR fails CI, gets review comment
 
 This is how Ratchet learns from the real world — not just from its own debates.
 
+**You have full read/write access.** Unlike the run orchestrator (which is read-only), the retro skill MUST edit files directly — updating adversarial prompts, adding guards to workflow.yaml, and modifying test files. Do NOT defer edits to the user. When the user selects "Apply all fixes" or "Apply fixes", make the changes yourself using the Edit tool.
+
 ## Usage
 ```
 /ratchet:retro                     # Interactive — ask what happened

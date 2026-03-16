@@ -7,6 +7,8 @@ description: Tighten the ratchet — analyst reviews agent performance and sharp
 
 Tighten agent pairs based on accumulated debate performance. The analyst reviews what agents missed, where they wasted effort, and rewrites their prompts to be sharper.
 
+**You have full read/write access.** This skill directly edits pair definition files (generative.md, adversarial.md) and writes review summaries. Do NOT defer edits to the user — apply changes yourself using the Edit tool.
+
 ## Usage
 ```
 /ratchet:tighten              # Tighten all pairs with sufficient review data
