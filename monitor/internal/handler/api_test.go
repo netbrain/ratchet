@@ -75,6 +75,95 @@ func newMockDS() *mockDataSource {
 	}
 }
 
+// newMockDS_V2 creates a mock datasource with v2 plan and status structures.
+func newMockDS_V2() *mockDataSource {
+	return &mockDataSource{
+		pairs: []map[string]string{
+			{"name": "api-contracts", "phase": "review"},
+		},
+		debates: []map[string]string{
+			{"id": "debate-v2-1", "status": "consensus"},
+		},
+		debate: map[string]any{
+			"debate-v2-1": map[string]string{"id": "debate-v2-1", "status": "consensus", "pair": "api-contracts"},
+		},
+		plan: map[string]any{
+			"epic": map[string]any{
+				"name":        "test-epic",
+				"description": "Testing v2 plan",
+				"milestones": []map[string]any{
+					{
+						"id":          1,
+						"name":        "M1",
+						"description": "First milestone",
+						"status":      "done",
+						"depends_on":  []int{},
+						"regressions": 0,
+						"issues": []map[string]any{
+							{
+								"ref":    "issue-1-1",
+								"title":  "First issue",
+								"pairs":  []string{"api-contracts"},
+								"status": "done",
+								"phase_status": map[string]string{
+									"plan":   "done",
+									"test":   "done",
+									"build":  "done",
+									"review": "done",
+								},
+								"depends_on": []string{},
+								"files":      []string{"file1.go"},
+								"debates":    []string{"debate-v2-1"},
+								"branch":     "feature/issue-1-1",
+							},
+						},
+					},
+					{
+						"id":          2,
+						"name":        "M2",
+						"description": "Second milestone",
+						"status":      "in_progress",
+						"depends_on":  []int{1},
+						"regressions": 1,
+						"issues": []map[string]any{
+							{
+								"ref":    "issue-2-1",
+								"title":  "Second issue",
+								"pairs":  []string{"api-contracts"},
+								"status": "in_progress",
+								"phase_status": map[string]string{
+									"plan":  "done",
+									"test":  "in_progress",
+									"build": "pending",
+								},
+								"depends_on": []string{},
+								"files":      []string{},
+								"debates":    []string{},
+								"branch":     "",
+							},
+						},
+					},
+				},
+				"current_focus": map[string]any{
+					"milestone_id": 2,
+					"issue_ref":    "issue-2-1",
+					"phase":        "test",
+					"started":      "2026-03-16",
+				},
+			},
+		},
+		status: map[string]any{
+			"milestone_id":   2,
+			"milestone_name": "M2",
+			"issue_ref":      "issue-2-1",
+			"phase":          "test",
+		},
+		scores: []map[string]any{
+			{"debate_id": "debate-v2-1", "pair": "api-contracts", "milestone": 1},
+		},
+	}
+}
+
 // --- Method enforcement ---
 
 func TestAPIHandlers_RejectNonGET(t *testing.T) {
@@ -589,5 +678,244 @@ func TestScoresHandler_DataSourceError(t *testing.T) {
 	}
 	if body["error"] != "internal server error" {
 		t.Errorf("error message: got %q", body["error"])
+	}
+}
+
+// --- V2 API Tests ---
+
+// TestPlanHandler_V2Plan verifies that /api/plan returns v2 milestone and issue fields.
+func TestPlanHandler_V2Plan(t *testing.T) {
+	ds := newMockDS_V2()
+	h := PlanHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/plan", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify epic structure
+	epic, ok := response["epic"].(map[string]any)
+	if !ok {
+		t.Fatalf("epic field missing or wrong type: got %T", response["epic"])
+	}
+
+	milestones, ok := epic["milestones"].([]any)
+	if !ok {
+		t.Fatalf("milestones field missing or wrong type: got %T", epic["milestones"])
+	}
+
+	if len(milestones) != 2 {
+		t.Fatalf("expected 2 milestones, got %d", len(milestones))
+	}
+
+	// Check milestone 1 v2 fields
+	m1 := milestones[0].(map[string]any)
+	if _, ok := m1["depends_on"]; !ok {
+		t.Error("milestone 1 missing depends_on field")
+	}
+	if _, ok := m1["regressions"]; !ok {
+		t.Error("milestone 1 missing regressions field")
+	}
+	issues1, ok := m1["issues"].([]any)
+	if !ok {
+		t.Fatalf("milestone 1 missing issues array: got %T", m1["issues"])
+	}
+	if len(issues1) != 1 {
+		t.Errorf("milestone 1 expected 1 issue, got %d", len(issues1))
+	}
+
+	// Check issue 1 v2 fields
+	issue1 := issues1[0].(map[string]any)
+	requiredIssueFields := []string{"ref", "title", "pairs", "depends_on", "phase_status", "files", "debates", "branch", "status"}
+	for _, field := range requiredIssueFields {
+		if _, ok := issue1[field]; !ok {
+			t.Errorf("issue missing required field: %s", field)
+		}
+	}
+
+	// Check milestone 2 v2 fields
+	m2 := milestones[1].(map[string]any)
+	dependsOn, ok := m2["depends_on"].([]any)
+	if !ok || len(dependsOn) == 0 {
+		t.Errorf("milestone 2 depends_on: got %v, want non-empty array", m2["depends_on"])
+	}
+	regressions, ok := m2["regressions"].(float64)
+	if !ok || regressions != 1 {
+		t.Errorf("milestone 2 regressions: got %v, want 1", m2["regressions"])
+	}
+
+	// Check current_focus v2 fields
+	focus, ok := epic["current_focus"].(map[string]any)
+	if !ok {
+		t.Fatalf("current_focus field missing: got %T", epic["current_focus"])
+	}
+	if _, ok := focus["issue_ref"]; !ok {
+		t.Error("current_focus missing issue_ref field")
+	}
+	if focus["issue_ref"] != "issue-2-1" {
+		t.Errorf("current_focus issue_ref: got %q, want %q", focus["issue_ref"], "issue-2-1")
+	}
+}
+
+// TestStatusHandler_V2Status verifies that /api/status includes issue_ref.
+func TestStatusHandler_V2Status(t *testing.T) {
+	ds := newMockDS_V2()
+	h := StatusHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Verify v2 fields
+	requiredFields := []string{"milestone_id", "milestone_name", "issue_ref", "phase"}
+	for _, field := range requiredFields {
+		if _, ok := response[field]; !ok {
+			t.Errorf("status missing required v2 field: %s", field)
+		}
+	}
+
+	if response["issue_ref"] != "issue-2-1" {
+		t.Errorf("issue_ref: got %q, want %q", response["issue_ref"], "issue-2-1")
+	}
+	if response["phase"] != "test" {
+		t.Errorf("phase: got %q, want %q", response["phase"], "test")
+	}
+}
+
+// TestPlanHandler_V2IssuePhaseStatus verifies phase_status map serialization.
+func TestPlanHandler_V2IssuePhaseStatus(t *testing.T) {
+	ds := newMockDS_V2()
+	h := PlanHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/plan", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	epic := response["epic"].(map[string]any)
+	milestones := epic["milestones"].([]any)
+	m1 := milestones[0].(map[string]any)
+	issues := m1["issues"].([]any)
+	issue := issues[0].(map[string]any)
+
+	phaseStatus, ok := issue["phase_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("phase_status wrong type: got %T", issue["phase_status"])
+	}
+
+	expectedPhases := []string{"plan", "test", "build", "review"}
+	for _, phase := range expectedPhases {
+		if _, ok := phaseStatus[phase]; !ok {
+			t.Errorf("phase_status missing phase: %s", phase)
+		}
+	}
+}
+
+// TestPlanHandler_V2IssueDependencies verifies issue depends_on serialization.
+func TestPlanHandler_V2IssueDependencies(t *testing.T) {
+	// Create a datasource with issue dependencies
+	ds := &mockDataSource{
+		plan: map[string]any{
+			"epic": map[string]any{
+				"name":        "test-epic",
+				"description": "Testing issue dependencies",
+				"milestones": []any{
+					map[string]any{
+						"id":          2,
+						"name":        "M2",
+						"description": "Second milestone",
+						"status":      "in_progress",
+						"depends_on":  []int{1},
+						"regressions": 0,
+						"issues": []any{
+							map[string]any{
+								"ref":        "issue-2-1",
+								"title":      "First issue",
+								"depends_on": []any{},
+							},
+							map[string]any{
+								"ref":        "issue-2-2",
+								"title":      "Second issue",
+								"depends_on": []any{"issue-2-1"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	h := PlanHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/plan", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	epic2 := response["epic"].(map[string]any)
+	milestones2 := epic2["milestones"].([]any)
+	if len(milestones2) < 1 {
+		t.Fatalf("expected at least 1 milestone, got %d", len(milestones2))
+	}
+	m2Resp := milestones2[0].(map[string]any)
+	issues := m2Resp["issues"].([]any)
+
+	if len(issues) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(issues))
+	}
+
+	issue1 := issues[0].(map[string]any)
+	issue1DependsOn, ok := issue1["depends_on"].([]any)
+	if !ok {
+		t.Fatalf("issue1 depends_on wrong type: got %T", issue1["depends_on"])
+	}
+	if len(issue1DependsOn) != 0 {
+		t.Errorf("issue1 depends_on should be empty: got %v", issue1DependsOn)
+	}
+
+	issue2 := issues[1].(map[string]any)
+	dependsOn, ok := issue2["depends_on"].([]any)
+	if !ok {
+		t.Fatalf("issue2 depends_on wrong type: got %T", issue2["depends_on"])
+	}
+
+	if len(dependsOn) != 1 {
+		t.Errorf("issue2 depends_on length: got %d, want 1", len(dependsOn))
+	}
+	if dependsOn[0] != "issue-2-1" {
+		t.Errorf("issue2 depends_on[0]: got %q, want %q", dependsOn[0], "issue-2-1")
 	}
 }
