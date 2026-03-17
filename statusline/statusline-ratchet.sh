@@ -100,7 +100,7 @@ if $ratchet_active; then
   echo -e "${cyan}◬ ${reset}${epic_name}${dim} | ${reset}$bar ${milestone_progress} ${dim}|${reset} $issue_progress ${dim}|${reset} ${yellow}${model}${reset} ${ctx_pct}%${vim_indicator}"
 
   # Optional second line: warnings/discoveries
-  discoveries=$(yq eval '[.epic.discoveries[] | select(.severity == "high")] | length' "$plan_yaml" 2>/dev/null || echo "0")
+  discoveries=$(yq eval '[.epic.discoveries[] | select(.status == "pending")] | length' "$plan_yaml" 2>/dev/null || echo "0")
   blocked=$(yq eval '[.epic.milestones[].issues[] | select(.status == "blocked")] | length' "$plan_yaml" 2>/dev/null || echo "0")
 
   if [ "$discoveries" -gt 0 ] || [ "$blocked" -gt 0 ]; then
