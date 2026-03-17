@@ -39,12 +39,17 @@ set -e
 escaped_output=$(printf '%s' "$output" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\f/\\f/g' | sed 's/\x08/\\b/g' | tr '\n' ' ')
 # Escape the command string for JSON embedding
 escaped_command=$(printf '%s' "$GUARD_COMMAND" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\f/\\f/g' | sed 's/\x08/\\b/g' | tr '\n' ' ')
+# Escape the guard name for JSON embedding
+escaped_guard_name=$(printf '%s' "$GUARD_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 if [ "$BLOCKING" = "true" ]; then blocking_json="true"; else blocking_json="false"; fi
 
-cat > "$GUARDS_DIR/$GUARD_NAME.json" <<JSON_EOF
+# Atomic write: temp file + mv to prevent corrupt JSON on crash
+tmp_guard=$(mktemp "${GUARDS_DIR}/${GUARD_NAME}.XXXXXX")
+trap 'rm -f "$tmp_guard"' EXIT
+cat > "$tmp_guard" <<JSON_EOF
 {
-  "guard": "$GUARD_NAME",
+  "guard": "$escaped_guard_name",
   "phase": "$PHASE",
   "command": "$escaped_command",
   "exit_code": $exit_code,
@@ -53,6 +58,7 @@ cat > "$GUARDS_DIR/$GUARD_NAME.json" <<JSON_EOF
   "timestamp": "$timestamp"
 }
 JSON_EOF
+mv "$tmp_guard" "$GUARDS_DIR/$GUARD_NAME.json"
 
 if [ "$exit_code" -ne 0 ]; then
     if [ "$BLOCKING" = "true" ]; then

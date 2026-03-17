@@ -15,8 +15,10 @@ if [ ! -f "$FILEPATH" ]; then
 fi
 
 # Update the status line (portable temp file approach for macOS/Linux compatibility)
+# Escape STATUS for sed replacement: / and & and \ are special in the replacement side
+ESCAPED_STATUS=$(printf '%s' "$STATUS" | sed 's/[\/&\\]/\\&/g')
 TMP_FILE=$(mktemp)
 trap 'rm -f "$TMP_FILE"' EXIT
-sed "s/^\*\*Status:\*\* .*/\*\*Status:\*\* $STATUS/" "$FILEPATH" > "$TMP_FILE" && mv "$TMP_FILE" "$FILEPATH"
+sed "s/^\*\*Status:\*\* .*/\*\*Status:\*\* $ESCAPED_STATUS/" "$FILEPATH" > "$TMP_FILE" && mv "$TMP_FILE" "$FILEPATH"
 
 echo "Updated $ITEM_REF status to: $STATUS"

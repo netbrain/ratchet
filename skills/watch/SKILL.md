@@ -106,6 +106,8 @@ fi
 
 ### PR Monitoring (every 10 minutes)
 
+> **Schema note**: PR monitoring requires the `pr` and `status: blocked` fields on issues. Both are defined in the plan.yaml schema (see `skills/init/SKILL.md`). The `pr` field is populated by `/ratchet:run` when a PR is created. The `blocked` status is set when an issue cannot progress due to a dependency or escalation.
+
 ```bash
 # Get all PRs created by Ratchet (from plan.yaml)
 prs=$(yq eval '.epic.milestones[].issues[] | select(.pr != null) | .pr' .ratchet/plan.yaml)
@@ -139,6 +141,8 @@ for pr_url in $prs; do
         \"source\": \"pr-conflict-$pr_num\",
         \"created_at\": \"$(date -Iseconds)\",
         \"severity\": \"high\",
+        \"status\": \"pending\",
+        \"issue_ref\": \"$issue_ref\",
         \"affected_scope\": \"issue $issue_ref\"
       }]" .ratchet/plan.yaml
 
@@ -167,6 +171,8 @@ for pr_url in $prs; do
         \"source\": \"pr-ci-failure-$pr_num\",
         \"created_at\": \"$(date -Iseconds)\",
         \"severity\": \"medium\",
+        \"status\": \"pending\",
+        \"issue_ref\": \"$issue_ref\",
         \"affected_scope\": \"issue $issue_ref\",
         \"retro_type\": \"ci-failure\"
       }]" .ratchet/plan.yaml
@@ -179,7 +185,7 @@ done
 
 ### Discovery Schema
 
-Discoveries created by PR monitoring follow this structure:
+Discoveries created by PR monitoring (and by `/ratchet:retro`) follow this structure:
 
 ```yaml
 epic:
@@ -190,7 +196,10 @@ epic:
       source: "pr-conflict-20"
       created_at: "2026-03-17T00:30:00Z"
       severity: "high"           # high for conflicts, medium for CI failures
-      affected_scope: "issue issue-2-2"
+      status: "pending"          # pending | done (set to "done" by /ratchet:run after processing)
+      issue_ref: "issue-2-2"     # direct ref to the affected issue (for run/status lookups)
+      affected_scope: "issue issue-2-2"   # human-readable scope description
+      retro_type: null           # null for merge conflicts; "ci-failure" | "skipped-finding" for retro discoveries
 
     - ref: "discovery-retro-1710633100"
       title: "Retro: CI failure in PR #19"
@@ -198,11 +207,25 @@ epic:
       source: "pr-ci-failure-19"
       created_at: "2026-03-17T00:31:40Z"
       severity: "medium"
+      status: "pending"
+      issue_ref: "issue-2-3"
       affected_scope: "issue issue-2-3"
       retro_type: "ci-failure"
 ```
 
-These discoveries can later be implemented using `/ratchet:run` - they'll show up as available work in the epic.
+**Discovery fields:**
+- `ref` — unique ID (format: `discovery-<type>-<timestamp>`)
+- `title` — short human-readable description
+- `description` — full context including what happened and what to do
+- `source` — origin identifier (e.g., `pr-conflict-20`, `retro-2026-03-17T00:00:00Z`)
+- `created_at` — ISO timestamp
+- `severity` — `high` (merge conflicts) | `medium` (CI failures, skipped findings) | `low`
+- `status` — `pending` (not yet processed) | `done` (processed by `/ratchet:run`)
+- `issue_ref` — the issue ref this discovery is related to (used for pipeline re-launch)
+- `affected_scope` — human-readable scope description
+- `retro_type` — `null` (merge conflicts), `"ci-failure"`, or `"skipped-finding"`
+
+These discoveries surface as available work in `/ratchet:run` (Mode B sidequest option) and `/ratchet:status` (Sidequests section).
 
 ## Limitations
 

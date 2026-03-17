@@ -31,6 +31,10 @@ If debates exist, use `AskUserQuestion` to let the user pick a debate to view:
 
 ### With ID — View Transcript
 
+> **Verdict storage note**: Verdicts may exist in two locations depending on how the debate was resolved:
+> - `meta.json` → `verdict` field: populated by the debate-runner for consensus (ACCEPT, CONDITIONAL_ACCEPT) or tiebreaker verdicts. This is an embedded object.
+> - `verdict.json` (separate file in the debate directory): populated by `/ratchet:verdict` for human-cast verdicts. Read both; prefer `verdict.json` if it exists (human decision overrides).
+
 Read the debate's `meta.json` and all round files. Present the full transcript:
 
 ```

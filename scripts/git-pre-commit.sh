@@ -9,4 +9,9 @@ fi
 
 # Delegate to consensus check
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$SCRIPT_DIR/check-consensus.sh"
+CONSENSUS_SCRIPT="$SCRIPT_DIR/check-consensus.sh"
+if [ ! -f "$CONSENSUS_SCRIPT" ]; then
+    echo "Error: check-consensus.sh not found at $CONSENSUS_SCRIPT" >&2
+    exit 1
+fi
+exec bash "$CONSENSUS_SCRIPT"

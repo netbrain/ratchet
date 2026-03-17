@@ -74,9 +74,12 @@ After recording the verdict, update `.ratchet/plan.yaml` to reflect the issue's 
 Example logic:
 ```bash
 # Check if this is the last debate for the issue
-issue_ref=$(jq -r '.issue' /workspace/main/.ratchet/debates/<id>/meta.json)
-pending_debates=$(grep -l "\"issue\": \"$issue_ref\"" /workspace/main/.ratchet/debates/*/meta.json | \
-                  xargs grep -l '"status": "initiated"' | wc -l)
+issue_ref=$(jq -r '.issue' .ratchet/debates/<id>/meta.json)
+pending_debates=$(for f in .ratchet/debates/*/meta.json; do
+  jq -e --arg ref "$issue_ref" \
+    '.issue == $ref and (.status == "initiated" or .status == "in_progress")' \
+    "$f" 2>/dev/null
+done | grep -c "^true$")
 
 if [ "$pending_debates" -eq 0 ]; then
   # This was the last debate - safe to advance phase
@@ -88,6 +91,8 @@ fi
 
 Run the score update script:
 ```bash
+test -f .claude/ratchet-scripts/update-scores.sh \
+  || { echo "Error: update-scores.sh not found. Scores not updated." >&2; }
 bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 ```
 

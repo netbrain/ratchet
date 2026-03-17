@@ -80,7 +80,7 @@ Overall health: [healthy / needs attention / at risk]
 Options:
 - `"Apply recommendations (Recommended)"` — walk through each recommendation interactively
 - `"Apply all automatically"` — apply all changes without individual confirmation
-- `"Export as report"` — save to `.ratchet/reports/health-<timestamp>.md`
+- `"Export as report"` — save to `.ratchet/reports/health-<timestamp>.md` (creates `.ratchet/reports/` directory if it doesn't exist: `mkdir -p .ratchet/reports`)
 - `"Done for now"`
 
 ### Step 4: Apply Recommendations (if chosen)

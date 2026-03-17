@@ -12,15 +12,14 @@ TITLE="${1:?Usage: create-item.sh <title> <body> [labels...]}"
 BODY="${2:-}"
 shift 2 || true
 
-# Build label args
-LABEL_ARGS=""
+# Build label args as array to handle labels with spaces correctly
+LABEL_ARGS=()
 for label in "$@"; do
-    LABEL_ARGS="$LABEL_ARGS --label $label"
+    LABEL_ARGS+=(--label "$label")
 done
 
 # Create issue and capture the number
-# shellcheck disable=SC2086
-ISSUE_URL=$(gh issue create --title "$TITLE" --body "$BODY" $LABEL_ARGS 2>&1) || {
+ISSUE_URL=$(gh issue create --title "$TITLE" --body "$BODY" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"} 2>&1) || {
     echo "Error: Failed to create GitHub issue: $ISSUE_URL" >&2
     exit 1
 }

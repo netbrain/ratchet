@@ -11,7 +11,7 @@ Review and improve Ratchet agent definitions for prompt quality, tool usage corr
 Ratchet has three core agents spawned during workflows:
 
 **Analyst** (`agents/analyst.md`):
-- Spawned by `/ratchet:init` via Task tool (subagent_type='claude-code-guide' or custom analyst)
+- `/ratchet:init` runs analyst inline (you ARE the analyst — no subagent spawn). Tighten/advise skills spawn analyst via Agent tool.
 - Role: Project analysis, codebase scanning, agent pair generation
 - Tools: Read, Grep, Glob, Write, Edit, Bash, AskUserQuestion
 - Output: workflow.yaml, plan.yaml, project.yaml, pair definitions
@@ -19,14 +19,14 @@ Ratchet has three core agents spawned during workflows:
 **Debate Runner** (`agents/debate-runner.md`):
 - Spawned by `/ratchet:run` to orchestrate debates
 - Role: Create debate dirs, spawn generative/adversarial pairs, manage rounds
-- Tools: Read, Write, Edit, Bash, Task (to spawn pair agents)
+- Tools: Read, Write, Edit, Agent, AskUserQuestion (Agent spawns generative/adversarial pairs)
 - Protocol: Creates `meta.json`, `round-N-{role}.md`, checks consensus
 
 **Tiebreaker** (`agents/tiebreaker.md`):
 - Spawned by `/ratchet:verdict` or auto-escalation
 - Role: Read full debate transcripts, render judgment on unresolved disagreements
-- Tools: Read, Grep, Glob, Write
-- Output: verdict in meta.json, verdict reasoning document
+- Tools: Read, Grep, Glob, Bash (disallowedTools: Write, Edit)
+- Output: verdict JSON returned to debate-runner, which persists to disk
 
 ## Review Focus Areas
 
@@ -48,11 +48,11 @@ Based on user priorities:
 ### Tool Specifications
 - [ ] Allowed tools listed correctly for the role:
   - Analyst: Read, Grep, Glob, Write, Edit, Bash, AskUserQuestion
-  - Debate Runner: Read, Write, Edit, Bash, Task
-  - Tiebreaker: Read, Grep, Glob, Write
+  - Debate Runner: Read, Write, Edit, Agent, AskUserQuestion
+  - Tiebreaker: Read, Grep, Glob, Bash
 - [ ] Disallowed tools specified if needed (e.g., adversarial agents can't Write/Edit)
 - [ ] Tool usage examples match actual tool signatures
-- [ ] Task tool spawning correct (subagent_type specified, prompt clear)
+- [ ] Agent tool spawning correct (model parameter specified, prompt includes all required context)
 
 ### Protocol Adherence
 - [ ] File paths correct (`.ratchet/debates/{id}/`, `.ratchet/pairs/{name}/`)

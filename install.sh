@@ -81,7 +81,9 @@ remove_git_hook() {
 
     local tmp_file
     tmp_file="$(mktemp)"
-    trap 'rm -f "$tmp_file"' EXIT
+    # Use a subshell-scoped cleanup: clean up tmp_file immediately after use
+    # Avoid setting EXIT trap inside function — EXIT fires at script exit, not function return,
+    # so a function-level trap would overwrite any outer trap and reference a stale variable.
     sed '/^# BEGIN RATCHET$/,/^# END RATCHET$/d' "$hook_file" > "$tmp_file"
 
     local content
@@ -92,6 +94,7 @@ remove_git_hook() {
         mv "$tmp_file" "$hook_file"
         chmod +x "$hook_file"
     fi
+    rm -f "$tmp_file" 2>/dev/null || true
 }
 
 do_install() {

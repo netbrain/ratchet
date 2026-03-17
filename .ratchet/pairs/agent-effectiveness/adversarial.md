@@ -27,15 +27,14 @@ For each agent (analyst, debate-runner, tiebreaker):
 ### Tool Specifications
 - [ ] **Analyst** allowed tools:
   - Read, Grep, Glob, Write, Edit, Bash, AskUserQuestion ✓
-  - Task (for spawning subagents if needed) ✓
 - [ ] **Debate Runner** allowed tools:
-  - Read, Write, Edit, Bash, Task ✓
-  - Task used to spawn generative/adversarial pairs ✓
+  - Read, Write, Edit, Agent, AskUserQuestion ✓
+  - Agent tool used to spawn generative/adversarial pairs with `model` parameter ✓
 - [ ] **Tiebreaker** allowed tools:
-  - Read, Grep, Glob, Write ✓
-  - NO Edit (read-only review) ✓
+  - Read, Grep, Glob, Bash ✓
+  - disallowedTools: Write, Edit (read-only review) ✓
 - [ ] Tool usage examples syntactically correct
-- [ ] Task tool spawning has `subagent_type` specified
+- [ ] Agent tool spawning has `model` parameter specified, prompt provides full context
 
 ### Protocol Adherence
 - [ ] File paths correct:
@@ -48,33 +47,37 @@ For each agent (analyst, debate-runner, tiebreaker):
     "id": "debate-id",
     "pair": "pair-name",
     "phase": "review",
-    "milestone": 1,
+    "milestone": null,
+    "issue": null,
     "files": ["file1", "file2"],
-    "status": "consensus|escalated",
-    "round_count": 3,
+    "status": "consensus|resolved|escalated",
+    "rounds": 3,
     "max_rounds": 3,
     "started": "2026-03-16T...",
     "resolved": "2026-03-16T...",
-    "verdict": "approved|rejected"
+    "verdict": "ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT|REJECT|REGRESS",
+    "fast_path": false
   }
   ```
 - [ ] Round files: `round-1-generative.md`, `round-1-adversarial.md`, etc.
-- [ ] Consensus detection logic clear (adversarial says "LGTM" or "Ship it")
+- [ ] Consensus detection logic clear (adversarial outputs exactly one keyword: ACCEPT, CONDITIONAL_ACCEPT, TRIVIAL_ACCEPT, REJECT, or REGRESS)
 - [ ] Escalation triggers clear (max_rounds without consensus)
 
 ### Consistency with Skills
 - [ ] **Analyst** ↔ `/ratchet:init`:
-  - Init skill spawns analyst with Task tool ✓
+  - Init skill runs analyst inline — YOU ARE the analyst (no subagent spawn) ✓
+  - Tighten/advise skills spawn analyst via Agent tool ✓
   - Analyst uses AskUserQuestion for interview ✓
   - Analyst outputs workflow.yaml, plan.yaml, project.yaml ✓
   - Output format matches what init expects ✓
 - [ ] **Debate Runner** ↔ `/ratchet:run`:
-  - Run skill spawns debate-runner with Task tool ✓
+  - Run skill spawns debate-runner with Agent tool ✓
   - Debate-runner creates meta.json, round files ✓
-  - Debate-runner spawns generative/adversarial pairs ✓
+  - Debate-runner spawns generative/adversarial pairs via Agent tool ✓
   - Consensus detection matches what run expects ✓
 - [ ] **Tiebreaker** ↔ `/ratchet:verdict`:
-  - Verdict skill spawns tiebreaker with Task tool ✓
+  - Verdict skill runs inline — tiebreaker only spawned by debate-runner on escalation ✓
+  - Tiebreaker spawned by debate-runner via Agent tool when escalation_policy is tiebreaker/both ✓
   - Tiebreaker reads full debate history ✓
   - Tiebreaker produces verdict + reasoning ✓
   - Verdict format matches what skill expects ✓
@@ -84,7 +87,7 @@ For each agent (analyst, debate-runner, tiebreaker):
 - [ ] **Error handling completeness (9 occurrences - 69% of debates)**: Check that error handling is explicit:
   - Parse errors when reading JSON/YAML
   - Missing files (workflow.yaml, plan.yaml, debate metadata)
-  - Failed commands (git, jq, Task spawning)
+  - Failed commands (git, jq, Agent spawning)
   - Must show concrete error handling code with stderr messages
 - [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
 - [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
@@ -105,9 +108,10 @@ done
 
 **For agents that delegate to other agents:**
 ```bash
-# Find Task tool invocations with subagent_type
-grep -B2 -A2 'subagent_type' agents/*.md
-# Verify referenced agent types exist in config or are valid
+# Find Agent tool spawn calls and verify model parameter is specified
+grep -n "Spawn an Agent\|model.*opus\|model.*sonnet\|model.*haiku" agents/*.md
+# Verify spawning instructions include: model, prompt with full context, output file path
+grep -n "model.*set to\|model:.*opus\|model:.*sonnet" agents/debate-runner.md
 ```
 
 **For agents that produce structured output (CRITICAL - format compatibility):**
@@ -175,9 +179,16 @@ For each agent:
 ls -d .ratchet/debates/ .ratchet/pairs/ .ratchet/
 ```
 
-**Verify skill spawns agent correctly:**
+**Verify skill spawns debate-runner with Agent tool:**
 ```bash
-grep -A5 "Task tool" skills/init/SKILL.md | grep subagent_type
+grep -n "Agent\|spawn.*debate" skills/run/SKILL.md | head -5
+# Expected: "- **Agent** — to spawn issue pipelines and debate-runners"
+```
+
+**Verify init skill runs analyst inline:**
+```bash
+grep -n "inline\|YOU ARE\|spawn" skills/init/SKILL.md | head -3
+# Expected: "You execute this entire flow inline — do NOT spawn subagents"
 ```
 
 **Check meta.json format:**

@@ -204,6 +204,12 @@ Build a picture of:
 
 If no `plan.yaml` exists, skip epic tracking and fall through to file-based detection.
 
+If `plan.yaml` exists but fails to parse (malformed YAML or missing `epic` key):
+```bash
+yq eval '.epic' .ratchet/plan.yaml > /dev/null 2>&1 \
+  || { echo "Error: .ratchet/plan.yaml is malformed or missing required 'epic' field. Fix it before running." >&2; exit 1; }
+```
+
 **CHECKPOINT**: You now understand the project state. Do NOT act on it — do not analyze code, do not plan fixes, do not write implementations. Your next action is Step 2: present choices to the user (or auto-select in unsupervised mode). Then Step 4: launch issue pipelines. The pipelines do the work.
 
 ### Step 2: Determine Focus
@@ -252,9 +258,19 @@ Options:
 - "Run all ready issues sequentially (Recommended)" — executes all issues with no unmet dependencies
 - "Run specific issue: [ref]" — one option per ready issue
 - "Address unresolved conditions from last run" — only if conditions exist
+- "Process sidequests ([N] pending: [titles...])" — only if `epic.discoveries` has unprocessed items (status != "done")
 - "[Next milestone name]" — skip ahead
 - "Review all existing code"
 - (Include an "Other" option so the user can type a custom focus)
+
+**Sidequest processing**: When "Process sidequests" is selected, iterate over `epic.discoveries` with status != "done":
+- `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:retro pr <N>` for the affected issue
+- `retro_type: "skipped-finding"` → present to user for decision (apply now or defer)
+- No `retro_type` (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase. If `issue_ref` is absent (legacy discovery), parse from `affected_scope`: `issue_ref=$(echo "$affected_scope" | sed 's/^issue //')`
+- Mark each discovery `status: "done"` in `plan.yaml` after it is processed:
+  ```bash
+  yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"done\"" .ratchet/plan.yaml
+  ```
 
 #### Mode C: Changed files (no plan.yaml, git repo exists)
 ```bash

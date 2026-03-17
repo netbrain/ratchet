@@ -64,7 +64,13 @@ Property-based tests are higher value than example-based tests — they catch re
 
 ### Step 4: Generate Tests
 
-For each unresolved finding, spawn a generative agent (tools: Read, Grep, Glob, Bash, Write, Edit) to write a test. The agent operates outside the debate loop — it generates tests only, not production code:
+For each unresolved finding, spawn a generative agent to write a test. Use the generative model from `workflow.yaml` (`models.generative`). The agent operates outside the debate loop — it generates tests only, not production code.
+
+Agent spawn configuration:
+- `subagent_type`: generative
+- `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
+- `tools`: Read, Grep, Glob, Bash, Write, Edit
+- `disallowedTools`: none
 
 ```
 Based on this adversarial finding from a Ratchet debate:

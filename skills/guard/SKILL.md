@@ -150,7 +150,9 @@ When a guard is overridden, `overridden` becomes `true` and `override_reason` co
 
 ### override — Override a Failed Guard
 
-Read the guard result from `.ratchet/guards/<milestone>/<phase>/<name>.json`.
+Read the guard result from `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json`.
+
+Determine `<issue-ref>` from the current active issue in `.ratchet/plan.yaml` (`current_focus`), or require it as an argument: `guard override <name> --issue <ref>`.
 
 If no failure exists for this guard:
 > "Guard '[name]' has no recent failure to override."
@@ -161,16 +163,14 @@ If failure exists, use `AskUserQuestion`:
 
 If "Override with reason": use follow-up `AskUserQuestion` (freeform) to capture the reason.
 
-Write override to the guard result JSON:
-```json
-{
-  "guard": "<name>",
-  "phase": "<phase>",
-  "overridden": true,
-  "override_reason": "<user's reason>",
-  "override_timestamp": "<ISO timestamp>"
-}
+Update the existing guard result JSON (do NOT overwrite — patch only the override fields):
+```bash
+jq '.overridden = true | .override_reason = "<user reason>" | .override_timestamp = "<ISO timestamp>"' \
+  .ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json > /tmp/guard-override-tmp.json \
+  && mv /tmp/guard-override-tmp.json .ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json
 ```
+
+This preserves the original `exit_code`, `stdout`, `stderr`, and `command` fields.
 
 ### remove — Remove a Guard
 

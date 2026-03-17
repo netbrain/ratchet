@@ -85,6 +85,15 @@ Progress: [completed]/[total] milestones
 ✓ = done  ● = in progress  ○ = pending  ✗ = failed/blocked
 ```
 
+If `epic.discoveries` exists in `plan.yaml` and has items with status != "done", append:
+```
+Sidequests: [N] pending
+  [discovery-ref]: [title] ([severity])
+  ...
+
+Run /ratchet:run to process sidequests.
+```
+
 Adapt the phase display based on the component's workflow preset:
 - `tdd`: show all 5 phases
 - `traditional`: show plan, build, review, harden (skip test)

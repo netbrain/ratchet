@@ -121,6 +121,24 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
 
    This history helps `/ratchet:tighten` understand systemic patterns — e.g., "the adversarial keeps missing lint issues" vs. "one-off CI flake." Severity and recurrence data give tighten a priority queue.
 
+8. **Create sidequests for skipped findings:**
+
+   For any finding with severity `major` or `critical` where `fix_applied` is null (user chose to skip), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` so it surfaces as actionable work in future `/ratchet:run` and `/ratchet:status` views:
+   ```bash
+   # For each skipped major/critical finding:
+   if [ -f .ratchet/plan.yaml ]; then
+     yq eval -i ".epic.discoveries += [{
+       \"ref\": \"discovery-retro-$(date +%s)\",
+       \"title\": \"Address retro finding: $description\",
+       \"source\": \"retro-$timestamp\",
+       \"created_at\": \"$(date -Iseconds)\",
+       \"severity\": \"$severity\",
+       \"retro_type\": \"skipped-finding\",
+       \"status\": \"pending\"
+     }]" .ratchet/plan.yaml
+   fi
+   ```
+
 ### Mode: Monitor (`retro monitor [number]`)
 
 Watch a PR's checks and analyze when they complete.

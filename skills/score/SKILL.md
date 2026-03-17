@@ -47,7 +47,7 @@ Per pair, calculate:
 - **Issues resolved**: total resolved
 - **Resolution rate**: resolved / found
 - **Fast-path rate**: % of debates with `fast_path: true` (TRIVIAL_ACCEPT)
-- **Trend**: compare last 5 debates to previous 5 — improving, stable, or degrading
+- **Trend**: compare last 5 debates to previous 5 — improving, stable, or degrading. If fewer than 6 total debates exist, show `Trend: — (insufficient data)` rather than computing a comparison.
 
 ### Step 3: Present
 

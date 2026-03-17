@@ -32,7 +32,12 @@ Read `.ratchet/project.yaml` and `.ratchet/workflow.yaml` to understand:
 
 ### Step 2: Launch Analyst Agent
 
-Spawn the **analyst** agent with the following task:
+Spawn the **analyst** agent using the generative model from `workflow.yaml` (`models.generative`, default `opus`). Agent configuration:
+- `subagent_type`: analyst
+- `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
+- `tools`: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
+
+Task prompt:
 
 ```
 A new agent pair is being added to this Ratchet-configured project.

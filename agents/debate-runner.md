@@ -1,7 +1,7 @@
 ---
 name: debate-runner
 description: Debate orchestrator — creates debate directories, spawns generative/adversarial pairs, manages rounds until verdict
-tools: Read, Bash, Write, Edit, Agent, AskUserQuestion
+tools: Read, Write, Edit, Agent, AskUserQuestion
 disallowedTools: []
 ---
 
@@ -91,7 +91,8 @@ Create the directory structure and write initial `meta.json`:
   "started": "<ISO timestamp>",
   "resolved": null,
   "verdict": null,
-  "fast_path": false
+  "fast_path": false,
+  "decided_by": null
 }
 ```
 
@@ -300,9 +301,9 @@ If the loop completes all rounds without a verdict:
 
 3. Based on escalation policy:
    - **tiebreaker**: Spawn tiebreaker agent (from `agents/tiebreaker.md`) with `model` set to the tiebreaker model from the task context. Provide the full debate transcript. Map tiebreaker verdict:
-     - Tiebreaker ACCEPT → `status: "resolved"`, `decided_by: "tiebreaker"`
-     - Tiebreaker MODIFY → `status: "resolved"`, `decided_by: "tiebreaker"`, log `required_changes` as conditions
-     - Tiebreaker REJECT → `status: "resolved"`, `decided_by: "tiebreaker"`, `verdict: "REJECT"`
+     - Tiebreaker ACCEPT → `status: "resolved"`, `verdict: "ACCEPT"`, `decided_by: "tiebreaker"`
+     - Tiebreaker MODIFY → `status: "resolved"`, `verdict: "CONDITIONAL_ACCEPT"`, `decided_by: "tiebreaker"`, log `required_changes` as conditions
+     - Tiebreaker REJECT → `status: "resolved"`, `verdict: "REJECT"`, `decided_by: "tiebreaker"`
    - **human**: Set `status: "escalated"`. Return to caller with `verdict: "escalated"`. The caller will inform the user to use `/ratchet:verdict`.
    - **both**: Spawn tiebreaker first, then present recommendation to caller for human review.
 
