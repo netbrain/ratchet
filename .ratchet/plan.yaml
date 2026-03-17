@@ -1,0 +1,126 @@
+epic:
+  name: "Engine Robustness"
+  description: "Harden the Ratchet engine — fix review gaps, script robustness, e2e tests, sidequest lifecycle"
+  milestones:
+    - id: 1
+      name: "Review Follow-ups"
+      description: "Fix remaining gaps surfaced by the 4 codebase review debates"
+      status: pending
+      done_when: "All review findings addressed, no open conditions from debate consensus"
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "#21"
+          title: "Fix retro discovery status field + sidequest skill review"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+        - ref: "#22"
+          title: "Expand schema scope to cover .claude/ratchet-schemas"
+          pairs: [schema-correctness]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 2
+      name: "Script Hardening"
+      description: "Systematic robustness pass on all bash scripts — atomic JSON, cleanup traps, bash 3.2+ portability"
+      status: pending
+      done_when: "All scripts have atomic JSON writes, proper cleanup traps, portability verified on bash 3.2+"
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "#23"
+          title: "Harden progress adapter scripts (github-issues, markdown, none)"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+        - ref: "#24"
+          title: "Harden core scripts (cache, consensus, guards, scores)"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 3
+      name: "E2E Test Infrastructure"
+      description: "Build a test harness that exercises install/uninstall and debate flows end-to-end"
+      status: pending
+      done_when: "A runnable test suite exists that validates core workflows"
+      depends_on: [1]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "#25"
+          title: "Install/uninstall cycle test"
+          pairs: [script-robustness]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+        - ref: "#26"
+          title: "Debate flow end-to-end test"
+          pairs: [script-robustness, skill-coherence]
+          depends_on: ["#25"]
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+    - id: 4
+      name: "Sidequest Lifecycle Validation"
+      description: "Verify discovery/sidequest feature works end-to-end across watch, retro, run, status, sidequest skills"
+      status: pending
+      done_when: "A discovery can be created, displayed, promoted to issue, and resolved"
+      depends_on: [1]
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: "#27"
+          title: "Sidequest creation and display flow validation"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+        - ref: "#28"
+          title: "Sidequest promotion to issue flow"
+          pairs: [skill-coherence]
+          depends_on: ["#27"]
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          status: pending
+
+  current_focus: null
+  discoveries: []

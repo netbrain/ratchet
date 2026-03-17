@@ -7,6 +7,7 @@ result-*
 .ratchet/*
 !.ratchet/workflow.yaml
 !.ratchet/project.yaml
+!.ratchet/plan.yaml
 !.ratchet/pairs/
 
 # Ratchet workspaces: Exclude runtime state in all workspace subdirs
