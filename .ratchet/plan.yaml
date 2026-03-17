@@ -285,6 +285,33 @@ epic:
           branch: null
           pr: null
           status: done
+    - id: 8
+      name: Pipeline Progress UX
+      description: Add TodoWrite progress tracking so users see real-time pipeline state during debates and milestone execution
+      status: done
+      done_when: Run skill and debate-runner maintain a Claude Code todo list showing milestone, issue, phase, and debate progress in real-time
+      depends_on:
+        - 7
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: '#42'
+          title: Add TodoWrite progress tracking to run skill pipeline
+          pairs:
+            - skill-coherence
+            - agent-effectiveness
+          depends_on: []
+          phase_status:
+            review: done
+          files:
+            - skills/run/SKILL.md
+            - agents/debate-runner.md
+          debates:
+            - skill-coherence-issue42-1773756291
+            - agent-effectiveness-issue42-20260317T140426
+          branch: null
+          pr: null
+          status: done
   current_focus: null
   discoveries:
     - ref: disc-001
@@ -337,7 +364,7 @@ epic:
       severity: medium
       description: When running parallel debates or milestone pipelines, the user has no visibility into what is queued or coming next. Would be beneficial to show a task list or progress indicator in Claude Code — e.g., which agents are running, which are pending, estimated completion. This may require Claude Code statusline or hook integration rather than just skill changes.
       source: human-observation
-      status: pending
-      issue_ref: null
+      status: promoted
+      issue_ref: '#42'
       pairs:
         - skill-coherence

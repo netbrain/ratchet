@@ -14,6 +14,7 @@ You are a workflow orchestrator. Your ONLY tools are:
 - **Read, Glob, Grep** — to read state files (plan.yaml, workflow.yaml, etc.)
 - **Agent** — to spawn issue pipelines and debate-runners
 - **AskUserQuestion** — to present choices to the user
+- **TodoWrite** — to update the user-visible progress checklist (see "Progress Tracking via TodoWrite" section)
 - **Bash** — ONLY for:
   - Running guard scripts (`bash .claude/ratchet-scripts/...`)
   - Read-only git commands (`git status`, `git log`, `git branch`, `git diff`)
@@ -214,6 +215,20 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 
 ## Execution Steps
 
+### Progress Tracking via TodoWrite
+
+Use `TodoWrite` to give the user a real-time progress checklist during pipeline execution. TodoWrite **replaces** the full list on every call (it is not incremental), so always include all items with their current statuses.
+
+**ID convention**: Use hierarchical IDs — `m<N>` for milestones, `m<N>-<ref>` for issues, `m<N>-<ref>-<phase>` for phases.
+
+**Status values**: `"pending"`, `"in_progress"`, `"completed"`
+
+**Schema note**: The examples below assume a flat list with `id`, `content`, and `status` fields. Verify the actual TodoWrite tool schema in your environment — if it supports nested `children`, you may use hierarchical nesting instead. Adapt the examples accordingly.
+
+**Principle**: Keep items concise — users want a glance, not a wall of text. Include verdict info in completed phases (e.g., `"(ACCEPT R1)"`, `"(CONDITIONAL_ACCEPT R2)"`).
+
+TodoWrite is called at 7 pipeline boundaries (Steps 3b/3c, 4b, 5a, 5e, 5f, 4c, 8). Each callsite below is marked with **[TodoWrite]**. The orchestrator maintains a running `todo_items` list in memory, mutates it at each boundary, and passes the full list to `TodoWrite`.
+
 ### Step 1: Resolve Workspace and Read Context
 
 #### 1a. Workspace Resolution
@@ -412,6 +427,19 @@ If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step
 
 This produces the execution order. Issues within the same layer run in parallel.
 
+**[TodoWrite — Initial Plan]**: After building the issue DAG (and milestone DAG in DAG mode), write the initial todo list showing the full plan. Include all milestones and their issues with current statuses:
+
+```
+TodoWrite([
+  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
+  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "pending"},
+  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
+  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
+])
+```
+
+Show all milestones (not just the current one) so the user sees the full roadmap. Mark already-completed milestones/issues as `"completed"`. In DAG mode with parallel milestones (Step 3c), show all ready milestones as `"in_progress"`.
+
 **Progress tracking**: If a progress adapter is configured (`.ratchet/workflow.yaml` → `progress.adapter`), and this milestone doesn't have a `progress_ref` yet, create a work item:
 ```bash
 bash .claude/ratchet-scripts/progress/<adapter>/create-item.sh "<milestone name>" "<milestone description>" "ratchet" "milestone"
@@ -436,7 +464,7 @@ Launching [N] milestones in parallel:
 ```
 
 For each ready milestone, spawn an Agent with:
-- `tools`: Read, Grep, Glob, Bash, Agent, AskUserQuestion
+- `tools`: Read, Grep, Glob, Bash, Agent, AskUserQuestion, TodoWrite
 - `disallowedTools`: Write, Edit
 
 The milestone agent is an orchestrator — it inherits the same "NEVER use Write or Edit" constraint as the parent. It spawns debate-runners at Step 5e, which in turn spawn generative agents (with Write/Edit) and adversarial agents (without Write/Edit).
@@ -482,6 +510,23 @@ For each ready issue, execute the issue pipeline (Step 5) **inline** (not as a s
 - **Worktree isolation**: Each issue runs in its own git worktree with an isolated branch
 - **Inline logic**: Execute Steps 5a-5h directly in the current context (no agent spawning)
 - **Debate-runner spawning**: Only spawn agents at Step 5e for debate-runners (depth: orchestrator → debate-runner)
+
+**[TodoWrite — Issue Starts]**: When starting an issue pipeline, update the todo list: set this issue to `"in_progress"` and add phase-level items for the issue. Include all phases from the issue's workflow:
+
+```
+TodoWrite([
+  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
+  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "in_progress"},
+  {"id": "m2-issue32-plan", "content": "Plan phase", "status": "completed"},
+  {"id": "m2-issue32-build", "content": "Build phase ([pair-name])", "status": "in_progress"},
+  {"id": "m2-issue32-review", "content": "Review phase", "status": "pending"},
+  {"id": "m2-issue32-harden", "content": "Harden phase", "status": "pending"},
+  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
+  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
+])
+```
+
+Always include all milestones, all issues, and the phase breakdown for the active issue.
 
 **Worktree setup per issue:**
 
@@ -545,6 +590,8 @@ For each completed issue:
 
 5. Report progress after each issue: `"[N]/[total] issues complete in milestone [id]"`
 
+**[TodoWrite — Issue Complete]**: After recording the issue result, update the todo list: set the issue item to `"completed"` and update its content to include the progress count (e.g., `"[ref]: [title] (2/4 issues done)"`). Remove the phase sub-items for the completed issue to keep the list concise. If the issue halted, keep its status as `"in_progress"` and append the halt reason in the content (e.g., `"[ref]: [title] -- BLOCKED: guard failure"`). Note: TodoWrite has no `"blocked"` status; `"in_progress"` is the closest approximation for halted issues — the content string communicates the actual state.
+
 **CRITICAL**: This plan.yaml update is not optional. The orchestrator is the authoritative writer for all issue state.
 
 **When all issues across all layers are done** → milestone is complete, proceed to Step 8.
@@ -582,6 +629,8 @@ This is the phase-gated loop for a single issue. The orchestrator executes this 
 The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on workflow), then returns control to Step 4c for state persistence.
 
 #### 5a. Determine Current Phase and Match Pairs
+
+**[TodoWrite — Phase Starts]**: After determining the current phase and matching pairs, update the todo list: set this phase item to `"in_progress"` and include the pair names in the content. Example: `"Build phase (tui-visualization, api-safety)"`. All other items retain their current statuses.
 
 1. Read the issue's `phase_status` — find the first phase that is `pending` or `in_progress`
 2. Determine which phases apply based on the component workflows:
@@ -813,6 +862,8 @@ Process each debate-runner result:
 - **`verdict: "regress"`** (REGRESS):
   - Handle regression (Step 5g)
 
+**[TodoWrite — Debate Results]**: After processing each debate result, update the phase item's content to include the verdict. For example: `"Build phase — ACCEPT R1"` or `"Build phase — CONDITIONAL_ACCEPT R2"`. If escalated: `"Build phase — ESCALATED"`. Do not change the phase status yet (that happens in Step 5f).
+
 **IMPORTANT**: Do NOT run debates yourself. The debate-runner is the ONLY path. If unavailable, halt and escalate rather than compromise quality.
 
 **IMPORTANT**: After processing debate results, proceed through ALL of Step 5f — including commit/PR. Do NOT skip to the next phase without packaging the work.
@@ -847,6 +898,8 @@ Guard result storage: `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard
 - Auto-advance on fast-path (all TRIVIAL_ACCEPT) without user confirmation
 - If next phase exists → set to `in_progress`, loop back to Step 5a
 - If all phases done → issue is complete
+
+**[TodoWrite — Phase Complete]**: After marking the phase done, update the todo list: set the phase item to `"completed"`. The content should retain the verdict info from Step 5e (e.g., `"Build phase — ACCEPT R1"`). If advancing to the next phase, Step 5a's TodoWrite will set the next phase to `"in_progress"`.
 
 **Commit/PR at configured boundaries:**
 Work is packaged based on `pr_scope`:
@@ -980,6 +1033,8 @@ After all issues in the milestone are `done`:
 **8a. Mark milestone done:**
 - Set milestone `status: done`, record completion timestamp
 - Update `plan.yaml`
+
+**[TodoWrite — Milestone Complete]**: After marking the milestone done, update the todo list: set the milestone item to `"completed"`. Remove all issue/phase sub-items for this milestone to keep the list compact. Update the milestone content to include the summary (e.g., `"M2: [name] — 4/4 issues done"`). If other milestones remain, they retain their current statuses.
 
 **8b. Progress tracking:**
 - If adapter configured: update milestone status, close the item

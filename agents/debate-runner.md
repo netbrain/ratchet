@@ -1,7 +1,7 @@
 ---
 name: debate-runner
 description: Debate orchestrator — creates debate directories, spawns generative/adversarial pairs, manages rounds until verdict
-tools: Read, Write, Edit, Agent, AskUserQuestion
+tools: Read, Write, Edit, Agent, AskUserQuestion, TodoWrite
 disallowedTools: []
 ---
 
@@ -79,6 +79,60 @@ Context:
     generative: [opus|sonnet|haiku]
     adversarial: [opus|sonnet|haiku]
     tiebreaker: [opus|sonnet|haiku]
+  Progress:
+    todo_id: [parent todo item ID, or null if orchestrator did not provide one]
+```
+
+## Progress Reporting
+
+The debate-runner operates inside the orchestrator's TodoWrite context. Use TodoWrite to report debate progress so users see real-time status in their terminal.
+
+**Rules:**
+- UPDATE the existing debate todo item -- do NOT create new top-level items or replace the entire list
+- Use the todo ID provided by the parent orchestrator (passed in task context as `todo_id`), or if none provided, create a single item for this debate
+- Keep status text concise -- one line showing pair name, phase, round, and verdict
+
+**When to update:**
+
+1. **On debate start** (after creating meta.json in Step 1):
+   ```
+   TodoWrite: Update item to show debate initiated
+   Status: "Debate: {pair-name} ({phase} phase)"
+   ```
+
+2. **After each generative agent completes** (after saving round-N-generative.md in Step 2a):
+   ```
+   TodoWrite: Update item with round progress
+   Status: "Debate: {pair-name} -- Round {N} (generative done, adversarial pending)"
+   ```
+
+3. **After each adversarial agent completes** (after saving round-N-adversarial.md in Step 2b):
+   ```
+   TodoWrite: Update item with verdict status
+   Status: "Debate: {pair-name} -- Round {N} {VERDICT}, Round {N+1} starting"
+   (or if final: "Debate: {pair-name} -- {VERDICT} ({N} rounds)")
+   ```
+
+4. **On debate completion** (after finalizing meta.json in Step 5):
+   ```
+   TodoWrite: Mark item as completed
+   Status: "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
+   Mark: completed
+   ```
+
+**Example progression:**
+```
+Starting debate:
+  [ ] Debate: api-contracts (review phase)
+
+After round 1 generative:
+  [ ] Debate: api-contracts -- Round 1 (generative done, adversarial pending)
+
+After round 1 adversarial CONDITIONAL_ACCEPT:
+  [ ] Debate: api-contracts -- Round 1 CONDITIONAL_ACCEPT, Round 2 starting
+
+After round 2 ACCEPT:
+  [x] Debate: api-contracts -- ACCEPT (2 rounds)
 ```
 
 ## What You Produce
@@ -143,6 +197,8 @@ Create the directory structure and write initial `meta.json`:
   "conditional_accept_round": null
 }
 ```
+
+**Progress:** Update TodoWrite -- "Debate: {pair-name} ({phase} phase)"
 
 ### Error Handling
 
@@ -295,6 +351,8 @@ until proven otherwise. New changes are GUILTY until proven innocent:
 
 Save the generative agent's output to `.ratchet/debates/<id>/rounds/round-<N>-generative.md`.
 
+**Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} (generative done, adversarial pending)"
+
 Track any files the generative agent created or modified — these go into `files_modified` in the result.
 
 #### 2b. Spawn Adversarial Agent
@@ -351,6 +409,8 @@ otherwise. If the generative agent claims a test failure is "pre-existing" or
 
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 
+**Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} {VERDICT}[, Round {N+1} starting]"
+
 #### 2c. Parse Verdict
 
 Parse the adversarial agent's output for exactly one verdict keyword.
@@ -371,6 +431,8 @@ Update `meta.json` after every round.
 If the loop completes all rounds without a verdict:
 
 1. Set `status: "escalated"` in meta.json.
+
+**Progress:** Update TodoWrite -- "Debate: {pair-name} -- ESCALATED ({N} rounds, awaiting {escalation_policy})"
 
 2. **Precedent check**: If the caller provided escalation precedents matching this pair and dispute pattern, and 3+ rulings exist in the same direction:
    - Use `AskUserQuestion`: "This dispute matches a settled pattern — [N] prior escalations for [pair] on [dispute type] all resulted in [verdict]. Apply the settled pattern?"
@@ -440,6 +502,8 @@ Update `meta.json` with final state:
 - `rounds`: total rounds executed
 - `fast_path`: true if TRIVIAL_ACCEPT
 - `status`: "consensus" or "resolved" or "escalated"
+
+**Progress:** Mark TodoWrite item completed -- "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
 
 Return the result object to the caller.
 
