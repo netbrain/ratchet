@@ -146,7 +146,7 @@ This becomes the testing spec in `project.yaml`, and adversarial agents use it t
 When relevant to the project, suggest complementary tools from the broader ecosystem. Don't force these — only mention them when they genuinely fit the project's needs. These are resources to be aware of, not a checklist.
 
 **Agent quality & evaluation:**
-- [PromptFoo](https://github.com/promptfoo/promptfoo) — LLM eval, red-teaming, and regression testing. Useful when the project relies heavily on AI-generated code and you want to validate that Ratchet's agents are performing well over time. Can plug into `/ratchet:retro` as a quantitative signal. Suggest when: the project has many debate pairs and the user cares about agent drift or wants measurable quality metrics beyond debate scores.
+- [PromptFoo](https://github.com/promptfoo/promptfoo) — LLM eval, red-teaming, and regression testing. Useful when the project relies heavily on AI-generated code and you want to validate that Ratchet's agents are performing well over time. Can plug into `/ratchet:tighten` as a quantitative signal. Suggest when: the project has many debate pairs and the user cares about agent drift or wants measurable quality metrics beyond debate scores.
 
 **Persistent context & memory:**
 - [OpenViking](https://github.com/volcengine/OpenViking) — Context database for AI agents with tiered loading and semantic retrieval. Useful when cross-phase context is complex (large codebases, long-running epics) and flat-file context passing isn't enough. Suggest when: the project is large, has many milestones, or the user reports context loss between phases.
@@ -435,7 +435,7 @@ When reviewing agent performance (`/ratchet:tighten`):
 
 ## Ongoing Workflow Health Monitoring
 
-When performing post-milestone reviews (spawned by `/ratchet:run` Step 8f) or health checks (spawned by `/ratchet:advise`), analyze:
+When performing post-milestone reviews (spawned by `/ratchet:run` Step 8c) or tighten assessments (spawned by `/ratchet:tighten`), analyze:
 
 1. **Round trends** — Are pairs converging faster or slower over time? Rising round counts may indicate prompt drift or scope creep.
 2. **Always-fast-path pairs** — If a pair consistently issues TRIVIAL_ACCEPT, it may be redundant. Consider whether the pair is too broadly scoped or if its quality dimension is already covered by guards.

@@ -17,12 +17,11 @@ Ratchet skills are markdown files in `skills/*/SKILL.md` that define the behavio
 - `skills/debate/SKILL.md` — `/ratchet:debate` (view/continue debates)
 - `skills/status/SKILL.md` — `/ratchet:status` (progress dashboard)
 - `skills/score/SKILL.md` — `/ratchet:score` (quality metrics)
-- `skills/advise/SKILL.md` — `/ratchet:advise` (workflow health check)
+- `skills/tighten/SKILL.md` — `/ratchet:tighten` (analyze signals and sharpen system)
 - `skills/tighten/SKILL.md` — `/ratchet:tighten` (improve agents based on performance)
 - `skills/guard/SKILL.md` — `/ratchet:guard` (manage guards)
 - `skills/verdict/SKILL.md` — `/ratchet:verdict` (human tiebreaker for escalations)
 - `skills/gen-tests/SKILL.md` — `/ratchet:gen-tests` (generate tests from adversarial findings)
-- `skills/retro/SKILL.md` — `/ratchet:retro` (learn from PR feedback, CI failures)
 - `skills/sidequest/SKILL.md` — `/ratchet:sidequest` (manual discovery/sidequest logging)
 - `skills/update/SKILL.md` — `/ratchet:update` (update Ratchet framework)
 

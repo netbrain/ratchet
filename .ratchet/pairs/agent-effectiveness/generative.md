@@ -11,7 +11,7 @@ Review and improve Ratchet agent definitions for prompt quality, tool usage corr
 Ratchet has three core agents spawned during workflows:
 
 **Analyst** (`agents/analyst.md`):
-- `/ratchet:init` runs analyst inline (you ARE the analyst — no subagent spawn). Tighten/advise skills spawn analyst via Agent tool.
+- `/ratchet:init` runs analyst inline (you ARE the analyst — no subagent spawn). `/ratchet:tighten` spawns analyst via Agent tool.
 - Role: Project analysis, codebase scanning, agent pair generation
 - Tools: Read, Grep, Glob, Write, Edit, Bash, AskUserQuestion
 - Output: workflow.yaml, plan.yaml, project.yaml, pair definitions

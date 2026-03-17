@@ -66,7 +66,7 @@ For each agent (analyst, debate-runner, tiebreaker):
 ### Consistency with Skills
 - [ ] **Analyst** ↔ `/ratchet:init`:
   - Init skill runs analyst inline — YOU ARE the analyst (no subagent spawn) ✓
-  - Tighten/advise skills spawn analyst via Agent tool ✓
+  - `/ratchet:tighten` spawns analyst via Agent tool ✓
   - Analyst uses AskUserQuestion for interview ✓
   - Analyst outputs workflow.yaml, plan.yaml, project.yaml ✓
   - Output format matches what init expects ✓

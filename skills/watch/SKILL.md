@@ -197,7 +197,7 @@ done
 
 ### Discovery Schema
 
-Discoveries created by PR monitoring (and by `/ratchet:retro`) follow the **unified discovery schema** shared with `/ratchet:sidequest`:
+Discoveries created by PR monitoring (and by `/ratchet:tighten`) follow the **unified discovery schema** shared with `/ratchet:sidequest`:
 
 ```yaml
 epic:

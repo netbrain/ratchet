@@ -10,7 +10,7 @@ Ratchet turns AI code generation into a structured development process. Every ph
 4. **Agent pairs debate** — a builder (generative) and critic (adversarial) argue each phase. The critic runs real validation commands as evidence
 5. **Guards gate advancement** — deterministic checks (lint, tests, security scans) run at phase boundaries. Blocking guards must pass to advance
 6. **Issue → PR** — each issue produces its own PR when complete. Dependent issues state their merge order
-7. **Learn from feedback** — CI failures and PR review comments feed back into the system via retrospectives, improving agents and guards over time
+7. **Learn from feedback** — CI failures, PR review comments, and debate patterns feed back into the system via `/ratchet:tighten`, improving agents and guards over time
 
 ## Installation
 
@@ -137,10 +137,8 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 | `/ratchet:debate [id]` | View or continue an ongoing debate |
 | `/ratchet:verdict [id]` | Human-in-the-loop: cast deciding vote on escalated debate |
 | `/ratchet:score [pair]` | Quality metrics and trends |
-| `/ratchet:retro [pr]` | Retrospective — learn from CI failures and PR feedback |
 | `/ratchet:gen-tests` | Generate tests from debate findings |
-| `/ratchet:tighten [pair]` | Sharpen agents from debate lessons and retro findings |
-| `/ratchet:advise` | On-demand workflow health check — pair effectiveness, scope gaps, guard recommendations |
+| `/ratchet:tighten [pair\|pr N]` | Analyze all improvement signals and sharpen the system — pair prompts, guards, workflow config |
 
 ## Workflow
 
@@ -270,23 +268,23 @@ milestones:
     depends_on: [1, 2]      # Layer 1 — waits for both
 ```
 
-**Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs across retros, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
+**Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
 
 **Cross-cutting scope** — Changed files are matched against all component scopes, not just the first match. Multi-component changes automatically trigger pairs from all relevant components. Pairs can use `scope: "auto"` to inherit their parent component's scope.
 
 **Tiebreaker learning** — Escalation rulings are stored in `.ratchet/escalations/`. When 3+ rulings exist in the same direction for the same pair and dispute type, the settled pattern is offered as a shortcut before spawning the tiebreaker.
 
-**Workflow health checks** — `/ratchet:advise` spawns the analyst for an on-demand assessment: pair effectiveness rankings, scope coverage gaps, guard recommendations, and workflow preset suggestions. Also runs automatically after each milestone completion.
+**Workflow health checks** — `/ratchet:tighten` spawns the analyst for an on-demand assessment: pair effectiveness rankings, scope coverage gaps, guard recommendations, workflow preset suggestions, and PR/CI gap analysis. Also runs automatically after each milestone completion.
 
 ### Feedback Loop
 
 ```
-debates → guards → commit/PR → CI runs → /ratchet:retro → /ratchet:tighten
-    ↑                                                            │
-    └────────────────────────────────────────────────────────────┘
+debates → guards → commit/PR → CI runs → /ratchet:tighten
+    ↑                                          │
+    └──────────────────────────────────────────┘
 ```
 
-`/ratchet:retro` analyzes CI failures and PR review comments, identifies what Ratchet's debates missed, and proposes fixes (new guards, updated agent prompts, new pairs). `/ratchet:tighten` consumes retro findings to sharpen agents over time.
+`/ratchet:tighten` is the single entrypoint for improving the system. It analyzes CI failures, PR review comments, debate history, escalation patterns, and discoveries — identifies what Ratchet missed — and applies fixes: sharpened agent prompts, new guards, workflow config changes.
 
 ## Architecture
 
@@ -427,7 +425,7 @@ resources:
 ├── retros/              # Retrospective findings with severity and recurrence  (.gitignore)
 ├── escalations/         # Tiebreaker rulings for precedent lookup              (.gitignore)
 ├── guards/              # Guard execution results                              (.gitignore)
-├── reports/             # Health check reports from /ratchet:advise            (.gitignore)
+├── reports/             # Tighten reports and health assessments               (.gitignore)
 ├── progress/            # Local progress tracking (markdown adapter)           (.gitignore)
 └── scores/              # Historical quality metrics (includes fast-path data) (.gitignore)
 ```

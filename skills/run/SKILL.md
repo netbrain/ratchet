@@ -333,13 +333,13 @@ Options:
 
 - Question: "Discovery: [title] ([category], [severity])\n[description]"
 - Options:
-  - `"Process now"` — handle via existing pipeline (retro, re-launch, etc.)
+  - `"Process now"` — handle via existing pipeline (tighten, re-launch, etc.)
   - `"Promote to issue"` — convert this discovery into a full plan.yaml issue
   - `"Dismiss"` — mark as non-actionable
   - `"Skip for now"` — leave as pending, move to next discovery
 
 **Action: Process now** (existing behavior):
-- `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:retro pr <N>` for the affected issue
+- `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:tighten pr <N>` for the affected issue
 - `retro_type: "skipped-finding"` → present to user for decision (apply now or defer)
 - No `retro_type` with `issue_ref` set (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase
 - No `retro_type` with `issue_ref: null` (manual discovery with no issue context) → cannot process directly, inform user: "This discovery has no linked issue. Promote it to an issue first, or dismiss it." Then re-present the action selector without the "Process now" option.
@@ -1051,7 +1051,7 @@ Spawn the analyst agent (with resolved `analyst` model, defaults to `opus`) for 
 
 The post-milestone analyst is **read-only** — it analyzes data and produces recommendations. Any file modifications from recommendations are applied by the orchestrator's parent skill, not the analyst.
 
-The analyst reviews all issue debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
+The analyst reviews all issue debates, scores, guard results, and any escalation data to produce 3-5 bullet points covering:
 - Pair effectiveness observations
 - Scope coverage gaps
 - Guard recommendations

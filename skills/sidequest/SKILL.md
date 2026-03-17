@@ -5,7 +5,7 @@ description: Manually log discoveries and sidequests during active work
 
 # /ratchet:sidequest — Log a Discovery
 
-Manually log discoveries during active work — mid-debate, mid-phase, mid-milestone. This fills the gap between auto-detected discoveries (watch creates them for CI failures/merge conflicts, retro creates them for skipped findings) and manual tracking.
+Manually log discoveries during active work — mid-debate, mid-phase, mid-milestone. This fills the gap between auto-detected discoveries (watch creates them for CI failures/merge conflicts, tighten creates them for skipped findings) and manual tracking.
 
 Lightweight and fast. No debates, no guards, just bookkeeping.
 
@@ -204,4 +204,4 @@ Valid status values: `pending` | `done` | `promoted` | `dismissed`
 - `/ratchet:status` — View pending discoveries
 - `/ratchet:run` — Process discoveries as sidequest work items
 - `/ratchet:watch` — Auto-detects discoveries from CI failures and merge conflicts
-- `/ratchet:retro` — Creates discoveries from retrospective analysis
+- `/ratchet:tighten` — Creates discoveries from retrospective analysis and PR feedback
