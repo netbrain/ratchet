@@ -3,16 +3,16 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestStaticHandler_ServesFiles(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "test.js"), []byte("console.log('hello')"), 0o644)
+	fsys := fstest.MapFS{
+		"test.js": &fstest.MapFile{Data: []byte("console.log('hello')")},
+	}
 
-	h := StaticHandler(dir)
+	h := StaticHandler(fsys)
 	req := httptest.NewRequest(http.MethodGet, "/static/test.js", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -28,14 +28,32 @@ func TestStaticHandler_ServesFiles(t *testing.T) {
 }
 
 func TestStaticHandler_NotFound(t *testing.T) {
-	dir := t.TempDir()
+	fsys := fstest.MapFS{}
 
-	h := StaticHandler(dir)
+	h := StaticHandler(fsys)
 	req := httptest.NewRequest(http.MethodGet, "/static/nonexistent.js", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestStaticHandler_VendorSubdir(t *testing.T) {
+	fsys := fstest.MapFS{
+		"vendor/alpine.min.js": &fstest.MapFile{Data: []byte("alpine-code")},
+	}
+
+	h := StaticHandler(fsys)
+	req := httptest.NewRequest(http.MethodGet, "/static/vendor/alpine.min.js", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Body.String(); got != "alpine-code" {
+		t.Errorf("body: got %q, want %q", got, "alpine-code")
 	}
 }

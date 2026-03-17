@@ -4,17 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestIndexHandler_GET_ReturnsHTML(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "index.html")
-	os.WriteFile(tmplPath, []byte(`<html><body>hello</body></html>`), 0o644)
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html><body>hello</body></html>`)},
+	}
 
-	h := IndexHandler(tmplPath)
+	h := IndexHandler(fsys, "index.html")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -29,11 +28,11 @@ func TestIndexHandler_GET_ReturnsHTML(t *testing.T) {
 }
 
 func TestIndexHandler_POST_Returns405(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "index.html")
-	os.WriteFile(tmplPath, []byte(`<html><body>hello</body></html>`), 0o644)
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html><body>hello</body></html>`)},
+	}
 
-	h := IndexHandler(tmplPath)
+	h := IndexHandler(fsys, "index.html")
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -54,11 +53,11 @@ func TestIndexHandler_POST_Returns405(t *testing.T) {
 }
 
 func TestIndexHandler_PUT_Returns405(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "index.html")
-	os.WriteFile(tmplPath, []byte(`<html><body>hello</body></html>`), 0o644)
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html><body>hello</body></html>`)},
+	}
 
-	h := IndexHandler(tmplPath)
+	h := IndexHandler(fsys, "index.html")
 	req := httptest.NewRequest(http.MethodPut, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -69,8 +68,10 @@ func TestIndexHandler_PUT_Returns405(t *testing.T) {
 }
 
 func TestIndexHandler_MissingTemplate_Returns500(t *testing.T) {
-	// Provide a path to a non-existent file — should not panic.
-	h := IndexHandler("/nonexistent/path/index.html")
+	// Empty FS — template file does not exist. Should not panic.
+	fsys := fstest.MapFS{}
+
+	h := IndexHandler(fsys, "nonexistent.html")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
@@ -83,11 +84,11 @@ func TestIndexHandler_MissingTemplate_Returns500(t *testing.T) {
 }
 
 func TestIndexHandler_GET_XContentTypeOptions(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "index.html")
-	os.WriteFile(tmplPath, []byte(`<html><body>hello</body></html>`), 0o644)
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html><body>hello</body></html>`)},
+	}
 
-	h := IndexHandler(tmplPath)
+	h := IndexHandler(fsys, "index.html")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -99,12 +100,11 @@ func TestIndexHandler_GET_XContentTypeOptions(t *testing.T) {
 }
 
 func TestIndexHandler_InvalidTemplate_Returns500(t *testing.T) {
-	dir := t.TempDir()
-	tmplPath := filepath.Join(dir, "index.html")
-	// Invalid Go template syntax
-	os.WriteFile(tmplPath, []byte(`<html>{{ .Invalid`), 0o644)
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<html>{{ .Invalid`)},
+	}
 
-	h := IndexHandler(tmplPath)
+	h := IndexHandler(fsys, "index.html")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
@@ -112,5 +112,21 @@ func TestIndexHandler_InvalidTemplate_Returns500(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestIndexHandler_NestedPath(t *testing.T) {
+	// Verify it works with nested paths like "templates/index.html"
+	fsys := fstest.MapFS{
+		"templates/index.html": &fstest.MapFile{Data: []byte(`<html><body>nested</body></html>`)},
+	}
+
+	h := IndexHandler(fsys, "templates/index.html")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
 	}
 }

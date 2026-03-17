@@ -3,13 +3,18 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
+	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	monitor "github.com/netbrain/ratchet-monitor"
 	"github.com/netbrain/ratchet-monitor/internal/datasource"
 	"github.com/netbrain/ratchet-monitor/internal/handler"
 	"github.com/netbrain/ratchet-monitor/internal/pipeline"
@@ -18,8 +23,46 @@ import (
 )
 
 func main() {
-	dir := envOr("WATCH_DIR", ".")
-	addr := envOr("LISTEN_ADDR", ":9100")
+	var (
+		dir       string
+		addr      string
+		workspace string
+		verbose   bool
+	)
+
+	flag.StringVar(&dir, "dir", "", "path to .ratchet directory (env: WATCH_DIR, default: \".\")")
+	flag.StringVar(&dir, "d", "", "path to .ratchet directory (shorthand)")
+	flag.StringVar(&addr, "addr", "", "listen address (env: LISTEN_ADDR, default: \":9100\")")
+	flag.StringVar(&addr, "a", "", "listen address (shorthand)")
+	flag.StringVar(&workspace, "workspace", "", "workspace name filter")
+	flag.StringVar(&workspace, "w", "", "workspace name filter (shorthand)")
+	flag.BoolVar(&verbose, "verbose", false, "enable debug logging")
+	flag.BoolVar(&verbose, "v", false, "enable debug logging (shorthand)")
+	flag.Parse()
+
+	// CLI flag > env var > default
+	if dir == "" {
+		dir = envOr("WATCH_DIR", ".")
+	}
+	if addr == "" {
+		addr = envOr("LISTEN_ADDR", ":9100")
+	}
+
+	// Configure slog level based on verbose flag.
+	logLevel := slog.LevelInfo
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: logLevel,
+	})))
+
+	slog.Debug("configuration",
+		"dir", dir,
+		"addr", addr,
+		"workspace", workspace,
+		"verbose", verbose,
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -28,7 +71,7 @@ func main() {
 	w, err := watcher.New(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Fatalf("WATCH_DIR %q does not exist; create it or set WATCH_DIR to a valid .ratchet directory", dir)
+			log.Fatalf("directory %q does not exist; create it or set --dir / WATCH_DIR to a valid .ratchet directory", dir)
 		}
 		log.Fatalf("failed to create watcher for %q: %v", dir, err)
 	}
@@ -47,8 +90,18 @@ func main() {
 	// Create the file-backed data source for API handlers.
 	ds := datasource.NewFileDataSource(dir)
 
+	// Prepare embedded filesystems for templates and static assets.
+	templatesFS, err := fs.Sub(monitor.TemplatesFS, "templates")
+	if err != nil {
+		log.Fatalf("failed to create templates sub-FS: %v", err)
+	}
+	staticFS, err := fs.Sub(monitor.StaticFS, "static")
+	if err != nil {
+		log.Fatalf("failed to create static sub-FS: %v", err)
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/", handler.IndexHandler("templates/index.html"))
+	mux.Handle("/", handler.IndexHandler(templatesFS, "index.html"))
 	mux.Handle("/health", handler.HealthHandler())
 	mux.Handle("/events", handler.SSEHandler(broker))
 
@@ -61,8 +114,8 @@ func main() {
 	mux.Handle("/api/scores", handler.ScoresHandler(ds))
 	mux.Handle("/api/workspaces", handler.WorkspacesHandler(ds))
 
-	// Static file serving.
-	mux.Handle("/static/", handler.StaticHandler("static"))
+	// Static file serving from embedded FS.
+	mux.Handle("/static/", handler.StaticHandler(staticFS))
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -72,15 +125,20 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		log.Println("shutting down server")
+		slog.Info("shutting down server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown error: %v", err)
+			slog.Error("server shutdown error", "error", err)
 		}
 	}()
 
-	log.Printf("watching %s, serving on %s", dir, addr)
+	if workspace != "" {
+		fmt.Fprintf(os.Stderr, "watching %s (workspace=%s), serving on %s\n", dir, workspace, addr)
+	} else {
+		fmt.Fprintf(os.Stderr, "watching %s, serving on %s\n", dir, addr)
+	}
+	slog.Info("server starting", "dir", dir, "addr", addr, "workspace", workspace)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
