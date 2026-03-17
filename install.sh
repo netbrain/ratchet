@@ -168,6 +168,17 @@ do_install() {
         echo "  Installed schemas to $schemas_dir/"
     fi
 
+    # Copy statusline scripts
+    if [ -d "$SCRIPT_DIR/statusline" ] && ls "$SCRIPT_DIR"/statusline/*.sh >/dev/null 2>&1; then
+        for statusline_file in "$SCRIPT_DIR"/statusline/*.sh; do
+            local basename_file
+            basename_file="$(basename "$statusline_file")"
+            cp "$statusline_file" "$target/$basename_file"
+            chmod +x "$target/$basename_file"
+        done
+        echo "  Installed statusline scripts to $target/"
+    fi
+
     # Git pre-commit hook (local installs only)
     if [ "$skip_hooks" = "false" ] && [ "$target" != "$HOME/.claude" ]; then
         install_git_hook "$(pwd)" "$scripts_dir"
@@ -176,6 +187,9 @@ do_install() {
     echo ""
     echo "Done! Ratchet installed."
     echo "  Start claude and verify with /help — look for /ratchet:init"
+    echo ""
+    echo "Optional: Configure Ratchet statusline in Claude Code settings:"
+    echo "  statusline: $target/statusline-ratchet.sh"
 }
 
 do_uninstall() {
@@ -206,6 +220,17 @@ do_uninstall() {
         chmod -R u+w "$schemas_dir" 2>/dev/null || true
         rm -rf "$schemas_dir"
         echo "  Removed schemas"
+    fi
+
+    # Remove statusline scripts
+    for statusline_pattern in "$target"/statusline-*.sh; do
+        if [ -f "$statusline_pattern" ]; then
+            chmod u+w "$statusline_pattern" 2>/dev/null || true
+            rm -f "$statusline_pattern"
+        fi
+    done
+    if ls "$target"/statusline-*.sh >/dev/null 2>&1; then
+        echo "  Removed statusline scripts"
     fi
 
     # Remove old plugin-style install if present
