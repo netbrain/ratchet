@@ -9,7 +9,8 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
 
 ## Usage
 ```
-/ratchet:statusline          # Install the statusline
+/ratchet:statusline          # Install the statusline (local settings)
+/ratchet:statusline --global # Install to global settings (~/.claude/)
 /ratchet:statusline --remove # Remove it and restore default
 ```
 
@@ -42,7 +43,9 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
 
    Then stop. Do nothing else.
 
-2. **Update settings.** Read `.claude/settings.json` (or `~/.claude/settings.json` for global installs). If the file doesn't exist, create it with just the statusline key. If it exists, add/update only the `statusline` key — preserve everything else.
+2. **Update settings.** Default to **local** (`.claude/settings.json`). Use `~/.claude/settings.json` only if `--global` is specified.
+
+   If the settings file doesn't exist, create it with just the statusline key. If it exists, add/update only the `statusline` key — preserve everything else.
 
    ```json
    {
@@ -56,6 +59,6 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
 
 ### Remove (`--remove`)
 
-1. Read `.claude/settings.json` (check local, then global)
+1. Read `.claude/settings.json` (check local first, then global)
 2. Remove the `statusline` key — preserve everything else
 3. Confirm: "Statusline removed. Restart Claude Code to restore default."
