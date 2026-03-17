@@ -3,16 +3,16 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestStaticHandler_ServesFiles(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "test.js"), []byte("console.log('hello')"), 0o644)
+	fsys := fstest.MapFS{
+		"test.js": {Data: []byte("console.log('hello')")},
+	}
 
-	h := StaticHandler(dir)
+	h := StaticHandler(fsys)
 	req := httptest.NewRequest(http.MethodGet, "/static/test.js", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -28,9 +28,9 @@ func TestStaticHandler_ServesFiles(t *testing.T) {
 }
 
 func TestStaticHandler_NotFound(t *testing.T) {
-	dir := t.TempDir()
+	fsys := fstest.MapFS{}
 
-	h := StaticHandler(dir)
+	h := StaticHandler(fsys)
 	req := httptest.NewRequest(http.MethodGet, "/static/nonexistent.js", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
