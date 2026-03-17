@@ -1,286 +1,100 @@
-# /ratchet:watch — Background Monitoring
+---
+name: ratchet:watch
+description: Watch active PRs for merge conflicts and CI failures, auto-create sidequests
+---
 
-Monitor Ratchet epic progress in the background using Claude Code's `/loop` feature.
+# /ratchet:watch — PR Monitor
+
+Watch active Ratchet PRs for merge conflicts and CI failures. When problems are detected, automatically creates discoveries in plan.yaml so they surface in `/ratchet:run` and `/ratchet:status`.
+
+Uses Claude Code's `/loop` feature to poll every 10 minutes.
 
 ## Usage
-
-```bash
-/ratchet:watch              # Start monitoring current workspace
-/ratchet:watch monitor      # Monitor specific workspace
-/ratchet:watch --stop       # Stop all monitoring loops
-/ratchet:watch --list       # List active monitoring loops
+```
+/ratchet:watch              # Start watching PRs
+/ratchet:watch --stop       # Stop watching
 ```
 
-## What It Does
+## Prerequisites
+- `.ratchet/plan.yaml` must exist with issues that have `pr` fields populated
+- `gh` CLI must be authenticated
 
-Sets up background loops to monitor epic progress without interrupting your workflow:
-
-- **Every 5 minutes**: Display epic status summary
-- **Every 10 minutes**: Check PRs for merge conflicts and CI failures
-- **Every 1 hour**: Update quality scores and metrics
-- **Every 30 minutes**: Check for blocked/escalated issues requiring attention
-
-All monitoring output is displayed between your turns at low priority.
-
-### PR Monitoring Features
-
-When PR monitoring is enabled, `/ratchet:watch` proactively:
-
-1. **Detects merge conflicts**: Checks all open Ratchet PRs for merge conflicts
-2. **Monitors CI status**: Watches GitHub Actions/CI checks for failures
-3. **Auto-creates sidequests**: When issues are detected, automatically adds discoveries to `plan.yaml`:
-   - **CI failure** → Creates retro sidequest to learn from the failure
-   - **Merge conflict** → Creates fix sidequest to resolve the conflict
-4. **Notifies you**: Surfaces issues between your turns for awareness
-
-## Requirements
-
-- Claude Code v2.1.72+ (requires `/loop` feature)
-- Active Ratchet workspace with `plan.yaml`
+If no PRs exist in plan.yaml, inform the user:
+> "No PRs found in plan.yaml. PRs are created by /ratchet:run when issues complete."
 
 ## Behavior
 
-When you run `/ratchet:watch`:
+### Starting
 
-1. **Resolve workspace** (same logic as `/ratchet:run`):
-   - If workspace specified → use that
-   - If CWD inside workspace → auto-detect
-   - If at workspace root → present selector
-
-2. **Set up monitoring loops**:
-   ```bash
-   /loop 5m /ratchet:status [workspace] --quiet
-   /loop 10m check Ratchet PRs for conflicts and CI failures
-   /loop 1h /ratchet:score [workspace] --summary
-   /loop 30m check for blocked issues in [workspace]
+1. **Resolve workspace** (same logic as `/ratchet:run` Step 1a)
+2. **Verify PRs exist** — scan plan.yaml for issues with non-null `pr` fields
+3. **Start loop**:
    ```
+   /loop 10m check Ratchet PRs for conflicts and CI failures
+   ```
+4. **Confirm**: "Watching [N] PRs. Checking every 10 minutes. Use /ratchet:watch --stop to end."
 
-3. **Track loop IDs** in `/tmp/ratchet-watch-loops-[workspace].json` for later cleanup
+### Each Poll Cycle
 
-4. **Confirm to user**: "Monitoring [workspace] epic in background. Loops will expire after 72 hours or when session closes. Use /ratchet:watch --stop to end monitoring."
-
-## Stopping Monitoring
-
-`/ratchet:watch --stop` cancels all Ratchet monitoring loops. It does NOT stop the main `/ratchet:run` workflow if running.
-
-## Listing Active Monitors
-
-`/ratchet:watch --list` shows active monitoring loops with their last execution time.
-
-## Implementation
-
-### Loop Management
+For each PR URL found in plan.yaml (`epic.milestones[].issues[] | select(.pr != null) | .pr`):
 
 ```bash
-# For --stop flag:
-# Cancel all loops tracked in /tmp/ratchet-watch-loops-[workspace].json
-# Use Claude Code's loop cancellation API
+pr_num=$(echo "$pr_url" | grep -oP 'pull/\K\d+')
 
-# Store loop metadata:
-{
-  "workspace": "monitor",
-  "started": "2026-03-17T00:30:00Z",
-  "loops": [
-    {"id": "loop-123", "command": "/ratchet:status monitor --quiet", "interval": "5m"},
-    {"id": "loop-124", "command": "check PRs", "interval": "10m"},
-    {"id": "loop-125", "command": "/ratchet:score monitor --summary", "interval": "1h"},
-    {"id": "loop-126", "command": "check blocked issues", "interval": "30m"}
-  ]
-}
+# Check merge conflict status
+mergeable=$(gh pr view "$pr_num" --json mergeable -q .mergeable)
+
+# Check CI status
+ci_status=$(gh pr view "$pr_num" --json statusCheckRollup -q '.statusCheckRollup[] | select(.conclusion != "SUCCESS") | .name')
 ```
 
-### Blocked Issue Check (every 30 minutes)
+**Merge conflict detected** (`mergeable == "CONFLICTING"`):
+- Check if discovery already exists: `epic.discoveries[] | select(.source == "pr-conflict-<pr_num>")`
+- If not, create discovery:
+  ```bash
+  issue_ref=$(yq eval ".epic.milestones[].issues[] | select(.pr == \"$pr_url\") | .ref" .ratchet/plan.yaml)
+  milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
+  yq eval -i ".epic.discoveries += [{
+    \"ref\": \"discovery-conflict-$(date +%s)\",
+    \"title\": \"Merge conflict in PR #$pr_num\",
+    \"description\": \"PR #$pr_num for issue $issue_ref has merge conflicts with main.\",
+    \"category\": \"bug\",
+    \"severity\": \"critical\",
+    \"source\": \"pr-conflict-$pr_num\",
+    \"created_at\": \"$(date -Iseconds)\",
+    \"status\": \"pending\",
+    \"issue_ref\": \"$issue_ref\"
+  }]" .ratchet/plan.yaml
+  ```
+- Report: "Merge conflict detected: PR #[N] (issue [ref]) — discovery created"
 
-```bash
-if [ -f .ratchet/plan.yaml ]; then
-  blocked=$(yq eval '.epic.milestones[].issues[] | select(.status == "blocked") | .ref' .ratchet/plan.yaml)
-  escalated=$(yq eval '.epic.milestones[].issues[] | select(.status == "escalated") | .ref' .ratchet/plan.yaml)
+**CI failure detected** (non-empty `ci_status`):
+- Check if discovery already exists: `epic.discoveries[] | select(.source == "pr-ci-failure-<pr_num>")`
+- If not, create discovery:
+  ```bash
+  yq eval -i ".epic.discoveries += [{
+    \"ref\": \"discovery-ci-$(date +%s)\",
+    \"title\": \"CI failure in PR #$pr_num\",
+    \"description\": \"PR #$pr_num for issue $issue_ref failed: $ci_status\",
+    \"category\": \"tech-debt\",
+    \"severity\": \"major\",
+    \"source\": \"pr-ci-failure-$pr_num\",
+    \"created_at\": \"$(date -Iseconds)\",
+    \"status\": \"pending\",
+    \"issue_ref\": \"$issue_ref\",
+    \"retro_type\": \"ci-failure\"
+  }]" .ratchet/plan.yaml
+  ```
+- Report: "CI failure detected: PR #[N] ([failed checks]) — discovery created"
 
-  if [ -n "$blocked" ] || [ -n "$escalated" ]; then
-    echo "⚠️  Issues requiring attention:"
-    [ -n "$blocked" ] && echo "  Blocked: $blocked"
-    [ -n "$escalated" ] && echo "  Escalated: $escalated"
-  fi
-fi
-```
+**All clear**: No output (silent when nothing is wrong).
 
-### PR Monitoring (every 10 minutes)
+### Stopping
 
-> **Schema note**: PR monitoring requires the `pr` and `status: blocked` fields on issues. Both are defined in the plan.yaml schema (see `skills/init/SKILL.md`). The `pr` field is populated by `/ratchet:run` when a PR is created. The `blocked` status is set when an issue cannot progress due to a dependency or escalation.
-
-```bash
-# Get all PRs created by Ratchet (from plan.yaml)
-prs=$(yq eval '.epic.milestones[].issues[] | select(.pr != null) | .pr' .ratchet/plan.yaml)
-
-for pr_url in $prs; do
-  pr_num=$(echo "$pr_url" | grep -oP 'pull/\K\d+')
-
-  # Check merge conflict status
-  mergeable=$(gh pr view "$pr_num" --json mergeable -q .mergeable)
-
-  # Check CI status
-  ci_status=$(gh pr view "$pr_num" --json statusCheckRollup -q '.statusCheckRollup[] | select(.conclusion != "SUCCESS") | .name')
-
-  # Handle merge conflicts
-  if [ "$mergeable" = "CONFLICTING" ]; then
-    issue_ref=$(yq eval ".epic.milestones[].issues[] | select(.pr == \"$pr_url\") | .ref" .ratchet/plan.yaml)
-
-    # Check if discovery already exists
-    existing=$(yq eval ".epic.discoveries[] | select(.source == \"pr-conflict-$pr_num\")" .ratchet/plan.yaml)
-
-    if [ -z "$existing" ]; then
-      echo "🔴 Merge conflict detected: PR #$pr_num (issue $issue_ref)"
-      echo "   Creating sidequest to resolve conflict..."
-
-      # Add discovery to plan.yaml (unified discovery schema)
-      discovery_ref="discovery-conflict-$(date +%s)"
-      milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
-      yq eval -i ".epic.discoveries += [{
-        \"ref\": \"$discovery_ref\",
-        \"title\": \"Resolve merge conflict in PR #$pr_num\",
-        \"description\": \"PR #$pr_num for issue $issue_ref has merge conflicts with main. Re-run issue pipeline to regenerate code on current main branch.\",
-        \"category\": \"bug\",
-        \"severity\": \"critical\",
-        \"source\": \"pr-conflict-$pr_num\",
-        \"context\": {\"milestone\": \"$milestone_id\", \"issue\": \"$issue_ref\", \"debate\": null},
-        \"pairs\": [],
-        \"created_at\": \"$(date -Iseconds)\",
-        \"status\": \"pending\",
-        \"issue_ref\": \"$issue_ref\",
-        \"affected_scope\": \"issue $issue_ref\",
-        \"retro_type\": null
-      }]" .ratchet/plan.yaml
-
-      echo "   ✓ Created discovery: $discovery_ref"
-    fi
-  fi
-
-  # Handle CI failures
-  # PRINCIPLE: Guilty until proven innocent — CI failures on a PR branch
-  # are CAUSED by the PR unless definitively proven otherwise. Do not
-  # dismiss as flaky or pre-existing without checking master.
-  if [ -n "$ci_status" ]; then
-    issue_ref=$(yq eval ".epic.milestones[].issues[] | select(.pr == \"$pr_url\") | .ref" .ratchet/plan.yaml)
-
-    # Check if retro already exists
-    existing=$(yq eval ".epic.discoveries[] | select(.source == \"pr-ci-failure-$pr_num\")" .ratchet/plan.yaml)
-
-    if [ -z "$existing" ]; then
-      echo "❌ CI failure detected: PR #$pr_num (issue $issue_ref)"
-      echo "   Failed checks: $ci_status"
-      echo "   PR is GUILTY until proven innocent — creating retro sidequest..."
-
-      # Add retro discovery (unified discovery schema)
-      discovery_ref="discovery-retro-$(date +%s)"
-      milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
-      yq eval -i ".epic.discoveries += [{
-        \"ref\": \"$discovery_ref\",
-        \"title\": \"Retro: CI failure in PR #$pr_num\",
-        \"description\": \"PR #$pr_num for issue $issue_ref failed CI checks: $ci_status. Review failure, update guards/tests, and improve agent prompts to prevent recurrence.\",
-        \"category\": \"tech-debt\",
-        \"severity\": \"major\",
-        \"source\": \"pr-ci-failure-$pr_num\",
-        \"context\": {\"milestone\": \"$milestone_id\", \"issue\": \"$issue_ref\", \"debate\": null},
-        \"pairs\": [],
-        \"created_at\": \"$(date -Iseconds)\",
-        \"status\": \"pending\",
-        \"issue_ref\": \"$issue_ref\",
-        \"affected_scope\": \"issue $issue_ref\",
-        \"retro_type\": \"ci-failure\"
-      }]" .ratchet/plan.yaml
-
-      echo "   ✓ Created retro discovery: $discovery_ref"
-    fi
-  fi
-done
-```
-
-### Discovery Schema
-
-Discoveries created by PR monitoring (and by `/ratchet:tighten`) follow the **unified discovery schema** shared with `/ratchet:sidequest`:
-
-```yaml
-epic:
-  discoveries:
-    - ref: "discovery-conflict-1710633000"
-      title: "Resolve merge conflict in PR #20"
-      description: "PR #20 for issue issue-2-2 has merge conflicts with main. Re-run issue pipeline to regenerate code on current main branch."
-      category: "bug"             # bug for conflicts, tech-debt for CI failures
-      severity: "critical"        # critical for conflicts, major for CI failures, minor for info
-      source: "pr-conflict-20"
-      context:
-        milestone: "milestone-2"
-        issue: "issue-2-2"
-        debate: null
-      pairs: []
-      created_at: "2026-03-17T00:30:00Z"
-      status: "pending"           # pending | promoted | dismissed | done
-      issue_ref: "issue-2-2"      # direct ref to the affected issue (for run/status lookups)
-      affected_scope: "issue issue-2-2"   # human-readable scope description
-      retro_type: null             # null for merge conflicts; "ci-failure" | "skipped-finding" for retro discoveries
-
-    - ref: "discovery-retro-1710633100"
-      title: "Retro: CI failure in PR #19"
-      description: "PR #19 for issue issue-2-3 failed CI checks: test-suite. Review failure, update guards/tests, and improve agent prompts to prevent recurrence."
-      category: "tech-debt"
-      severity: "major"
-      source: "pr-ci-failure-19"
-      context:
-        milestone: "milestone-2"
-        issue: "issue-2-3"
-        debate: null
-      pairs: []
-      created_at: "2026-03-17T00:31:40Z"
-      status: "pending"
-      issue_ref: "issue-2-3"
-      affected_scope: "issue issue-2-3"
-      retro_type: "ci-failure"
-```
-
-**Discovery fields (unified schema — all sources):**
-- `ref` — unique ID (format: `discovery-<type>-<timestamp>`)
-- `title` — short human-readable description
-- `description` — full context including what happened and what to do
-- `category` — `bug | tech-debt | feature | security | performance | other`
-- `severity` — `critical | major | minor | info`
-- `source` — origin identifier (e.g., `manual`, `pr-conflict-20`, `pr-ci-failure-19`)
-- `context` — object with `milestone`, `issue`, `debate` refs (all nullable)
-- `pairs` — array of relevant pair names (may be empty)
-- `created_at` — ISO timestamp
-- `status` — `pending` (new) | `promoted` (converted to issue) | `dismissed` (non-actionable) | `done` (processed by `/ratchet:run`)
-- `issue_ref` — the issue ref this discovery is related to (set on creation for PR-linked discoveries, set on promotion for manual discoveries)
-- `affected_scope` — human-readable scope description
-- `retro_type` — `null` (merge conflicts, manual), `"ci-failure"`, or `"skipped-finding"`
-
-These discoveries surface as available work in `/ratchet:run` (Mode B sidequest option) and `/ratchet:status` (Sidequests section).
+`/ratchet:watch --stop` — cancel the loop. No cleanup needed beyond stopping the loop itself.
 
 ## Limitations
 
-- **Session-scoped**: Monitoring stops when you close Claude Code
-- **72-hour expiry**: Loops auto-delete after 3 days
-- **50 loop limit**: Don't run `/ratchet:watch` on too many workspaces simultaneously
-- **Not for critical path**: Monitoring is advisory — don't rely on it for workflow correctness
-
-## Use Cases
-
-**Good:**
-```bash
-# Monitor long-running epic while working on other tasks
-/ratchet:watch monitor
-
-# Check in periodically during unsupervised run
-/ratchet:run --unsupervised --auto-pr monitor &
-/ratchet:watch monitor
-```
-
-**Bad:**
-```bash
-# Don't use for workflow orchestration
-# (use /ratchet:run --unsupervised instead)
-```
-
-## See Also
-
-- `/ratchet:status` — One-time status check
-- `/ratchet:score` — Quality metrics
-- `/ratchet:run` — Main workflow execution
+- **Session-scoped**: stops when you close Claude Code
+- **Requires `gh` auth**: uses GitHub CLI for PR status
+- **Only watches PRs in plan.yaml**: PRs created outside Ratchet are not monitored

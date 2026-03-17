@@ -137,7 +137,6 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 | `/ratchet:debate [id]` | View or continue an ongoing debate |
 | `/ratchet:verdict [id]` | Human-in-the-loop: cast deciding vote on escalated debate |
 | `/ratchet:score [pair]` | Quality metrics and trends |
-| `/ratchet:gen-tests` | Generate tests from debate findings |
 | `/ratchet:tighten [pair\|pr N]` | Analyze all improvement signals and sharpen the system — pair prompts, guards, workflow config |
 
 ## Workflow
