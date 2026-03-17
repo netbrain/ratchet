@@ -20,7 +20,7 @@ BLOCKING="${5:-true}"  # "true" or "false"
 RATCHET_DIR=".ratchet"
 GUARDS_DIR="$RATCHET_DIR/guards/$MILESTONE_ID/$PHASE"
 
-mkdir -p "$GUARDS_DIR"
+mkdir -p "$GUARDS_DIR" || { echo "Error: Failed to create guards directory: $GUARDS_DIR" >&2; exit 1; }
 
 echo "Running guard: $GUARD_NAME ($GUARD_COMMAND)"
 

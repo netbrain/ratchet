@@ -77,7 +77,7 @@
         }
       ],
       "default": 2,
-      "description": "Maximum phase regressions per milestone. Integer applies to all phases. Object sets per-phase limits with fallback to 2 for unspecified phases."
+      "description": "Maximum phase regressions per milestone. Integer applies to all phases (e.g., 2). Object sets per-phase limits with fallback to 2 for unspecified phases (e.g., {\"build\": 3, \"review\": 1})."
     },
     "workspaces": {
       "type": "array",

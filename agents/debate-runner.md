@@ -380,7 +380,7 @@ If the loop completes all rounds without a verdict:
      "dispute_type": "<categorization of what was disputed>",
      "adversarial_argument": "<summary>",
      "generative_argument": "<summary>",
-     "verdict": "accept|reject|modify",
+     "verdict": "ACCEPT|REJECT|MODIFY",
      "reasoning": "<reasoning>"
    }
    ```

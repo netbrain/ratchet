@@ -94,6 +94,15 @@ using the appropriate library for this stack. Property-based tests should:
 Place the test in the appropriate directory.
 ```
 
+**Error handling for test generation**: If the generative agent fails to produce a valid test file:
+- Check that the target test directory exists; create it if needed:
+  ```bash
+  mkdir -p <test-directory>
+  ```
+- If the agent returns an error or empty output, log a warning and continue with remaining findings:
+  > "Warning: Failed to generate test for finding '[description]'. Skipping."
+- Do NOT halt the entire generation run for a single failure — process all findings and report failures at the end.
+
 ### Step 5: Verify Tests
 
 Run the generated tests to verify they:

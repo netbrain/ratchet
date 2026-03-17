@@ -194,6 +194,67 @@ epic:
           branch: null
           pr: null
           status: done
+    - id: 5
+      name: Apply Quality Improvements
+      description: Apply all fixes identified in M1-M4 debates to the framework code — 72+ improvements across skills, scripts, agents, schemas
+      status: done
+      done_when: All critical, high, and medium severity issues from debates fixed. Framework passes all guards. No regressions.
+      depends_on:
+        - 1
+        - 2
+        - 3
+        - 4
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: '#2'
+          title: Apply skill improvements (36+ fixes from M1)
+          pairs:
+            - skill-coherence
+          depends_on: []
+          phase_status:
+            review: done
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: done
+        - ref: '#3'
+          title: Apply script improvements (20+ fixes from M2) - CRITICAL
+          pairs:
+            - script-robustness
+          depends_on: []
+          phase_status:
+            review: done
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: done
+        - ref: '#4'
+          title: Apply agent improvements (10+ fixes from M3)
+          pairs:
+            - agent-effectiveness
+          depends_on: []
+          phase_status:
+            review: done
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: done
+        - ref: '#5'
+          title: Apply schema improvements (6 fixes from M4) - CRITICAL
+          pairs:
+            - schema-correctness
+          depends_on: []
+          phase_status:
+            review: done
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: done
   current_focus: null
   discoveries:
     - ref: disc-001

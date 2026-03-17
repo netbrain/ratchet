@@ -632,6 +632,10 @@ Run guards where `timing: "pre-debate"` for the current phase. Guards without a 
 
 For each pre-debate guard assigned to the current phase:
 ```bash
+# Verify guard script exists before running
+test -f .claude/ratchet-scripts/run-guards.sh \
+  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
+
 # Without singleton resources:
 bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
 
@@ -791,6 +795,10 @@ Process each debate-runner result:
 
 For each guard where `timing: "post-debate"` (or no timing field) assigned to the current phase:
 ```bash
+# Verify guard script exists (same check as pre-debate guards)
+test -f .claude/ratchet-scripts/run-guards.sh \
+  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
+
 bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
 ```
 

@@ -69,7 +69,23 @@ Follow the same agent generation conventions as init:
 
 ### Step 3: Verify & Report
 
-Verify the new pair was created and registered, then report:
+Verify the new pair was created and registered:
+```bash
+# Verify agent files exist
+test -f .ratchet/pairs/<name>/generative.md || { echo "Error: generative.md not created for pair '<name>'" >&2; exit 1; }
+test -f .ratchet/pairs/<name>/adversarial.md || { echo "Error: adversarial.md not created for pair '<name>'" >&2; exit 1; }
+
+# Verify registered in workflow.yaml
+yq eval '.pairs[] | select(.name == "<name>")' .ratchet/workflow.yaml | grep -q 'name:' \
+  || { echo "Error: pair '<name>' not registered in workflow.yaml" >&2; exit 1; }
+```
+
+If the analyst agent fails (returns an error or produces empty output), inform the user:
+> "Pair generation failed. This may be due to insufficient project context or an invalid pair name."
+
+Then use `AskUserQuestion` with options: `"Try again"`, `"Try with a different name"`, `"Cancel"`.
+
+Report:
 ```
 New pair added: [name]
   Scope: [file glob]

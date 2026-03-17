@@ -41,7 +41,7 @@ if [ ! -f "$META_FILE" ]; then
 fi
 
 # Ensure scores directory exists
-mkdir -p "$(dirname "$SCORES_FILE")"
+mkdir -p "$(dirname "$SCORES_FILE")" || { echo "Error: Failed to create scores directory" >&2; exit 1; }
 
 # Extract fields from meta.json
 meta_id=$(json_get "$META_FILE" "id")

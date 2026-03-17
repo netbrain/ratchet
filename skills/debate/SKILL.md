@@ -31,6 +31,17 @@ If debates exist, use `AskUserQuestion` to let the user pick a debate to view:
 
 ### With ID — View Transcript
 
+**Error handling**: If `meta.json` is missing or malformed:
+```bash
+if [ ! -f ".ratchet/debates/<id>/meta.json" ]; then
+  echo "Error: Debate '<id>' not found — no meta.json in .ratchet/debates/<id>/" >&2
+  # Suggest listing available debates
+fi
+# Validate JSON is parseable
+jq empty .ratchet/debates/<id>/meta.json 2>/dev/null \
+  || { echo "Error: meta.json for debate '<id>' is malformed JSON. It may have been corrupted by an interrupted write." >&2; exit 1; }
+```
+
 > **Verdict storage note**: Verdicts may exist in two locations depending on how the debate was resolved:
 > - `meta.json` → `verdict` field: populated by the debate-runner for consensus (ACCEPT, CONDITIONAL_ACCEPT) or tiebreaker verdicts. This is an embedded object.
 > - `verdict.json` (separate file in the debate directory): populated by `/ratchet:verdict` for human-cast verdicts. Read both; prefer `verdict.json` if it exists (human decision overrides).
@@ -71,12 +82,17 @@ Resume the debate protocol from where it left off. Use `AskUserQuestion` to let 
 - If `escalated`:
   - Question: "Debate [id] escalated after [N] rounds (max was [max_rounds]). How do you want to proceed?"
   - Options: `"Run another round (extend max by 1)"`, `"Proceed to verdict"`, `"View full transcript first"`
-  - If "Run another round": increment `max_rounds` by 1 in meta.json, then execute one debate round per `/ratchet:run` Step 7 protocol.
+  - If "Run another round": increment `max_rounds` by 1 in meta.json using jq:
+    ```bash
+    jq '.max_rounds += 1' .ratchet/debates/<id>/meta.json > /tmp/meta-tmp.json \
+      && mv /tmp/meta-tmp.json .ratchet/debates/<id>/meta.json
+    ```
+    Then execute one debate round per `/ratchet:run` Step 5e protocol.
 
 - If `initiated`:
   - Question: "Debate [id] was interrupted at round [N]. Resume from where it left off?"
   - Options: `"Resume debate (Recommended)"`, `"Restart debate"`, `"Abandon debate"`
-  - If "Restart debate": delete all files in the `rounds/` directory, reset `rounds` to 0 in meta.json, then start fresh from round 1 per `/ratchet:run` Step 7 protocol.
+  - If "Restart debate": delete all files in the `rounds/` directory, reset `rounds` to 0 in meta.json, then start fresh from round 1 per `/ratchet:run` Step 5e protocol.
 
 When resuming or running another round, execute the same debate protocol as `/ratchet:run` Step 5e (generative round, adversarial round, check verdict). Read the pair's agent definitions from `.ratchet/pairs/<pair-name>/` and the debate context from `meta.json` and existing round files. If `rounds/` is empty (no prior round files), start from round 1.
 

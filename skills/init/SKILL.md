@@ -41,6 +41,17 @@ Before asking the human anything, scan whatever exists in the project:
 
 Adapt your scan to what's actually in the repo. DO NOT ask the human for information you can read from the codebase.
 
+**Error handling for scan failures**: If specific scan targets are missing, skip that category silently and proceed:
+```bash
+# CI detection — skip gracefully if no CI config found
+if ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1 > /dev/null; then
+  # parse pipeline files for guard candidates
+else
+  # No CI config found — skip CI guard mirroring, note for interview
+fi
+```
+Do NOT abort the scan because one source is missing — gather what you can and note gaps for the interview.
+
 If the project is empty or has no code yet, skip this step — the interview IS the discovery phase.
 
 ### Step 3: Interview (inline — talk directly to the user)
@@ -372,6 +383,15 @@ Create the `.ratchet/` directory structure:
 .ratchet/reports/
 .ratchet/progress/
 ```
+
+**Error handling for file generation (Step 8)**: If any file write fails during generation:
+```bash
+# Verify each critical file was created
+for f in .ratchet/project.yaml .ratchet/workflow.yaml .ratchet/plan.yaml; do
+  test -f "$f" || { echo "Error: Failed to create $f" >&2; exit 1; }
+done
+```
+If a write fails mid-generation, inform the user which files were created successfully and which failed. Do NOT leave a partially-generated `.ratchet/` directory without warning — the user must know the state is incomplete.
 
 IMPORTANT:
 - If code exists, scan it FIRST — never ask what you can read

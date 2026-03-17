@@ -19,6 +19,16 @@ View quality metrics and trends across all pairs or a specific pair.
 
 Read debate artifacts directly from the source of truth — no derived score files needed.
 
+**Workspace scoping**: In a multi-workspace setup, `/ratchet:score` with no arguments shows scores for the current workspace. Use `/ratchet:score --all` to aggregate across all workspaces, or `/ratchet:score [workspace]` for a specific workspace.
+
+**Error handling for debate metadata**: When reading meta.json files, skip any that are malformed:
+```bash
+for f in .ratchet/debates/*/meta.json; do
+  jq empty "$f" 2>/dev/null || { echo "Warning: Skipping malformed $f" >&2; continue; }
+  # process valid file
+done
+```
+
 **Debate metadata**: Read all `.ratchet/debates/*/meta.json` files. Each contains:
 ```json
 {

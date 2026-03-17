@@ -164,9 +164,17 @@ Watch a PR's checks and analyze when they complete.
 
 1. **Start monitoring:**
    ```bash
-   gh pr checks <number> --watch
+   # Timeout after 30 minutes to prevent indefinite blocking
+   timeout 1800 gh pr checks <number> --watch
    ```
-   This blocks until all checks complete (pass or fail).
+   This blocks until all checks complete (pass or fail) or the timeout is reached.
+
+   **If timeout is reached** (exit code 124):
+   > "PR checks did not complete within 30 minutes. The PR may have long-running checks or be stuck."
+
+   Use `AskUserQuestion`:
+   - Options: `"Extend timeout (30 more minutes)"`, `"Analyze current check status"`, `"Cancel"`
+   - If "Analyze current check status": run `gh pr checks <number>` (non-blocking) and analyze whatever results are available
 
 2. **On completion:**
    - If all checks passed: report success, no retro needed

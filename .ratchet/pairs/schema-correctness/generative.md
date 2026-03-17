@@ -17,7 +17,7 @@ Ratchet uses JSON schemas to validate configuration files:
 
 ## Review Focus Areas
 
-1. **Structural correctness** — Valid JSON Schema Draft 7 syntax
+1. **Structural correctness** — Valid JSON Schema Draft 2020-12 syntax
 2. **Completeness** — All v2 spec fields defined
 3. **Constraint accuracy** — Required fields, types, enums match actual usage
 4. **Edge case coverage** — Handles optional fields, defaults, validation edge cases

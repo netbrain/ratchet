@@ -45,7 +45,7 @@ fi
 current_hash=$(echo "$matched_files" | while IFS= read -r f; do cat "$f"; done 2>/dev/null | sha256)
 
 # Ensure .ratchet directory exists
-mkdir -p "$(dirname "$CACHE_FILE")"
+mkdir -p "$(dirname "$CACHE_FILE")" || { echo "Error: Failed to create cache directory" >&2; exit 1; }
 
 # Update cache
 # Strategy: build the new entry, then merge into existing cache file.

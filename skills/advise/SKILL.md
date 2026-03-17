@@ -77,6 +77,11 @@ Analyze the following dimensions (see "Ongoing Workflow Health Monitoring" in yo
 Present your findings as a prioritized list of actionable recommendations.
 ```
 
+**Error handling**: If the analyst agent fails or returns no recommendations:
+> "Health assessment could not be completed. This may be due to insufficient data or an internal error."
+
+Then use `AskUserQuestion` with options: `"Try again"`, `"View raw data (/ratchet:score)"`, `"Done for now"`.
+
 ### Step 3: Present Assessment
 
 Present the analyst's findings via `AskUserQuestion`:

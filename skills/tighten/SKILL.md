@@ -21,13 +21,17 @@ Tighten agent pairs based on accumulated debate performance. The analyst reviews
 
 Read `.ratchet/reviews/<pair-name>/` for each target pair. Look for `review-*.json` files (produced by `/ratchet:run` Step 9).
 
-If the reviews directory doesn't exist or has no review files, inform the user:
+If the reviews directory doesn't exist or has no review files (0 reviews), inform the user:
 > "No review data found for [pair-name]. Reviews are generated after debates complete. Run /ratchet:run to produce debate data first."
 
 Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
-If fewer than 3 reviews exist, inform the user that more debate data is needed before meaningful tightening can occur, but offer to proceed anyway:
-- Use `AskUserQuestion` with options: `"Proceed with limited data"`, `"Run more debates first (/ratchet:run)"`, `"Done for now"`
+Do NOT offer to proceed with 0 reviews — the analyst would have no data to work with.
+
+If 1-2 reviews exist, inform the user that limited data exists but more is needed for meaningful tightening:
+- Use `AskUserQuestion` with options: `"Proceed with limited data (results may be shallow)"`, `"Run more debates first (/ratchet:run) (Recommended)"`, `"Done for now"`
+
+If 3+ reviews exist, proceed directly to Step 2.
 
 ### Step 2: Launch Analyst
 
@@ -103,6 +107,9 @@ Your task:
 
 5. If approved, update the agent definitions and write an analyst summary:
    .ratchet/reviews/<pair-name>/analyst-summary.md
+   (Note: This file is intentionally .md, not .json, because it is a human-readable narrative
+   of what changed and why. The review-*.json files are machine-generated metrics; the analyst
+   summary is prose for human consumption.)
    containing:
    - Date of tightening
    - Changes made and rationale

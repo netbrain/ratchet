@@ -9,7 +9,7 @@ Review schema improvements proposed by the generative agent. Validate JSON Schem
 ## Focus Areas
 
 The user prioritized:
-1. **JSON Schema syntax** — Valid Draft 7, no errors
+1. **JSON Schema syntax** — Valid Draft 2020-12, no errors
 2. **Completeness** — All v2 fields present
 3. **Constraint testing** — Required fields, types, enums accurate
 4. **Edge cases** — Handles optional fields, defaults, unusual values

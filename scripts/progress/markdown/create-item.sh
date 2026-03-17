@@ -11,7 +11,7 @@ shift 2 || true
 LABELS="$*"
 
 PROGRESS_DIR=".ratchet/progress"
-mkdir -p "$PROGRESS_DIR"
+mkdir -p "$PROGRESS_DIR" || { echo "Error: Failed to create progress directory: $PROGRESS_DIR" >&2; exit 1; }
 
 # Generate filename from title
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')

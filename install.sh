@@ -31,7 +31,7 @@ install_git_hook() {
     local hooks_dir="$git_dir/hooks"
     local hook_file="$hooks_dir/pre-commit"
 
-    mkdir -p "$hooks_dir"
+    mkdir -p "$hooks_dir" || { echo "Error: Failed to create hooks directory: $hooks_dir" >&2; return 1; }
 
     # Remove existing ratchet block if present
     remove_git_hook "$target_dir"
@@ -57,7 +57,7 @@ $block
 SHEBANG
     fi
 
-    chmod +x "$hook_file"
+    chmod +x "$hook_file" || { echo "Error: Failed to set hook permissions: $hook_file" >&2; return 1; }
     echo "  Installed git pre-commit hook"
 }
 
@@ -134,16 +134,16 @@ do_install() {
 
     # Copy agents alongside commands
     if [ -d "$SCRIPT_DIR/agents" ] && ls "$SCRIPT_DIR"/agents/*.md >/dev/null 2>&1; then
-        mkdir -p "$commands_dir/agents"
-        cp "$SCRIPT_DIR"/agents/*.md "$commands_dir/agents/"
+        mkdir -p "$commands_dir/agents" || die "Failed to create agents directory: $commands_dir/agents"
+        cp "$SCRIPT_DIR"/agents/*.md "$commands_dir/agents/" || die "Failed to copy agent files"
         echo "  Installed agents"
     fi
 
     # Copy scripts
     if [ -d "$SCRIPT_DIR/scripts" ] && ls "$SCRIPT_DIR"/scripts/*.sh >/dev/null 2>&1; then
         mkdir -p "$scripts_dir" || die "Failed to create scripts directory: $scripts_dir"
-        cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/"
-        chmod +x "$scripts_dir"/*.sh
+        cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/" || die "Failed to copy script files"
+        chmod +x "$scripts_dir"/*.sh || die "Failed to set script permissions"
         echo "  Installed scripts to $scripts_dir/"
     fi
 
@@ -152,9 +152,9 @@ do_install() {
         for adapter_dir in "$SCRIPT_DIR"/scripts/progress/*/; do
             local adapter_name
             adapter_name="$(basename "$adapter_dir")"
-            mkdir -p "$scripts_dir/progress/$adapter_name"
-            cp "$adapter_dir"/*.sh "$scripts_dir/progress/$adapter_name/"
-            chmod +x "$scripts_dir/progress/$adapter_name"/*.sh
+            mkdir -p "$scripts_dir/progress/$adapter_name" || die "Failed to create progress adapter directory: $scripts_dir/progress/$adapter_name"
+            cp "$adapter_dir"/*.sh "$scripts_dir/progress/$adapter_name/" || die "Failed to copy progress adapter: $adapter_name"
+            chmod +x "$scripts_dir/progress/$adapter_name"/*.sh || die "Failed to set permissions for progress adapter: $adapter_name"
         done
         echo "  Installed progress adapters"
     fi
@@ -166,8 +166,8 @@ do_install() {
             chmod -R u+w "$schemas_dir" 2>/dev/null || true
             rm -rf "$schemas_dir"
         fi
-        mkdir -p "$schemas_dir"
-        cp "$SCRIPT_DIR"/schemas/*.json "$schemas_dir/"
+        mkdir -p "$schemas_dir" || die "Failed to create schemas directory: $schemas_dir"
+        cp "$SCRIPT_DIR"/schemas/*.json "$schemas_dir/" || die "Failed to copy schema files"
         echo "  Installed schemas to $schemas_dir/"
     fi
 
@@ -176,8 +176,8 @@ do_install() {
         for statusline_file in "$SCRIPT_DIR"/statusline/*.sh; do
             local basename_file
             basename_file="$(basename "$statusline_file")"
-            cp "$statusline_file" "$target/$basename_file"
-            chmod +x "$target/$basename_file"
+            cp "$statusline_file" "$target/$basename_file" || die "Failed to copy statusline script: $basename_file"
+            chmod +x "$target/$basename_file" || die "Failed to set permissions for: $basename_file"
         done
         echo "  Installed statusline scripts to $target/"
     fi
