@@ -19,7 +19,10 @@ TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
 FILENAME="${SLUG}-${TIMESTAMP}.md"
 FILEPATH="$PROGRESS_DIR/$FILENAME"
 
-cat > "$FILEPATH" <<EOF
+TMP_FILE=$(mktemp)
+trap 'rm -f "$TMP_FILE"' EXIT
+
+cat > "$TMP_FILE" <<EOF
 # $TITLE
 
 **Status:** open
@@ -35,5 +38,10 @@ $BODY
 ## Updates
 
 EOF
+
+mv "$TMP_FILE" "$FILEPATH" || {
+    echo "Error: Failed to create progress file: $FILEPATH" >&2
+    exit 1
+}
 
 echo "$FILENAME"

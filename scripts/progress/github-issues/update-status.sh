@@ -12,8 +12,9 @@ ISSUE_NUM="${1:?Usage: update-status.sh <issue-number> <status>}"
 STATUS="${2:?Usage: update-status.sh <issue-number> <status>}"
 
 # Add a comment noting the status change
-gh issue comment "$ISSUE_NUM" --body "Status updated to: **$STATUS**" 2>&1 || {
-    echo "Warning: Failed to comment on issue $ISSUE_NUM" >&2
-}
+if ! gh issue comment "$ISSUE_NUM" --body "Status updated to: **$STATUS**" >/dev/null 2>&1; then
+    echo "Error: Failed to update status on issue $ISSUE_NUM" >&2
+    exit 1
+fi
 
 echo "Updated issue $ISSUE_NUM status to: $STATUS"

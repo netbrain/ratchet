@@ -25,5 +25,9 @@ ISSUE_URL=$(gh issue create --title "$TITLE" --body "$BODY" ${LABEL_ARGS[@]+"${L
 }
 
 # Extract issue number from URL (https://github.com/owner/repo/issues/42 -> 42)
-ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$') || true
+if [ -z "$ISSUE_NUM" ]; then
+    echo "Error: Could not extract issue number from gh output: $ISSUE_URL" >&2
+    exit 1
+fi
 echo "$ISSUE_NUM"

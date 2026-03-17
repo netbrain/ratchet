@@ -107,7 +107,8 @@ Attempt to auto-detect context from `plan.yaml`:
 Generate the discovery entry:
 
 ```yaml
-- id: "discovery-<unix-timestamp>"
+- ref: "discovery-manual-<unix-timestamp>"
+  title: "<short summary of the discovery>"
   description: "<user's description>"
   category: "<bug|tech-debt|feature|security|performance|other>"
   severity: "<critical|major|minor|info>"
@@ -119,7 +120,8 @@ Generate the discovery entry:
   pairs: []  # populated from step 2d
   status: "pending"
   issue_ref: null
-  created: "<ISO 8601 timestamp>"
+  affected_scope: null
+  created_at: "<ISO 8601 timestamp>"
 ```
 
 Append to `epic.discoveries` in `.ratchet/plan.yaml` using yq:
@@ -129,7 +131,8 @@ timestamp=$(date +%s)
 created=$(date -Iseconds)
 
 yq eval -i ".epic.discoveries += [{
-  \"id\": \"discovery-$timestamp\",
+  \"ref\": \"discovery-manual-$timestamp\",
+  \"title\": \"<short summary>\",
   \"description\": \"<description>\",
   \"category\": \"<category>\",
   \"severity\": \"<severity>\",
@@ -142,7 +145,8 @@ yq eval -i ".epic.discoveries += [{
   \"pairs\": [<pair-list>],
   \"status\": \"pending\",
   \"issue_ref\": null,
-  \"created\": \"$created\"
+  \"affected_scope\": null,
+  \"created_at\": \"$created\"
 }]" .ratchet/plan.yaml
 ```
 
@@ -157,7 +161,7 @@ yq eval -i '.epic.discoveries //= []' .ratchet/plan.yaml
 Display a summary to the user:
 
 ```
-Discovery logged: discovery-<timestamp>
+Discovery logged: discovery-manual-<timestamp>
   Category: <category> | Severity: <severity>
   Context: milestone <id>, issue <ref> (or "no specific context")
   Pairs: <pair-list> (or "none")

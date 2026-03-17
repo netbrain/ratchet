@@ -21,15 +21,22 @@ RATCHET_DIR=".ratchet"
 SCORES_FILE="$RATCHET_DIR/scores/scores.jsonl"
 
 if [ $# -lt 1 ]; then
-    echo "Usage: update-scores.sh <debate-id>"
+    echo "Usage: update-scores.sh <debate-id>" >&2
     exit 1
 fi
 
 DEBATE_ID="$1"
+
+# Validate debate ID contains only safe characters (alphanumeric, hyphens, underscores)
+if ! printf '%s' "$DEBATE_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+    echo "Error: Invalid debate ID: $DEBATE_ID" >&2
+    exit 1
+fi
+
 META_FILE="$RATCHET_DIR/debates/$DEBATE_ID/meta.json"
 
 if [ ! -f "$META_FILE" ]; then
-    echo "Error: Debate $DEBATE_ID not found"
+    echo "Error: Debate $DEBATE_ID not found at $META_FILE" >&2
     exit 1
 fi
 

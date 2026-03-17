@@ -130,11 +130,14 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
      yq eval -i ".epic.discoveries += [{
        \"ref\": \"discovery-retro-$(date +%s)\",
        \"title\": \"Address retro finding: $description\",
+       \"description\": \"Retro finding (skipped): $description. Evidence: $evidence\",
        \"source\": \"retro-$timestamp\",
        \"created_at\": \"$(date -Iseconds)\",
        \"severity\": \"$severity\",
        \"retro_type\": \"skipped-finding\",
-       \"status\": \"pending\"
+       \"status\": \"pending\",
+       \"issue_ref\": null,
+       \"affected_scope\": null
      }]" .ratchet/plan.yaml
    fi
    ```

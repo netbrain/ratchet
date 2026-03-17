@@ -9,8 +9,9 @@ command -v gh >/dev/null 2>&1 || { echo "Error: gh CLI is required but not found
 
 ISSUE_NUM="${1:?Usage: close-item.sh <issue-number>}"
 
-gh issue close "$ISSUE_NUM" 2>&1 || {
-    echo "Warning: Failed to close issue $ISSUE_NUM" >&2
-}
+if ! gh issue close "$ISSUE_NUM" >/dev/null 2>&1; then
+    echo "Error: Failed to close issue $ISSUE_NUM" >&2
+    exit 1
+fi
 
 echo "Closed issue $ISSUE_NUM"

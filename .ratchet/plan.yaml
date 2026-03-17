@@ -5,7 +5,7 @@ epic:
     - id: 1
       name: "Review Follow-ups"
       description: "Fix remaining gaps surfaced by the 4 codebase review debates"
-      status: pending
+      status: done
       done_when: "All review findings addressed, no open conditions from debate consensus"
       depends_on: []
       progress_ref: null
@@ -16,26 +16,26 @@ epic:
           pairs: [skill-coherence]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [skills/retro/SKILL.md, skills/sidequest/SKILL.md]
+          debates: [skill-coherence-20260317T083808]
           branch: null
-          status: pending
+          status: done
         - ref: "#22"
           title: "Expand schema scope to cover .claude/ratchet-schemas"
           pairs: [schema-correctness]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [.claude/ratchet-schemas/workflow.schema.json]
+          debates: [schema-correctness-20260317T083900]
           branch: null
-          status: pending
+          status: done
 
     - id: 2
       name: "Script Hardening"
       description: "Systematic robustness pass on all bash scripts — atomic JSON, cleanup traps, bash 3.2+ portability"
-      status: pending
+      status: done
       done_when: "All scripts have atomic JSON writes, proper cleanup traps, portability verified on bash 3.2+"
       depends_on: []
       progress_ref: null
@@ -46,21 +46,21 @@ epic:
           pairs: [script-robustness]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [scripts/progress/github-issues/add-comment.sh, scripts/progress/github-issues/create-item.sh, scripts/progress/github-issues/update-status.sh, scripts/progress/github-issues/close-item.sh, scripts/progress/markdown/create-item.sh, scripts/progress/none/create-item.sh]
+          debates: [script-robustness-issue23-20260317T083800]
           branch: null
-          status: pending
+          status: done
         - ref: "#24"
           title: "Harden core scripts (cache, consensus, guards, scores)"
           pairs: [script-robustness]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [scripts/update-scores.sh]
+          debates: [script-robustness-issue24-20260317T084300]
           branch: null
-          status: pending
+          status: done
 
     - id: 3
       name: "E2E Test Infrastructure"
