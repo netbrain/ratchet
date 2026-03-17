@@ -81,7 +81,16 @@ Context:
     tiebreaker: [opus|sonnet|haiku]
   Progress:
     todo_id: [parent todo item ID, or null if orchestrator did not provide one]
+    publish_debates: [true|false — whether to post round comments to the tracking issue; defaults to false if omitted]
+    progress_ref: [issue/item reference to comment on (e.g., "44"), or null if not set]
+    adapter: [progress adapter name (e.g., "github-issues", "markdown", "none"), or null]
 ```
+
+> **Note (issue #45 pending):** The `publish_debates`, `progress_ref`, and `adapter` fields
+> will be added to the run skill's debate-runner spawn context by issue #45. Until that issue
+> resolves, these fields may be absent from the task context. Treat any absent field as its
+> safe default: `publish_debates: false`, `progress_ref: null`, `adapter: null`. When
+> `publish_debates` is false or absent, skip all `add-comment.sh` calls silently.
 
 ## Progress Reporting
 
@@ -211,6 +220,13 @@ Handle these failure modes:
 **Malformed meta.json**: If JSON parsing fails during any meta.json read/write operation, fail fast and report the parse error. Do not attempt recovery or default values—invalid debate state is a critical error.
 
 **Failed agent spawns**: If spawning a generative or adversarial agent fails, write the error to the current round file and escalate immediately with status "escalated" and reason "agent_spawn_failure".
+
+**Progress adapter failures (add-comment.sh)**: Adapter failures MUST NOT block debate execution. Always capture the exit code and log on failure:
+```bash
+bash .claude/ratchet-scripts/progress/{adapter}/add-comment.sh "$progress_ref" "$body" \
+  || echo "Warning: add-comment.sh failed (exit $?) — debate continues." >> {round-file}
+```
+Never halt the debate loop for an adapter failure. This matches the run skill's policy: "adapter failures never block debates."
 
 ### 2. Run Debate Rounds
 
@@ -353,6 +369,13 @@ Save the generative agent's output to `.ratchet/debates/<id>/rounds/round-<N>-ge
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} (generative done, adversarial pending)"
 
+**Progress comment** (if `publish_debates` is true and `adapter` is set and not `"none"`):
+```bash
+bash .claude/ratchet-scripts/progress/{adapter}/add-comment.sh "{progress_ref}" \
+  "Round {N} — {pair-name} ({phase}): generative done, adversarial review pending."
+```
+On failure: append `"Warning: add-comment.sh failed (exit $?) — debate continues."` to `round-{N}-generative.md` and continue. Adapter failures MUST NOT halt the debate loop.
+
 Track any files the generative agent created or modified — these go into `files_modified` in the result.
 
 #### 2b. Spawn Adversarial Agent
@@ -410,6 +433,13 @@ otherwise. If the generative agent claims a test failure is "pre-existing" or
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} {VERDICT}[, Round {N+1} starting]"
+
+**Progress comment** (if `publish_debates` is true and `adapter` is set and not `"none"`):
+```bash
+bash .claude/ratchet-scripts/progress/{adapter}/add-comment.sh "{progress_ref}" \
+  "Round {N} — {pair-name} ({phase}): {VERDICT}[. Conditions: {conditions}]"
+```
+On failure: append `"Warning: add-comment.sh failed (exit $?) — debate continues."` to `round-{N}-adversarial.md` and continue. Adapter failures MUST NOT halt the debate loop.
 
 #### 2c. Parse Verdict
 
@@ -504,6 +534,12 @@ Update `meta.json` with final state:
 - `status`: "consensus" or "resolved" or "escalated"
 
 **Progress:** Mark TodoWrite item completed -- "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
+
+> **Note:** No `add-comment.sh` call is made at debate completion. Per-round comments
+> (posted after each generative and adversarial turn in Step 2) provide sufficient granularity
+> for tracking issue subscribers. A completion-level comment is intentionally omitted to avoid
+> duplicate signaling — the per-round adversarial comment in Step 2b already carries the final
+> verdict when the debate concludes.
 
 Return the result object to the caller.
 
