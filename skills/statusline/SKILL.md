@@ -17,19 +17,28 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
 
 ### Install
 
-1. **Find the statusline script.** Check both local and global install paths:
+1. **Find the statusline script.** Check local, global, then fetch from GitHub:
    ```bash
    if [ -f .claude/statusline-ratchet.sh ]; then
      STATUSLINE_PATH=".claude/statusline-ratchet.sh"
    elif [ -f "$HOME/.claude/statusline-ratchet.sh" ]; then
      STATUSLINE_PATH="$HOME/.claude/statusline-ratchet.sh"
    else
-     echo "NOT FOUND"
+     echo "NOT FOUND LOCALLY"
    fi
    ```
 
-   **If NOT FOUND — STOP.** Do NOT create the script yourself. It is shipped with the Ratchet installer. Tell the user:
-   > "Statusline script not found. Install Ratchet first: `nix run github:netbrain/ratchet -- --global` or `./install.sh --local`"
+   **If not found locally**, fetch it from GitHub and install to the global path:
+   ```bash
+   mkdir -p "$HOME/.claude"
+   curl -fsSL https://raw.githubusercontent.com/netbrain/ratchet/main/statusline-ratchet.sh \
+     -o "$HOME/.claude/statusline-ratchet.sh"
+   chmod +x "$HOME/.claude/statusline-ratchet.sh"
+   STATUSLINE_PATH="$HOME/.claude/statusline-ratchet.sh"
+   ```
+
+   **If curl fails** — STOP. Do NOT create the script yourself. Tell the user:
+   > "Could not fetch statusline script. Install Ratchet first: `nix run github:netbrain/ratchet -- --global` or `./install.sh --local`"
 
    Then stop. Do nothing else.
 
