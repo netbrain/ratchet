@@ -2,12 +2,14 @@ package datasource
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/netbrain/ratchet-monitor/internal/handler"
 	"github.com/netbrain/ratchet-monitor/internal/parser"
 )
 
@@ -210,6 +212,30 @@ func TestFileDataSource_Debate_NotFound(t *testing.T) {
 	_, err := ds.Debate("nonexistent")
 	if err == nil {
 		t.Error("Debate() should return error for nonexistent debate")
+	}
+}
+
+// TestFileDataSource_Debate_NotFound_ReturnsNotFoundError verifies that
+// Debate() returns a handler.NotFoundError (not a generic error) for missing
+// debates, so the handler can distinguish 404 from 500.
+func TestFileDataSource_Debate_NotFound_ReturnsNotFoundError(t *testing.T) {
+	dir := setupTestDir(t)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Debate("nonexistent")
+	if err == nil {
+		t.Fatal("Debate() should return error for nonexistent debate")
+	}
+
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+	if nfe.Resource != "debate" {
+		t.Errorf("NotFoundError.Resource: got %q, want %q", nfe.Resource, "debate")
+	}
+	if nfe.ID != "nonexistent" {
+		t.Errorf("NotFoundError.ID: got %q, want %q", nfe.ID, "nonexistent")
 	}
 }
 

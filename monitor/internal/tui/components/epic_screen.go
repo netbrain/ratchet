@@ -145,18 +145,21 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 	table.AddChild(tableHeader)
 
 	// Table rows (sliced by scroll offset for viewport scrolling).
+	// We track rendered rows to avoid overflowing the fixed-height table,
+	// since each milestone may also emit issue sub-rows and DAG connectors.
 	phases := []string{"plan", "test", "build", "review", "harden"}
 	offset := es.vm.ScrollOffset()
-	end := offset + (height - overhead)
-	if end > len(milestones) {
-		end = len(milestones)
-	}
-	for i := offset; i < end; i++ {
+	maxRows := height - overhead // available data rows (excluding header)
+	rowsRendered := 0
+	for i := offset; i < len(milestones) && rowsRendered < maxRows; i++ {
 		m := milestones[i]
 		selected := i == es.vm.SelectedIndex()
 
 		// DAG connector row between layers
 		if i > 0 && m.Layer > milestones[i-1].Layer && len(m.DependsOn) > 0 {
+			if rowsRendered >= maxRows {
+				break
+			}
 			connectorText := "  │"
 			connectorEl := tui.New(
 				tui.WithText(connectorText),
@@ -164,15 +167,24 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 				tui.WithHeight(1),
 			)
 			table.AddChild(connectorEl)
+			rowsRendered++
 		}
 
+		if rowsRendered >= maxRows {
+			break
+		}
 		row := es.buildMilestoneRow(cols, i+1, m, phases, selected)
 		table.AddChild(row)
+		rowsRendered++
 
 		// Render per-issue rows under each milestone
 		for _, iss := range m.Issues {
+			if rowsRendered >= maxRows {
+				break
+			}
 			issueRow := es.buildIssueRow(cols, iss, phases, selected)
 			table.AddChild(issueRow)
+			rowsRendered++
 		}
 	}
 
@@ -327,7 +339,7 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 }
 
 // buildIssueRow creates a sub-row for a single issue within a milestone.
-func (es *EpicScreen) buildIssueRow(cols int, iss views.IssueStatus, phases []string, parentSelected bool) *tui.Element {
+func (es *EpicScreen) buildIssueRow(cols int, iss views.IssueStatus, phases []string, _ bool) *tui.Element {
 	statusColor := milestoneStatusTuiColor(iss.Status)
 	baseStyle := tui.NewStyle().Foreground(statusColor).Dim()
 

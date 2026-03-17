@@ -273,6 +273,16 @@ func ParseWorkflow(data []byte) (*WorkflowConfig, error) {
 			}
 		}
 
+		// Type validation: version must be an int (YAML float like 2.5 would silently truncate).
+		if v, ok := raw["version"]; ok && v != nil {
+			switch v.(type) {
+			case int:
+				// OK
+			default:
+				return nil, fmt.Errorf("parse workflow: version must be an integer, got %T", v)
+			}
+		}
+
 		// Type validation: escalation must be a string (YAML may coerce int to string).
 		if v, ok := raw["escalation"]; ok && v != nil {
 			switch v.(type) {

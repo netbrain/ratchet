@@ -26,6 +26,7 @@ func IndexHandler(templatePath string) http.Handler {
 			return
 		}
 
+		setSecurityHeaders(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := tmpl.Execute(w, nil); err != nil {
 			http.Error(w, "failed to render template", http.StatusInternalServerError)

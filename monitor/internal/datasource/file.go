@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/netbrain/ratchet-monitor/internal/handler"
 	"github.com/netbrain/ratchet-monitor/internal/parser"
 )
 
@@ -210,6 +211,9 @@ func (f *FileDataSource) Debate(id string) (any, error) {
 
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, &handler.NotFoundError{Resource: "debate", ID: id}
+		}
 		return nil, fmt.Errorf("read debate %s: %w", id, err)
 	}
 

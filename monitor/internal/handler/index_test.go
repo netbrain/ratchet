@@ -82,6 +82,22 @@ func TestIndexHandler_MissingTemplate_Returns500(t *testing.T) {
 	}
 }
 
+func TestIndexHandler_GET_XContentTypeOptions(t *testing.T) {
+	dir := t.TempDir()
+	tmplPath := filepath.Join(dir, "index.html")
+	os.WriteFile(tmplPath, []byte(`<html><body>hello</body></html>`), 0o644)
+
+	h := IndexHandler(tmplPath)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	xcto := rec.Header().Get("X-Content-Type-Options")
+	if xcto != "nosniff" {
+		t.Errorf("X-Content-Type-Options: got %q, want %q", xcto, "nosniff")
+	}
+}
+
 func TestIndexHandler_InvalidTemplate_Returns500(t *testing.T) {
 	dir := t.TempDir()
 	tmplPath := filepath.Join(dir, "index.html")

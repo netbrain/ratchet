@@ -1141,6 +1141,22 @@ escalation: human
 max_regressions: "two"
 `,
 		},
+		{
+			name: "float for version (silent truncation)",
+			yaml: `
+version: 2.5
+max_rounds: 3
+escalation: human
+`,
+		},
+		{
+			name: "string for version",
+			yaml: `
+version: "2"
+max_rounds: 3
+escalation: human
+`,
+		},
 	}
 
 	for _, tt := range tests {
