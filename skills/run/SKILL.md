@@ -19,6 +19,8 @@ You are a workflow orchestrator. Your ONLY tools are:
   - Read-only git commands (`git status`, `git log`, `git branch`, `git diff`)
   - Read-only GitHub CLI (`gh pr list`, `gh pr view`, `gh issue list`)
 
+**NEVER use Write or Edit tools.** You are read-only. All file modifications happen inside debate-runner agents (which delegate to generative agents). If you feel the urge to edit a file, STOP — you are breaking out of the framework.
+
 **TOOL GATE — check EVERY Bash command before running it:**
 - `git rebase` → STOP. This is code work. Route to an issue pipeline.
 - `git merge` → STOP. This is code work. Route to an issue pipeline.
@@ -43,6 +45,20 @@ Your job is to:
 
 Issue pipelines spawn debate-runner agents. Debate-runners spawn generative
 and adversarial agents. The generative agent writes code. You do none of this.
+
+---
+
+## Foundational Principle — Guilty Until Proven Innocent
+
+**New changes are GUILTY until proven innocent.** Test failures on a PR branch are CAUSED by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master, not assuming it is unrelated.
+
+This principle applies throughout the issue pipeline:
+- **Guard failures**: A guard failure during an issue pipeline is the issue's fault. Do not dismiss it as "flaky" or "pre-existing" without evidence (e.g., `git stash && run-test` on clean master).
+- **CI failures**: When a PR's CI fails, the PR is guilty. The issue pipeline must fix the failure or provide definitive proof that master has the same failure.
+- **Debate context**: Pass this principle to all spawned agents (debate-runners, generative, adversarial). Every agent must internalize that failures are their responsibility to fix, not dismiss.
+- **Regression analysis**: When processing REGRESS verdicts, the burden is on showing the regression was pre-existing, not on assuming it is.
+
+This principle is passed as context to all spawned debate-runner agents (see Step 5d/5e).
 
 ---
 
@@ -385,6 +401,11 @@ Launching [N] milestones in parallel:
 ```
 
 For each ready milestone, spawn an Agent with:
+- `tools`: Read, Grep, Glob, Bash, Agent, AskUserQuestion
+- `disallowedTools`: Write, Edit
+
+The milestone agent is an orchestrator — it inherits the same "NEVER use Write or Edit" constraint as the parent. It spawns debate-runners at Step 5e, which in turn spawn generative agents (with Write/Edit) and adversarial agents (without Write/Edit).
+
 ```
 /ratchet:run --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]
 ```
@@ -619,11 +640,18 @@ flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <m
 ```
 
 - If a **blocking** pre-debate guard fails:
+  - **Guilty until proven innocent**: This failure is caused by the current issue's changes unless proven otherwise. Before dismissing as pre-existing, verify on clean master:
+    ```bash
+    # In the worktree, stash changes and test on clean base
+    git stash && bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+    git stash pop
+    # Only if the guard ALSO fails on clean base can the failure be considered pre-existing
+    ```
   - Use `AskUserQuestion`: "Pre-debate guard '[name]' failed: [summary]. Debates have NOT started yet."
   - Options: `"Fix and re-run (Recommended)"`, `"Override and proceed to debates"`, `"Cancel — skip this phase"`
   - If fix or cancel: skip debate creation entirely
 - If an **advisory** pre-debate guard fails:
-  - Log the failure and pass the output as context to the debates
+  - Log the failure and pass the output as context to the debates (the debates must address it — guilty until proven innocent)
   - Continue to debate creation
 
 #### 5d. Prepare Debate Context
@@ -644,9 +672,36 @@ Spawn a **debate-runner** agent for each matched pair. When multiple pairs match
 
 Use `model` set to the resolved `debate_runner` model (defaults to `sonnet`).
 
+**Tool boundaries for the debate-runner agent:**
+- The debate-runner has Write and Edit tools but may ONLY use them for debate artifacts inside `.ratchet/debates/`, `.ratchet/escalations/`, and `.ratchet/reviews/`. It MUST NOT write to any other path — no source code, no tests, no application config.
+- When the debate-runner spawns a **generative agent**, it MUST grant Write and Edit tools (the generative agent is the ONLY role that writes code).
+- When the debate-runner spawns an **adversarial agent**, it MUST NOT grant Write or Edit tools. The adversarial agent is read-only — it reviews, validates, and critiques but never modifies files.
+- When the debate-runner spawns a **tiebreaker agent**, it MUST NOT grant Write or Edit tools. The tiebreaker is read-only — it evaluates arguments and renders a verdict.
+
 Each debate-runner receives:
 ```
 Run debate for pair [pair-name] in phase [phase].
+
+ROLE BOUNDARY — You are a debate-runner, NOT a solver:
+  You orchestrate debate rounds between generative and adversarial agents.
+  You may use Write/Edit ONLY for debate artifacts in .ratchet/debates/,
+  .ratchet/escalations/, and .ratchet/reviews/. You NEVER modify source
+  code, tests, or application config. Your tools are: Read, Write, Edit,
+  Agent, AskUserQuestion — with Write/Edit gated to .ratchet/ paths only.
+
+  When spawning agents, enforce these tool boundaries:
+    Generative agent: tools = Read, Grep, Glob, Bash, Write, Edit
+    Adversarial agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+    Tiebreaker agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+
+  If you feel the urge to edit source code or tests, STOP — spawn the generative agent instead.
+
+PRINCIPLE — Guilty Until Proven Innocent:
+  New changes are GUILTY until proven innocent. Test failures on a PR
+  branch are CAUSED by the PR unless definitively proven otherwise.
+  The burden of proof is on demonstrating the failure exists on master,
+  not assuming it is unrelated. If a test fails, fix it — do not dismiss
+  it without running the same test on a clean master checkout as evidence.
 
 Pair definitions:
   Generative: .ratchet/pairs/<name>/generative.md
@@ -693,14 +748,24 @@ If the Task/Agent tool is unavailable or debate-runner spawning fails (e.g., nes
 
 Process each debate-runner result:
 
-- **`verdict: "consensus"`** (ACCEPT, CONDITIONAL_ACCEPT, or TRIVIAL_ACCEPT):
+- **`verdict: "consensus"` with `verdict_detail: "ACCEPT"` or `verdict_detail: "TRIVIAL_ACCEPT"`**:
   - Update file-hash cache:
     ```bash
     bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
     ```
   - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
-  - If CONDITIONAL_ACCEPT: log conditions
   - If TRIVIAL_ACCEPT: note `fast_path: true`
+
+- **`verdict: "consensus"` with `verdict_detail: "CONDITIONAL_ACCEPT"`**:
+  - This means the debate-runner resolved conditions internally (generative addressed them, adversarial confirmed in a follow-up round). Treat as consensus with noted conditions:
+    - Update file-hash cache (same as ACCEPT)
+    - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
+    - Log the conditions from the debate result's `conditions` array in the issue's metadata for traceability
+
+- **`verdict: "escalated"` with `escalation_reason: "conditions_unresolved"`**:
+  - CONDITIONAL_ACCEPT conditions were never fully resolved within max_rounds
+  - Follow the same escalation flow as other escalated verdicts (below)
+  - Log: "Debate [id] escalated: CONDITIONAL_ACCEPT conditions unresolved after [N] rounds"
 
 - **`verdict: "escalated"`** (human escalation required):
   - Update issue status in plan.yaml
@@ -882,7 +947,13 @@ After all issues in the milestone are `done`:
 
 **8c. Post-Milestone Analyst Assessment:**
 
-Spawn the analyst agent (with resolved `analyst` model, defaults to `opus`) for a brief assessment. The analyst reviews all issue debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
+Spawn the analyst agent (with resolved `analyst` model, defaults to `opus`) for a brief assessment. Agent configuration:
+- `tools`: Read, Grep, Glob, Bash
+- `disallowedTools`: Write, Edit
+
+The post-milestone analyst is **read-only** — it analyzes data and produces recommendations. Any file modifications from recommendations are applied by the orchestrator's parent skill, not the analyst.
+
+The analyst reviews all issue debates, scores, guard results, and any retro/escalation data to produce 3-5 bullet points covering:
 - Pair effectiveness observations
 - Scope coverage gaps
 - Guard recommendations
@@ -930,7 +1001,7 @@ Milestone [id] [blocked|halted]:
 
 ---
 
-**If `--unsupervised`** (sequential mode): Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+**If `--unsupervised`** (sequential mode): Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool (with `disallowedTools: Write, Edit` — the continuation agent is an orchestrator) with task `/ratchet:run --unsupervised`. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
 
 **If `--unsupervised`** (DAG mode): The top-level orchestrator processes milestone results from Step 3c. If newly unblocked milestones exist, launch them. If all milestones are done, present the epic completion summary and halt.
 

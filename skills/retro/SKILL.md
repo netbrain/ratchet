@@ -9,6 +9,22 @@ Feed external signals back into Ratchet. When a PR fails CI, gets review comment
 
 This is how Ratchet learns from the real world — not just from its own debates.
 
+## Foundational Principle — Guilty Until Proven Innocent
+
+**New changes are GUILTY until proven innocent.** When analyzing CI failures on a PR branch, the default assumption is that the PR caused the failure. The burden of proof is on demonstrating the failure exists on master — not on assuming it is unrelated or a "flake."
+
+When classifying findings:
+- **Do NOT classify a failure as `noise` (CI flake)** unless you have evidence it passed on re-run OR the same failure exists on master. "It looks like a flake" is not evidence.
+- **Do NOT skip a failure** because "it's probably unrelated." Prove it by checking master.
+- **Verification command**: Before downgrading any CI failure severity, run:
+  ```bash
+  # Check if the same test fails on master
+  gh run list --branch main --workflow "<workflow>" --limit 3 --json conclusion -q '.[].conclusion'
+  # Or check the specific test on the base commit
+  git log --oneline -1 origin/main  # get base SHA
+  # If all recent main runs passed, the PR is guilty
+  ```
+
 **You have full read/write access.** Unlike the run orchestrator (which is read-only), the retro skill MUST edit files directly — updating adversarial prompts, adding guards to workflow.yaml, and modifying test files. Do NOT defer edits to the user. When the user selects "Apply all fixes" or "Apply fixes", make the changes yourself using the Edit tool.
 
 ## Usage
@@ -92,7 +108,7 @@ Based on the answer, gather context (PR number, incident description, etc.) via 
    - `critical`: build-breaking, security vulnerability, data loss
    - `major`: test failure, functional regression, missing validation
    - `minor`: lint/style, formatting, convention deviation
-   - `noise`: CI flake (passed on re-run), environment-specific issue
+   - `noise`: CI flake — **requires evidence**: must have passed on re-run OR same failure confirmed on master. Never classify as noise based on assumption alone (guilty until proven innocent)
 
    **Cross-retro recurrence check**: Before storing, scan existing `.ratchet/retros/*.json` for findings with the same `type` and a similar `description`. If 2+ prior matches exist:
    - Auto-escalate severity one level (noise → minor → major → critical; critical stays critical)

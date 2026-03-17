@@ -156,6 +156,9 @@ for pr_url in $prs; do
   fi
 
   # Handle CI failures
+  # PRINCIPLE: Guilty until proven innocent — CI failures on a PR branch
+  # are CAUSED by the PR unless definitively proven otherwise. Do not
+  # dismiss as flaky or pre-existing without checking master.
   if [ -n "$ci_status" ]; then
     issue_ref=$(yq eval ".epic.milestones[].issues[] | select(.pr == \"$pr_url\") | .ref" .ratchet/plan.yaml)
 
@@ -165,7 +168,7 @@ for pr_url in $prs; do
     if [ -z "$existing" ]; then
       echo "❌ CI failure detected: PR #$pr_num (issue $issue_ref)"
       echo "   Failed checks: $ci_status"
-      echo "   Creating retro sidequest..."
+      echo "   PR is GUILTY until proven innocent — creating retro sidequest..."
 
       # Add retro discovery (unified discovery schema)
       discovery_ref="discovery-retro-$(date +%s)"

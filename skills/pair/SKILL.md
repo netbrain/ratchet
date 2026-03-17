@@ -64,6 +64,7 @@ Follow the same agent generation conventions as init:
 - Adversarial: tools: Read, Grep, Glob, Bash, disallowedTools: Write, Edit
 - Include project-specific knowledge in prompts
 - Define tight file scope globs
+- Encode the guilty-until-proven-innocent principle: test failures on a PR branch are caused by the PR unless definitively proven otherwise. Generative agents must fix failures, not dismiss them. Adversarial agents must reject dismissals lacking evidence.
 ```
 
 ### Step 3: Verify & Report

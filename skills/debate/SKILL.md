@@ -78,7 +78,14 @@ Resume the debate protocol from where it left off. Use `AskUserQuestion` to let 
   - Options: `"Resume debate (Recommended)"`, `"Restart debate"`, `"Abandon debate"`
   - If "Restart debate": delete all files in the `rounds/` directory, reset `rounds` to 0 in meta.json, then start fresh from round 1 per `/ratchet:run` Step 7 protocol.
 
-When resuming or running another round, execute the same debate protocol as `/ratchet:run` Step 7 (generative round, adversarial round, check verdict). Read the pair's agent definitions from `.ratchet/pairs/<pair-name>/` and the debate context from `meta.json` and existing round files. If `rounds/` is empty (no prior round files), start from round 1.
+When resuming or running another round, execute the same debate protocol as `/ratchet:run` Step 5e (generative round, adversarial round, check verdict). Read the pair's agent definitions from `.ratchet/pairs/<pair-name>/` and the debate context from `meta.json` and existing round files. If `rounds/` is empty (no prior round files), start from round 1.
+
+**Tool boundaries for resumed debates**: When spawning agents for resumed rounds, enforce the same role boundaries as `/ratchet:run` Step 5e:
+- Generative agent: tools = Read, Grep, Glob, Bash, Write, Edit
+- Adversarial agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+- Tiebreaker agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+
+**Pass the guilty-until-proven-innocent principle** to resumed debate agents: new changes are GUILTY until proven innocent — test failures on a PR branch are caused by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master.
 
 If the user picks "Abandon debate", set status to `"resolved"` with verdict `{"decision": "reject", "decided_by": "human", "reasoning": "Debate abandoned by user"}`.
 

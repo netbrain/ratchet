@@ -121,7 +121,7 @@ epic:
     - id: 6
       name: Workflow Quality Fixes
       description: Fix critical workflow bugs discovered during monitor M1 — false consensus, framework breakout, test guilt principle
-      status: pending
+      status: done
       done_when: CONDITIONAL_ACCEPT forces Round 2, agents structurally prevented from writing code outside debates, guilt principle encoded in prompts
       depends_on: []
       progress_ref: null
@@ -134,24 +134,43 @@ epic:
             - skill-coherence
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files:
+            - agents/debate-runner.md
+            - agents/analyst.md
+            - agents/tiebreaker.md
+            - skills/run/SKILL.md
+            - skills/retro/SKILL.md
+            - skills/watch/SKILL.md
+            - skills/tighten/SKILL.md
+            - skills/advise/SKILL.md
+            - skills/debate/SKILL.md
+            - skills/gen-tests/SKILL.md
+            - skills/guard/SKILL.md
+            - skills/init/SKILL.md
+            - skills/pair/SKILL.md
+          debates:
+            - agent-effectiveness-issue37-20260317T120000
+            - skill-coherence-issue37-20260317T120000
           branch: null
           pr: null
-          status: pending
+          status: done
         - ref: '#38'
           title: Fix CONDITIONAL_ACCEPT — currently identical to ACCEPT
           pairs:
             - skill-coherence
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files:
+            - agents/debate-runner.md
+            - skills/run/SKILL.md
+            - agents/analyst.md
+          debates:
+            - skill-coherence-issue38-20260317T103529
           branch: null
           pr: null
-          status: pending
+          status: done
         - ref: '#39'
           title: Enforce agent role boundaries — prevent framework breakout
           pairs:
@@ -160,12 +179,21 @@ epic:
           depends_on:
             - '#38'
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files:
+            - agents/debate-runner.md
+            - agents/tiebreaker.md
+            - agents/analyst.md
+            - skills/run/SKILL.md
+            - skills/tighten/SKILL.md
+            - skills/advise/SKILL.md
+            - skills/debate/SKILL.md
+          debates:
+            - agent-effectiveness-issue39-20260317T104044
+            - skill-coherence-issue39-20260317T104103
           branch: null
           pr: null
-          status: pending
+          status: done
   current_focus: null
   discoveries:
     - ref: disc-001

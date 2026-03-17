@@ -37,7 +37,14 @@ Read all available signals:
 
 ### Step 2: Spawn Analyst
 
-Spawn the **analyst** agent with the following task:
+Spawn the **analyst** agent using the generative model from `workflow.yaml` (`models.generative`, default `opus`). Agent configuration:
+- `subagent_type`: analyst
+- `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
+- `tools`: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
+
+The advise analyst has Write/Edit access because it applies approved recommendations directly (editing workflow.yaml, pair definitions, etc.). It MUST use AskUserQuestion to get human approval before any file modification.
+
+Task prompt:
 
 ```
 Perform a workflow health assessment for this Ratchet project.
@@ -48,6 +55,11 @@ Score data: [contents of scores.jsonl]
 Reviews: [summary of review data]
 Retro findings: [contents of retros/*.json]
 Escalation rulings: [contents of escalations/*.json]
+
+PRINCIPLE — Guilty Until Proven Innocent:
+  New changes are GUILTY until proven innocent. When reviewing retro findings
+  and CI failure patterns, check whether agents are dismissing failures without
+  proof. A healthy workflow holds PRs accountable for their test failures.
 
 Analyze the following dimensions (see "Ongoing Workflow Health Monitoring" in your instructions):
 1. Pair effectiveness rankings — which pairs add the most/least value?
@@ -60,6 +72,7 @@ Analyze the following dimensions (see "Ongoing Workflow Health Monitoring" in yo
 8. Regression analysis — are regressions concentrated on specific phase transitions?
 9. Severity distribution from retros — are critical/major findings being addressed?
 10. Settled law coverage — are settled escalation patterns being injected into adversarials?
+11. Guilty-until-proven-innocent compliance — are agents properly treating PR test failures as the PR's fault? Check retro findings for patterns of failures dismissed as "flaky" or "pre-existing" without evidence.
 
 Present your findings as a prioritized list of actionable recommendations.
 ```

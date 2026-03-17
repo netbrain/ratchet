@@ -101,6 +101,8 @@ Run the generated tests to verify they:
 2. Are syntactically valid
 3. Follow project conventions
 
+**Guilty until proven innocent**: If a generated test fails, it is the code's fault (the finding was valid) — not the test's fault. Fix the test only if it has a genuine bug (wrong assertion, syntax error). Do not weaken the test to make it pass. If the test correctly identifies a real issue, flag it as an unresolved finding.
+
 ### Step 6: Report
 
 ```

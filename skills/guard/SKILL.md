@@ -124,8 +124,15 @@ Guard Results: [phase] phase
 [N] passed, [N] failed ([N] blocking)
 ```
 
+**Guilty until proven innocent**: Guard failures are caused by the current changes unless proven otherwise. Before overriding a failed guard, verify whether the failure exists on a clean checkout:
+```bash
+# Test on clean base to determine if failure is pre-existing
+git stash && bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<command>" <blocking> && git stash pop
+# Only override if the guard also fails on clean base (pre-existing failure)
+```
+
 If any blocking guards failed, use `AskUserQuestion`:
-- Options: `"Fix and re-run (Recommended)"`, `"View full output of [name]"`, `"Override [name]"`, `"Done for now"`
+- Options: `"Fix and re-run (Recommended)"`, `"View full output of [name]"`, `"Verify on clean base first"`, `"Override [name]"`, `"Done for now"`
 
 #### Guard Results
 

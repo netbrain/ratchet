@@ -382,6 +382,7 @@ IMPORTANT:
 - Adversarial agents get tools: Read, Grep, Glob, Bash with disallowedTools: Write, Edit
 - Adversarial agents must know the exact validation commands available in this project
 - Scope each pair to specific file globs — tight scope leads to deep analysis
+- **Guilty until proven innocent**: Both generative and adversarial agent prompts MUST encode the principle that test failures on a PR branch are caused by the PR unless definitively proven otherwise. Generative agents must fix failures, not dismiss them. Adversarial agents must reject dismissals that lack evidence of the failure existing on master.
 
 ### Step 9: Verify Output
 

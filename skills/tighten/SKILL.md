@@ -31,7 +31,14 @@ If fewer than 3 reviews exist, inform the user that more debate data is needed b
 
 ### Step 2: Launch Analyst
 
-Spawn the **analyst** agent with the following task:
+Spawn the **analyst** agent using the generative model from `workflow.yaml` (`models.generative`, default `opus`). Agent configuration:
+- `subagent_type`: analyst
+- `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
+- `tools`: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
+
+The analyst has Write/Edit access because it directly edits pair definition files (generative.md, adversarial.md). This is intentional — the analyst IS the generative role for tightening.
+
+Task prompt:
 
 ```
 Review the performance data for agent pair [pair-name] and propose improvements.
@@ -53,6 +60,13 @@ Escalation rulings: [contents of .ratchet/escalations/*.json, if any]
 in the same direction, inject it as "settled law" in the adversarial prompt so the pair
 stops re-litigating settled disputes.)
 
+PRINCIPLE — Guilty Until Proven Innocent:
+  New changes are GUILTY until proven innocent. When reviewing CI failures
+  and retro findings, assume the PR caused the failure unless there is
+  definitive evidence the failure exists on master. Agents should be
+  tightened to internalize this principle — they must fix failures, not
+  dismiss them as "pre-existing" or "flaky" without proof.
+
 Your task:
 1. Analyze patterns across all reviews AND retro findings:
    - What issues are repeatedly missed by debates?
@@ -61,6 +75,7 @@ Your task:
    - What blind spots exist?
    - What strengths should be preserved?
    - Are there missing guards that should be added?
+   - Are agents dismissing test failures without proving them pre-existing? (guilty-until-proven-innocent violation)
 
 1b. Process retro findings by severity (critical first, skip noise unless asked):
    - Present severity distribution: "[N] critical, [N] major, [N] minor, [N] noise (skipped)"
