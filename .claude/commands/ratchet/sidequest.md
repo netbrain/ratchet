@@ -1,1 +1,1 @@
-../../skills/sidequest/SKILL.md
+../../../skills/sidequest/SKILL.md

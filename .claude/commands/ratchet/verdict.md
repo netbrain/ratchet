@@ -1,1 +1,1 @@
-../../skills/verdict/SKILL.md
+../../../skills/verdict/SKILL.md

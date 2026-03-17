@@ -1,1 +1,1 @@
-../../skills/guard/SKILL.md
+../../../skills/guard/SKILL.md

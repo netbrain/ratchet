@@ -1,1 +1,1 @@
-../../skills/status/SKILL.md
+../../../skills/status/SKILL.md

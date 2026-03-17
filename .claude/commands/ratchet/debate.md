@@ -1,1 +1,1 @@
-../../skills/debate/SKILL.md
+../../../skills/debate/SKILL.md

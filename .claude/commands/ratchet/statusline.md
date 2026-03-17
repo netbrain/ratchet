@@ -1,1 +1,1 @@
-../../skills/statusline/SKILL.md
+../../../skills/statusline/SKILL.md

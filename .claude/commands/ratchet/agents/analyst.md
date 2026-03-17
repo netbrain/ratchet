@@ -1,1 +1,1 @@
-../../../agents/analyst.md
+../../../../agents/analyst.md

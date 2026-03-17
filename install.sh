@@ -136,7 +136,7 @@ do_install() {
         local skill_file="$skill_dir/SKILL.md"
         [ -f "$skill_file" ] || continue
         if [ "$use_symlinks" = true ]; then
-            ln -sf "../../skills/$skill_name/SKILL.md" "$commands_dir/$skill_name.md" || die "Failed to link skill: $skill_name"
+            ln -sf "../../../skills/$skill_name/SKILL.md" "$commands_dir/$skill_name.md" || die "Failed to link skill: $skill_name"
         else
             cp "$skill_file" "$commands_dir/$skill_name.md" || die "Failed to copy skill: $skill_name"
         fi
@@ -150,7 +150,7 @@ do_install() {
             local agent_name
             agent_name="$(basename "$agent_file")"
             if [ "$use_symlinks" = true ]; then
-                ln -sf "../../../agents/$agent_name" "$commands_dir/agents/$agent_name" || die "Failed to link agent: $agent_name"
+                ln -sf "../../../../agents/$agent_name" "$commands_dir/agents/$agent_name" || die "Failed to link agent: $agent_name"
             else
                 cp "$agent_file" "$commands_dir/agents/$agent_name" || die "Failed to copy agent: $agent_name"
             fi

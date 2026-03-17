@@ -1,1 +1,1 @@
-../../../agents/debate-runner.md
+../../../../agents/debate-runner.md

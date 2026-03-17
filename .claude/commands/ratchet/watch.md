@@ -1,1 +1,1 @@
-../../skills/watch/SKILL.md
+../../../skills/watch/SKILL.md
