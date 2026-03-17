@@ -290,3 +290,14 @@ epic:
       pairs:
         - agent-effectiveness
         - skill-coherence
+    - ref: disc-004
+      title: Orchestrator itself bypassed debate framework for issue 40
+      category: workflow-bug
+      severity: critical
+      description: 'The orchestrator spawned a direct implementation agent instead of a debate-runner for issue 40 (CLI flags). This is the exact pattern disc-003 identified. The TOOL GATE in the run skill was insufficient — the orchestrator rationalized the bypass because the user said go ahead. Structural enforcement needed: the orchestrator must NEVER have the option to spawn non-debate-runner agents for implementation work.'
+      source: self-observation
+      status: pending
+      issue_ref: null
+      pairs:
+        - skill-coherence
+        - agent-effectiveness
