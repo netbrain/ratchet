@@ -9,6 +9,8 @@ Watch active Ratchet PRs for merge conflicts and CI failures. When problems are 
 
 Uses Claude Code's `/loop` feature to poll every 10 minutes.
 
+**Auto-started by `/ratchet:run`** — the run orchestrator starts this loop when PRs exist and stops it on completion. Use `/ratchet:watch` manually only if you want monitoring outside of a run session.
+
 ## Usage
 ```
 /ratchet:watch              # Start watching PRs

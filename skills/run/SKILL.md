@@ -276,6 +276,12 @@ yq eval '.epic' .ratchet/plan.yaml > /dev/null 2>&1 \
   || { echo "Error: .ratchet/plan.yaml is malformed or missing required 'epic' field. Fix it before running." >&2; exit 1; }
 ```
 
+**Start PR monitor**: If any issues in plan.yaml have non-null `pr` fields, start the PR watch loop to detect merge conflicts and CI failures during the run:
+```
+/loop 10m check Ratchet PRs for conflicts and CI failures
+```
+This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries automatically. The loop is stopped in Step 9 when the run completes. Skip this if no PRs exist yet (first run of a new epic).
+
 **CHECKPOINT**: You now understand the project state. Do NOT act on it — do not analyze code, do not plan fixes, do not write implementations. Your next action is Step 2: present choices to the user (or auto-select in unsupervised mode). Then Step 4: launch issue pipelines. The pipelines do the work.
 
 ### Step 2: Determine Focus
@@ -1076,6 +1082,8 @@ For teardown:
 2. Clean up `.ratchet/locks/` directory (remove `resources.json` and any stale lock directories)
 
 Resources are torn down regardless of whether milestones succeeded, halted, or had errors — always clean up.
+
+**Stop PR monitor**: If the PR watch loop was started in Step 1b, stop it now. The run is complete — any new PR issues will be caught on the next `/ratchet:run` invocation or by a manual `/ratchet:watch`.
 
 ### Step 10: Propose Next Focus
 
