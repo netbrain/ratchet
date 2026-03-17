@@ -32,7 +32,7 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
    **If not found locally**, fetch it from GitHub and install to the global path:
    ```bash
    mkdir -p "$HOME/.claude"
-   curl -fsSL https://raw.githubusercontent.com/netbrain/ratchet/main/statusline-ratchet.sh \
+   curl -fsSL https://raw.githubusercontent.com/netbrain/ratchet/refs/heads/main/statusline/statusline-ratchet.sh \
      -o "$HOME/.claude/statusline-ratchet.sh"
    chmod +x "$HOME/.claude/statusline-ratchet.sh"
    STATUSLINE_PATH="$HOME/.claude/statusline-ratchet.sh"
