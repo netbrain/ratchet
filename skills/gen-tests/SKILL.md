@@ -72,6 +72,13 @@ Agent spawn configuration:
 - `tools`: Read, Grep, Glob, Bash, Write, Edit
 - `disallowedTools`: none
 
+**AGENT GATE exception**: This agent spawn is a deliberate exception to the AGENT GATE
+pattern enforced in `/ratchet:run`. It operates outside the debate loop because it
+generates test files only, not production code. The agent prompt explicitly scopes work
+to test file creation. This exception is safe because: (1) test files do not affect
+production behavior, (2) the generated tests are reviewed by humans before merge, and
+(3) the scope is a single test per adversarial finding — not open-ended implementation.
+
 ```
 Based on this adversarial finding from a Ratchet debate:
 

@@ -255,6 +255,36 @@ epic:
           branch: null
           pr: null
           status: done
+    - id: 7
+      name: Orchestrator Agent Gate
+      description: Prevent orchestrator from bypassing debate framework by spawning direct implementation agents
+      status: done
+      done_when: Run skill has AGENT GATE that structurally prevents spawning non-debate-runner implementation agents
+      depends_on:
+        - 6
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: '#41'
+          title: Prevent orchestrator from spawning direct implementation agents
+          pairs:
+            - skill-coherence
+            - agent-effectiveness
+          depends_on: []
+          phase_status:
+            review: done
+          files:
+            - skills/run/SKILL.md
+            - skills/gen-tests/SKILL.md
+            - agents/debate-runner.md
+            - agents/analyst.md
+            - agents/tiebreaker.md
+          debates:
+            - skill-coherence-issue41-20260317T135344
+            - agent-effectiveness-issue41-20260317T135310
+          branch: null
+          pr: null
+          status: done
   current_focus: null
   discoveries:
     - ref: disc-001
@@ -296,8 +326,18 @@ epic:
       severity: critical
       description: 'The orchestrator spawned a direct implementation agent instead of a debate-runner for issue 40 (CLI flags). This is the exact pattern disc-003 identified. The TOOL GATE in the run skill was insufficient — the orchestrator rationalized the bypass because the user said go ahead. Structural enforcement needed: the orchestrator must NEVER have the option to spawn non-debate-runner agents for implementation work.'
       source: self-observation
+      status: promoted
+      issue_ref: '#41'
+      pairs:
+        - skill-coherence
+        - agent-effectiveness
+    - ref: disc-005
+      title: 'UX: Show upcoming/queued tasks when running parallel agents'
+      category: enhancement
+      severity: medium
+      description: When running parallel debates or milestone pipelines, the user has no visibility into what is queued or coming next. Would be beneficial to show a task list or progress indicator in Claude Code — e.g., which agents are running, which are pending, estimated completion. This may require Claude Code statusline or hook integration rather than just skill changes.
+      source: human-observation
       status: pending
       issue_ref: null
       pairs:
         - skill-coherence
-        - agent-effectiveness

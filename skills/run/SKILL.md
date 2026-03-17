@@ -35,6 +35,41 @@ through a debate. The orchestrator's job is to detect the conflict (via
 `gh pr view`) and re-launch the issue pipeline to handle it — not to
 resolve it directly.
 
+**AGENT GATE — check EVERY Agent tool invocation before spawning it:**
+
+The orchestrator may ONLY spawn agents in these four categories:
+
+1. **Debate-runners** (Step 5e) — agents whose prompt references the debate-runner role
+   (`agents/debate-runner.md`) and whose task is to orchestrate a debate between
+   generative and adversarial agents. The debate-runner is the ONLY valid path for
+   code changes.
+2. **Milestone pipeline agents** (Step 3c) — orchestrator agents that inherit the
+   same read-only constraints (`disallowedTools: Write, Edit`) and themselves only
+   spawn debate-runners.
+3. **Analyst agents** (Step 8c) — read-only assessment agents
+   (`disallowedTools: Write, Edit`) that analyze data and produce recommendations.
+   They NEVER modify files.
+4. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
+   inherit the same read-only constraints (`disallowedTools: Write, Edit`) and
+   continue the `/ratchet:run` loop.
+
+**NEVER spawn an agent with implementation instructions.** If your Agent prompt
+contains phrases like "implement X", "fix Y", "add Z", "write code for", "create
+the file", or "modify the source" — STOP. You are bypassing the debate framework.
+All implementation work MUST flow through: orchestrator -> debate-runner ->
+generative agent. There are no shortcuts.
+
+**Violation examples (all FORBIDDEN):**
+- `Agent("Implement the AGENT GATE feature in skills/run/SKILL.md")` — direct implementation
+- `Agent("Fix the failing test in src/auth.ts")` — direct bug fix
+- `Agent("Add error handling to the parser module")` — direct code change
+- `Agent("Refactor the database layer")` — direct refactoring
+
+**Correct pattern:**
+- `Agent("Run debate for pair [name] in phase [phase]. ...")` — spawns a debate-runner
+- `Agent("/ratchet:run --milestone M3 --unsupervised")` — spawns a milestone pipeline
+- `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
+
 Your job is to:
 
 1. Read state (plan.yaml, workflow.yaml)
@@ -530,7 +565,7 @@ When the orchestrator detects (via `gh pr view`) that an issue's PR has merge co
 
 This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
 
-**IMPORTANT**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Issue pipelines handle all debate orchestration. This is a structural constraint.
+**IMPORTANT (AGENT GATE enforcement)**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Do NOT spawn any agent with implementation instructions ("implement X", "fix Y", "add Z"). All code changes flow through debate-runners only. See the AGENT GATE section at the top of this document.
 
 ---
 
