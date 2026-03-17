@@ -25,7 +25,7 @@
 
             mkdir -p $out/bin
             makeWrapper $out/share/ratchet/install.sh $out/bin/ratchet-install \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.gnused ]}
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.gnused pkgs.yq-go ]}
           '';
         };
       in
@@ -44,12 +44,13 @@
           buildInputs = with pkgs; [
             shellcheck
             jq
+            yq-go
             git
             bash
           ];
           shellHook = ''
             echo "Ratchet development environment loaded"
-            echo "Available tools: shellcheck, jq, git"
+            echo "Available tools: shellcheck, jq, yq, git"
           '';
         };
       }
