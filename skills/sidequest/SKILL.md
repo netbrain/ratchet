@@ -121,6 +121,7 @@ Generate the discovery entry:
   status: "pending"
   issue_ref: null
   affected_scope: null
+  retro_type: null
   created_at: "<ISO 8601 timestamp>"
 ```
 
@@ -146,6 +147,7 @@ yq eval -i ".epic.discoveries += [{
   \"status\": \"pending\",
   \"issue_ref\": null,
   \"affected_scope\": null,
+  \"retro_type\": null,
   \"created_at\": \"$created\"
 }]" .ratchet/plan.yaml
 ```
@@ -189,10 +191,13 @@ If "Log another discovery" is selected, return to Step 2.
 Discoveries logged by this skill enter the standard Ratchet discovery pipeline:
 
 1. **Created here** with `status: "pending"` and `source: "manual"`
-2. **Surfaced** by `/ratchet:status` in the Sidequests section
+2. **Surfaced** by `/ratchet:status` in the Sidequests section (only `pending` discoveries shown)
 3. **Consumed** by `/ratchet:run` as Mode B sidequest work items
-4. **Promoted** to full issues when addressed (sets `status: "promoted"` and `issue_ref`)
-5. **Dismissed** if determined to be non-actionable (sets `status: "dismissed"`)
+4. **Processed** by `/ratchet:run` pipeline handling (sets `status: "done"` after the pipeline resolves the discovery)
+5. **Promoted** to full issues when addressed (sets `status: "promoted"` and `issue_ref`)
+6. **Dismissed** if determined to be non-actionable (sets `status: "dismissed"`)
+
+Valid status values: `pending` | `done` | `promoted` | `dismissed`
 
 ## See Also
 

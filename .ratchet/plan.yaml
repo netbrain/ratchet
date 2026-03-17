@@ -65,7 +65,7 @@ epic:
     - id: 3
       name: "E2E Test Infrastructure"
       description: "Build a test harness that exercises install/uninstall and debate flows end-to-end"
-      status: pending
+      status: done
       done_when: "A runnable test suite exists that validates core workflows"
       depends_on: [1]
       progress_ref: null
@@ -76,26 +76,26 @@ epic:
           pairs: [script-robustness]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [tests/test-install.sh]
+          debates: [script-robustness-issue25-20260317T084710]
           branch: null
-          status: pending
+          status: done
         - ref: "#26"
           title: "Debate flow end-to-end test"
           pairs: [script-robustness, skill-coherence]
           depends_on: ["#25"]
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [tests/test-debate-flow.sh]
+          debates: [script-robustness-issue26-20260317T085300]
           branch: null
-          status: pending
+          status: done
 
     - id: 4
       name: "Sidequest Lifecycle Validation"
       description: "Verify discovery/sidequest feature works end-to-end across watch, retro, run, status, sidequest skills"
-      status: pending
+      status: done
       done_when: "A discovery can be created, displayed, promoted to issue, and resolved"
       depends_on: [1]
       progress_ref: null
@@ -106,21 +106,21 @@ epic:
           pairs: [skill-coherence]
           depends_on: []
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [skills/sidequest/SKILL.md, skills/watch/SKILL.md, skills/status/SKILL.md]
+          debates: [skill-coherence-issue27-20260317T090000]
           branch: null
-          status: pending
+          status: done
         - ref: "#28"
           title: "Sidequest promotion to issue flow"
           pairs: [skill-coherence]
           depends_on: ["#27"]
           phase_status:
-            review: pending
-          files: []
-          debates: []
+            review: done
+          files: [skills/run/SKILL.md]
+          debates: [skill-coherence-issue28-20260317T091500]
           branch: null
-          status: pending
+          status: done
 
   current_focus: null
   discoveries: []

@@ -85,14 +85,16 @@ Progress: [completed]/[total] milestones
 ✓ = done  ● = in progress  ○ = pending  ✗ = failed/blocked
 ```
 
-If `epic.discoveries` exists in `plan.yaml` and has items with status != "done", append:
+If `epic.discoveries` exists in `plan.yaml` and has items with `status == "pending"`, append:
 ```
 Sidequests: [N] pending
-  [discovery-ref]: [title] ([severity])
+  [discovery-ref]: [title] ([category], [severity])
   ...
 
 Run /ratchet:run to process sidequests.
 ```
+
+This filters out discoveries that have been `promoted` (converted to issues), `dismissed` (non-actionable), or marked `done` (processed). Only actionable pending discoveries are shown.
 
 Adapt the phase display based on the component's workflow preset:
 - `tdd`: show all 5 phases

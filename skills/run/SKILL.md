@@ -258,19 +258,70 @@ Options:
 - "Run all ready issues sequentially (Recommended)" — executes all issues with no unmet dependencies
 - "Run specific issue: [ref]" — one option per ready issue
 - "Address unresolved conditions from last run" — only if conditions exist
-- "Process sidequests ([N] pending: [titles...])" — only if `epic.discoveries` has unprocessed items (status != "done")
+- "Process sidequests ([N] pending: [titles...])" — only if `epic.discoveries` has items with `status == "pending"`
 - "[Next milestone name]" — skip ahead
 - "Review all existing code"
 - (Include an "Other" option so the user can type a custom focus)
 
-**Sidequest processing**: When "Process sidequests" is selected, iterate over `epic.discoveries` with status != "done":
+**Sidequest processing**: When "Process sidequests" is selected, iterate over `epic.discoveries` with `status == "pending"`. For each discovery, use `AskUserQuestion`:
+
+- Question: "Discovery: [title] ([category], [severity])\n[description]"
+- Options:
+  - `"Process now"` — handle via existing pipeline (retro, re-launch, etc.)
+  - `"Promote to issue"` — convert this discovery into a full plan.yaml issue
+  - `"Dismiss"` — mark as non-actionable
+  - `"Skip for now"` — leave as pending, move to next discovery
+
+**Action: Process now** (existing behavior):
 - `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:retro pr <N>` for the affected issue
 - `retro_type: "skipped-finding"` → present to user for decision (apply now or defer)
-- No `retro_type` (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase. If `issue_ref` is absent (legacy discovery), parse from `affected_scope`: `issue_ref=$(echo "$affected_scope" | sed 's/^issue //')`
-- Mark each discovery `status: "done"` in `plan.yaml` after it is processed:
+- No `retro_type` with `issue_ref` set (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase
+- No `retro_type` with `issue_ref: null` (manual discovery with no issue context) → cannot process directly, inform user: "This discovery has no linked issue. Promote it to an issue first, or dismiss it." Then re-present the action selector without the "Process now" option.
+- Mark each processed discovery `status: "done"` in `plan.yaml`:
   ```bash
   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"done\"" .ratchet/plan.yaml
   ```
+
+**Action: Promote to issue** — converts a discovery into a full plan.yaml issue:
+1. Determine target milestone:
+   - If `context.milestone` is set, use that milestone
+   - Otherwise, use `AskUserQuestion` to select from active milestones
+2. Generate issue ref: read existing issues in the target milestone, find the highest issue number, increment by 1. Format: `issue-<milestone-number>-<next-issue-number>`
+3. Determine pairs:
+   - If discovery `pairs` array is non-empty, use those
+   - Otherwise, use `AskUserQuestion` to select from available pairs in workflow.yaml
+4. Create the issue entry in plan.yaml:
+   ```bash
+   new_ref="issue-<M>-<N>"
+   yq eval -i "(.epic.milestones[] | select(.id == \"$milestone_id\")).issues += [{
+     \"ref\": \"$new_ref\",
+     \"title\": \"$discovery_title\",
+     \"pairs\": [\"$pair_name\"],
+     \"depends_on\": [],
+     \"phase_status\": {\"plan\": \"pending\", \"test\": \"pending\", \"build\": \"pending\", \"review\": \"pending\", \"harden\": \"pending\"},
+     \"files\": [],
+     \"debates\": [],
+     \"branch\": null,
+     \"pr\": null,
+     \"status\": \"pending\"
+   }])" .ratchet/plan.yaml
+   ```
+5. Update the discovery status and link:
+   ```bash
+   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"promoted\"" .ratchet/plan.yaml
+   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).issue_ref = \"$new_ref\"" .ratchet/plan.yaml
+   ```
+6. Confirm to user: "Discovery promoted to issue [new_ref] in milestone [milestone_id]. Run /ratchet:run to start working on it."
+
+**Action: Dismiss** — marks a discovery as non-actionable:
+1. Use `AskUserQuestion` (freeform): "Reason for dismissal (optional)"
+2. Update plan.yaml:
+   ```bash
+   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"dismissed\"" .ratchet/plan.yaml
+   ```
+3. Confirm: "Discovery [ref] dismissed."
+
+**Action: Skip for now** — no changes, move to next discovery.
 
 #### Mode C: Changed files (no plan.yaml, git repo exists)
 ```bash

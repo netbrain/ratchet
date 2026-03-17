@@ -132,18 +132,23 @@ for pr_url in $prs; do
       echo "🔴 Merge conflict detected: PR #$pr_num (issue $issue_ref)"
       echo "   Creating sidequest to resolve conflict..."
 
-      # Add discovery to plan.yaml
+      # Add discovery to plan.yaml (unified discovery schema)
       discovery_ref="discovery-conflict-$(date +%s)"
+      milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
       yq eval -i ".epic.discoveries += [{
         \"ref\": \"$discovery_ref\",
         \"title\": \"Resolve merge conflict in PR #$pr_num\",
         \"description\": \"PR #$pr_num for issue $issue_ref has merge conflicts with main. Re-run issue pipeline to regenerate code on current main branch.\",
+        \"category\": \"bug\",
+        \"severity\": \"critical\",
         \"source\": \"pr-conflict-$pr_num\",
+        \"context\": {\"milestone\": \"$milestone_id\", \"issue\": \"$issue_ref\", \"debate\": null},
+        \"pairs\": [],
         \"created_at\": \"$(date -Iseconds)\",
-        \"severity\": \"high\",
         \"status\": \"pending\",
         \"issue_ref\": \"$issue_ref\",
-        \"affected_scope\": \"issue $issue_ref\"
+        \"affected_scope\": \"issue $issue_ref\",
+        \"retro_type\": null
       }]" .ratchet/plan.yaml
 
       echo "   ✓ Created discovery: $discovery_ref"
@@ -162,15 +167,19 @@ for pr_url in $prs; do
       echo "   Failed checks: $ci_status"
       echo "   Creating retro sidequest..."
 
-      # Add retro discovery
+      # Add retro discovery (unified discovery schema)
       discovery_ref="discovery-retro-$(date +%s)"
+      milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
       yq eval -i ".epic.discoveries += [{
         \"ref\": \"$discovery_ref\",
         \"title\": \"Retro: CI failure in PR #$pr_num\",
         \"description\": \"PR #$pr_num for issue $issue_ref failed CI checks: $ci_status. Review failure, update guards/tests, and improve agent prompts to prevent recurrence.\",
+        \"category\": \"tech-debt\",
+        \"severity\": \"major\",
         \"source\": \"pr-ci-failure-$pr_num\",
+        \"context\": {\"milestone\": \"$milestone_id\", \"issue\": \"$issue_ref\", \"debate\": null},
+        \"pairs\": [],
         \"created_at\": \"$(date -Iseconds)\",
-        \"severity\": \"medium\",
         \"status\": \"pending\",
         \"issue_ref\": \"$issue_ref\",
         \"affected_scope\": \"issue $issue_ref\",
@@ -185,7 +194,7 @@ done
 
 ### Discovery Schema
 
-Discoveries created by PR monitoring (and by `/ratchet:retro`) follow this structure:
+Discoveries created by PR monitoring (and by `/ratchet:retro`) follow the **unified discovery schema** shared with `/ratchet:sidequest`:
 
 ```yaml
 epic:
@@ -193,37 +202,52 @@ epic:
     - ref: "discovery-conflict-1710633000"
       title: "Resolve merge conflict in PR #20"
       description: "PR #20 for issue issue-2-2 has merge conflicts with main. Re-run issue pipeline to regenerate code on current main branch."
+      category: "bug"             # bug for conflicts, tech-debt for CI failures
+      severity: "critical"        # critical for conflicts, major for CI failures, minor for info
       source: "pr-conflict-20"
+      context:
+        milestone: "milestone-2"
+        issue: "issue-2-2"
+        debate: null
+      pairs: []
       created_at: "2026-03-17T00:30:00Z"
-      severity: "high"           # high for conflicts, medium for CI failures
-      status: "pending"          # pending | done (set to "done" by /ratchet:run after processing)
-      issue_ref: "issue-2-2"     # direct ref to the affected issue (for run/status lookups)
+      status: "pending"           # pending | promoted | dismissed | done
+      issue_ref: "issue-2-2"      # direct ref to the affected issue (for run/status lookups)
       affected_scope: "issue issue-2-2"   # human-readable scope description
-      retro_type: null           # null for merge conflicts; "ci-failure" | "skipped-finding" for retro discoveries
+      retro_type: null             # null for merge conflicts; "ci-failure" | "skipped-finding" for retro discoveries
 
     - ref: "discovery-retro-1710633100"
       title: "Retro: CI failure in PR #19"
       description: "PR #19 for issue issue-2-3 failed CI checks: test-suite. Review failure, update guards/tests, and improve agent prompts to prevent recurrence."
+      category: "tech-debt"
+      severity: "major"
       source: "pr-ci-failure-19"
+      context:
+        milestone: "milestone-2"
+        issue: "issue-2-3"
+        debate: null
+      pairs: []
       created_at: "2026-03-17T00:31:40Z"
-      severity: "medium"
       status: "pending"
       issue_ref: "issue-2-3"
       affected_scope: "issue issue-2-3"
       retro_type: "ci-failure"
 ```
 
-**Discovery fields:**
+**Discovery fields (unified schema — all sources):**
 - `ref` — unique ID (format: `discovery-<type>-<timestamp>`)
 - `title` — short human-readable description
 - `description` — full context including what happened and what to do
-- `source` — origin identifier (e.g., `pr-conflict-20`, `retro-2026-03-17T00:00:00Z`)
+- `category` — `bug | tech-debt | feature | security | performance | other`
+- `severity` — `critical | major | minor | info`
+- `source` — origin identifier (e.g., `manual`, `pr-conflict-20`, `pr-ci-failure-19`)
+- `context` — object with `milestone`, `issue`, `debate` refs (all nullable)
+- `pairs` — array of relevant pair names (may be empty)
 - `created_at` — ISO timestamp
-- `severity` — `high` (merge conflicts) | `medium` (CI failures, skipped findings) | `low`
-- `status` — `pending` (not yet processed) | `done` (processed by `/ratchet:run`)
-- `issue_ref` — the issue ref this discovery is related to (used for pipeline re-launch)
+- `status` — `pending` (new) | `promoted` (converted to issue) | `dismissed` (non-actionable) | `done` (processed by `/ratchet:run`)
+- `issue_ref` — the issue ref this discovery is related to (set on creation for PR-linked discoveries, set on promotion for manual discoveries)
 - `affected_scope` — human-readable scope description
-- `retro_type` — `null` (merge conflicts), `"ci-failure"`, or `"skipped-finding"`
+- `retro_type` — `null` (merge conflicts, manual), `"ci-failure"`, or `"skipped-finding"`
 
 These discoveries surface as available work in `/ratchet:run` (Mode B sidequest option) and `/ratchet:status` (Sidequests section).
 
