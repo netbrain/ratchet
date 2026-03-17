@@ -8,3 +8,15 @@ result-*
 !.ratchet/workflow.yaml
 !.ratchet/project.yaml
 !.ratchet/pairs/
+
+# Ratchet workspaces: Exclude runtime state in all workspace subdirs
+*/.ratchet/plan.yaml
+*/.ratchet/worktrees/
+*/.ratchet/debates/
+*/.ratchet/reviews/
+*/.ratchet/scores/
+*/.ratchet/retros/
+*/.ratchet/escalations/
+*/.ratchet/guards/
+*/.ratchet/reports/
+*/.ratchet/progress/

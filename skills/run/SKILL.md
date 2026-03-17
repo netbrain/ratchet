@@ -81,12 +81,12 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 ### Behavior
 
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
-- **Step 2 (focus)**: Auto-select "Run all ready issues in parallel" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
-- **Step 4 (issue pipelines)**: Launch all ready issues in parallel. Each issue pipeline runs autonomously.
+- **Step 2 (focus)**: Auto-select "Run all ready issues sequentially" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
+- **Step 4 (issue pipelines)**: Execute all ready issues sequentially inline. Each issue pipeline runs in an isolated worktree, spawning only debate-runner agents.
 - **Step 5-dry (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
 - **Step 5c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, that issue **halts** (other issues continue).
 - **Step 6 (static analysis)**: Auto-select "Fix these before running". Same 2-attempt retry, then halt.
-- **Step 5e (debates)**: Run normally. Debates are autonomous by nature.
+- **Step 5e (debates)**: Run normally. Debates are autonomous by nature. If debate-runner cannot be spawned (tool unavailable), the issue **halts** with status `blocked` — quality gates cannot be compromised.
 - **Step 5e (escalation)**: If escalation policy is `tiebreaker` or `both`, auto-escalate to tiebreaker. If policy is `human`, that issue **halts** — this is the primary stop condition.
 - **Step 5e (precedent)**: Auto-select "Apply settled pattern" when available.
 - **Step 5f (post-debate guards)**: If blocking guard fails → auto-select "Fix and re-run" (2 attempts, then halt issue).
@@ -116,14 +116,15 @@ This creates a chain: each agent handles one milestone, persists state, and spaw
 
 **Issue-level halts** (the issue stops, other issues continue):
 1. A debate requires human escalation (`escalation: human`)
-2. A blocking guard fails after 2 auto-fix attempts
-3. Regression budget is exhausted and no auto-resolution is possible
+2. Debate-runner cannot be spawned (tool unavailable) — quality gate cannot be enforced
+3. A blocking guard fails after 2 auto-fix attempts
+4. Regression budget is exhausted and no auto-resolution is possible
 
 **Milestone-level halts** (the entire run stops):
-4. A static analysis pre-gate fails after 2 attempts (Step 6)
-5. A done milestone would need re-opening
-6. All issues in the milestone are halted (no progress possible)
-7. All milestones are complete (success)
+5. A static analysis pre-gate fails after 2 attempts (Step 6)
+6. A done milestone would need re-opening
+7. All issues in the milestone are halted (no progress possible)
+8. All milestones are complete (success)
 
 On halt, present a summary:
 ```
@@ -212,8 +213,11 @@ There are five modes, checked in order:
 #### Mode M: Single-milestone pipeline (--milestone <id>)
 If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3** to build the issue dependency graph for this single milestone. This mode is used when the orchestrator launches parallel milestones — each agent re-enters the run skill scoped to one milestone. Execute Steps 3 → 4 → 8 for this milestone, then return the result.
 
-#### Mode S: Single-issue pipeline (--issue <ref>)
-If `--issue` is set, skip all focus negotiation. Find the issue by ref in the current milestone's `issues` array. Jump directly to **Step 5** (Issue Pipeline) for this single issue. This mode is used when the orchestrator spawns parallel agents — each agent re-enters the run skill scoped to one issue. Do NOT spawn further issue-level agents; execute the pipeline directly.
+#### Mode S: Single-issue pipeline (--issue <ref>) [DEPRECATED]
+
+**Note**: This mode is deprecated in favor of inline execution (Step 4b). The `--issue` flag may still be used for manual/supervised runs but is no longer used by the orchestrator in automated flows.
+
+If `--issue` is set manually, execute the issue pipeline (Step 5) directly for the specified issue without milestone context.
 
 #### Mode A: Explicit pair or --all-files
 If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip epic negotiation.
@@ -245,7 +249,7 @@ If there are unresolved conditions from previous CONDITIONAL_ACCEPTs, append:
 `"(Unresolved from last run: [condition1], [condition2])"`
 
 Options:
-- "Run all ready issues in parallel (Recommended)" — launches all issues with no unmet dependencies
+- "Run all ready issues sequentially (Recommended)" — executes all issues with no unmet dependencies
 - "Run specific issue: [ref]" — one option per ready issue
 - "Address unresolved conditions from last run" — only if conditions exist
 - "[Next milestone name]" — skip ahead
@@ -334,11 +338,11 @@ The spawned agent enters Mode M (Step 2), builds the issue DAG for its milestone
 
 Proceed to **Step 8** for each completed milestone, then **Step 10** for epic-level next steps.
 
-### Step 4: Launch Issue Pipelines
+### Step 4: Execute Issue Pipelines
 
-**CHECKPOINT**: You are about to launch issue pipelines. Your ONLY action here is spawning Agent calls. If you are tempted to "quickly fix" something, write a test, or implement a feature before launching — STOP. That work belongs inside the issue pipeline's debate-runner, not here.
+**CHECKPOINT**: You are about to execute issue pipelines. Your job is to orchestrate the phase-gated execution for each issue in isolated worktrees. Do NOT write code, fix bugs, or implement features — that work belongs inside the debate-runner agents spawned from Step 5e.
 
-This is the core execution step. The orchestrator launches parallel pipelines for independent issues.
+This is the core execution step. The orchestrator executes pipeline logic for each issue inline (no agent spawning), using git worktrees for isolation. Debate-runner agents are spawned at Step 5e, keeping nesting depth minimal.
 
 #### 4a. Identify Ready Issues
 
@@ -346,63 +350,87 @@ From the dependency graph built in Step 3b, identify **ready issues** — issues
 
 **For explicit pair / --all-files modes:** Skip issue-based execution. Run the specified pairs directly using the single-issue flow (Step 5) without worktree isolation.
 
-#### 4b. Launch Parallel Issue Runners
+#### 4b. Execute Issue Pipelines Inline
 
-For each ready issue, spawn an Agent with `isolation: "worktree"` that re-invokes the run skill scoped to a single issue. The spawned agent enters Mode S (Step 2) and executes the issue pipeline directly.
+For each ready issue, execute the issue pipeline (Step 5) **inline** (not as a spawned agent). Use git worktrees for filesystem isolation.
 
-**Worktree base branch:**
-- If the issue has no `depends_on` → branch from main (or current branch)
-- If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml. This ensures the dependent issue builds on top of the dependency's changes.
+**Execution strategy:**
+- **Sequential execution**: Process issues one at a time to maintain simplicity and avoid resource contention
+- **Worktree isolation**: Each issue runs in its own git worktree with an isolated branch
+- **Inline logic**: Execute Steps 5a-5h directly in the current context (no agent spawning)
+- **Debate-runner spawning**: Only spawn agents at Step 5e for debate-runners (depth: orchestrator → debate-runner)
 
-Launch all ready issues **in parallel in a single message** — one Agent call per issue. Each agent's task:
+**Worktree setup per issue:**
+
+1. **Determine base branch:**
+   - If the issue has no `depends_on` → branch from main (or current branch)
+   - If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml
+
+2. **Create worktree:**
+   ```bash
+   git worktree add .ratchet/worktrees/<issue-ref> <base-branch>
+   cd .ratchet/worktrees/<issue-ref>
+   git checkout -b ratchet/<milestone-slug>/<issue-ref>
+   ```
+
+3. **Execute issue pipeline** (Steps 5a-5h) in the worktree context
+
+4. **Record results** in main repo's plan.yaml (worktree plan.yaml is ephemeral)
+
+5. **Clean up worktree** after issue completes or halts:
+   ```bash
+   cd <main-repo>
+   git worktree remove .ratchet/worktrees/<issue-ref>
+   ```
+
+**Note on parallelism**: Issues execute sequentially to:
+- Avoid agent nesting limits (debate-runners spawn directly from orchestrator, not from nested issue agents)
+- Prevent resource contention on shared guards/resources
+- Simplify state management and error handling
+
+For true parallelism, use milestone-level DAG (Step 3a) where each milestone runs in a separate agent, and each milestone processes its issues sequentially.
+
+Present a summary before execution:
 
 ```
-/ratchet:run --issue [ref] [--unsupervised] [--auto-pr] [--no-cache]
-```
-
-Pass through any flags from the parent invocation. The spawned agent reads plan.yaml, finds the issue by ref, and executes the issue pipeline (Step 5) directly. It does NOT spawn further agents for issues — it IS the issue runner.
-
-**Note on parallelism**: The Agent tool runs parallel calls concurrently but returns all results together — the orchestrator blocks until ALL agents in the batch complete. This means:
-- Layer 0 issues (no dependencies) are all launched in one batch
-- The orchestrator waits for the entire batch before processing any results
-- Layer 1+ issues (with dependencies) are launched in a subsequent batch after their dependencies complete
-
-Present a summary before the batch launches:
-
-```
-Launching [N] issue pipelines in parallel:
+Executing [N] issue pipelines sequentially:
   [ref]: [title] — [N] pairs, starting at [phase]
   [ref]: [title] — [N] pairs, starting at [phase]
 
 [If Layer 1+ exists: "[N] more issues waiting for dependencies"]
 ```
 
-#### 4c. Process Issue Results (after batch completes)
+#### 4c. Process Issue Results (after issue completes)
 
-When all agents in a batch return, process the results. **Do NOT fix, debug, or modify anything from the results — just report and route.** For each completed issue:
+After each issue pipeline completes (Step 5h), update state and check for newly unblocked issues. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
 
-1. Read the issue's completion summary (the agent's final output — see Step 5h)
-2. Present all summaries to the user
-3. **Update the MAIN repo's `plan.yaml`** based on each issue runner's output. Issue pipelines run in worktrees — their plan.yaml updates are lost when the worktree is cleaned up. The orchestrator MUST write these updates:
+For each completed issue:
+
+1. **Update the MAIN repo's `plan.yaml`** immediately after the issue pipeline completes. Since execution is inline, you have direct access to the results:
    - Set `status` (done, blocked, escalated, failed)
    - Set `phase_status` for all phases
    - Set `branch` (the branch name created by the pipeline)
    - Set `files` (list of modified files)
    - Set `debates` (debate IDs created)
-   - Parse these from the issue runner's structured completion summary (Step 5h)
-4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
-5. If newly unblocked issues exist → launch them as a new parallel batch (back to 4b)
-6. Report overall progress: `"[N]/[total] issues complete"`
+   - Update directly based on Step 5h execution results
 
-**CRITICAL**: This plan.yaml update is not optional. Without it, milestone completion state is lost at context boundaries. The orchestrator is the authoritative writer — issue pipelines output results, the orchestrator persists them.
+2. **Clean up the worktree**: Remove `.ratchet/worktrees/<issue-ref>` after recording results
+
+3. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
+
+4. If newly unblocked issues exist → execute them as the next batch (back to 4b)
+
+5. Report progress after each issue: `"[N]/[total] issues complete in milestone [id]"`
+
+**CRITICAL**: This plan.yaml update is not optional. The orchestrator is the authoritative writer for all issue state.
 
 **When all issues across all layers are done** → milestone is complete, proceed to Step 8.
 
-**If an issue runner returns with a halt (blocked/escalated/failed):**
-- Present the early-exit summary
+**If an issue pipeline halts (blocked/escalated/failed):**
+- Record the halt status in plan.yaml immediately
 - In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
   - Options: `"Resolve now"`, `"Continue with remaining issues (Recommended)"`, `"Done for now"`
-- In unsupervised mode: if `escalation: human`, note the halt. Continue launching subsequent layers if possible — a halted issue only blocks issues that depend on it, not unrelated issues. Halt the entire run only if no progress is possible.
+- In unsupervised mode: note the halt, continue with remaining issues if possible. A halted issue only blocks issues that depend on it, not unrelated issues. Halt the entire milestone only if all issues are blocked.
 
 **Handling merge conflicts on existing PRs:**
 
@@ -418,13 +446,17 @@ This is not a special case — it's the normal pipeline flow. Merge conflicts me
 
 ---
 
-### Step 5: Issue Pipeline (runs per-issue, typically in a worktree)
+### Step 5: Issue Pipeline (executed inline per-issue in isolated worktrees)
 
-This is the phase-gated loop for a single issue. You enter this step in two ways:
-- **Mode S** (`--issue <ref>`): You ARE the issue runner. A parent orchestrator spawned you via Agent tool with `isolation: "worktree"`. Execute the pipeline directly — do NOT spawn further issue-level agents.
-- **Single ready issue**: If only one issue is ready, the orchestrator can execute Step 5 inline without spawning a separate agent.
+This is the phase-gated loop for a single issue. The orchestrator executes this step **inline** for each issue, using git worktrees for filesystem isolation.
 
-The issue pipeline progresses through phases sequentially for ONE issue, then returns a result to the caller (or updates plan.yaml directly if running inline).
+**Execution context:**
+- Called from Step 4b for each ready issue
+- Runs in the issue's dedicated git worktree (`.ratchet/worktrees/<issue-ref>`)
+- Spawns debate-runner agents at Step 5e (only agent spawning in the pipeline)
+- Updates the main repo's plan.yaml upon completion (Step 5h)
+
+The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on workflow), then returns control to Step 4c for state persistence.
 
 #### 5a. Determine Current Phase and Match Pairs
 
@@ -570,6 +602,26 @@ Context:
     tiebreaker: [resolved model]
 ```
 
+**If Debate-Runner Cannot Be Spawned**
+
+If the Task/Agent tool is unavailable or debate-runner spawning fails (e.g., nesting limits, execution environment constraints):
+
+1. **In supervised mode**: Escalate to human via `AskUserQuestion`:
+   - Question: "Debate-runner unavailable for pair [pair-name] in phase [phase]. How should we proceed?"
+   - Options: `"Wait and retry"`, `"Skip this phase"`, `"Escalate issue for manual resolution"`
+
+2. **In unsupervised mode**: Halt the issue pipeline with status `blocked`:
+   - Reason: "Debate-runner unavailable - quality gate cannot be enforced"
+   - Set issue status to `blocked` in plan.yaml
+   - Other issues in the milestone continue (this issue only blocks its dependents)
+   - Log: "Issue [ref] blocked at phase [phase]: debate-runner tool unavailable. Manual intervention required."
+
+**Retry Logic** (if "Wait and retry" selected):
+- Retry spawning the debate-runner up to 3 times with exponential backoff (5s, 10s, 20s)
+- If all retries fail, escalate to human or halt (depending on mode)
+
+**No Fallback Validation**: The debate-runner is the ONLY acceptable path for quality enforcement. Guards alone are insufficient substitutes for adversarial review. Auto-approval without debate violates the quality contract.
+
 #### Handle Debate Results
 
 Process each debate-runner result:
@@ -590,7 +642,7 @@ Process each debate-runner result:
 - **`verdict: "regress"`** (REGRESS):
   - Handle regression (Step 5g)
 
-**IMPORTANT**: Do NOT run debates yourself. The debate-runner is the ONLY path.
+**IMPORTANT**: Do NOT run debates yourself. The debate-runner is the ONLY path. If unavailable, halt and escalate rather than compromise quality.
 
 **IMPORTANT**: After processing debate results, proceed through ALL of Step 5f — including commit/PR. Do NOT skip to the next phase without packaging the work.
 
