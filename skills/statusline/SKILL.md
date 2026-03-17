@@ -17,26 +17,36 @@ Configure Claude Code to use the Ratchet statusline, which shows epic progress, 
 
 ### Install
 
-1. Verify the statusline script exists:
+1. **Find the statusline script.** Check both local and global install paths:
    ```bash
-   test -f .claude/statusline-ratchet.sh || echo "missing"
+   if [ -f .claude/statusline-ratchet.sh ]; then
+     STATUSLINE_PATH=".claude/statusline-ratchet.sh"
+   elif [ -f "$HOME/.claude/statusline-ratchet.sh" ]; then
+     STATUSLINE_PATH="$HOME/.claude/statusline-ratchet.sh"
+   else
+     echo "NOT FOUND"
+   fi
    ```
-   If missing: "Statusline script not found. Run the Ratchet installer first."
 
-2. Read the current project settings from `.claude/settings.json` (create if it doesn't exist).
+   **If NOT FOUND — STOP.** Do NOT create the script yourself. It is shipped with the Ratchet installer. Tell the user:
+   > "Statusline script not found. Install Ratchet first: `nix run github:netbrain/ratchet -- --global` or `./install.sh --local`"
 
-3. Set the `statusline` field:
+   Then stop. Do nothing else.
+
+2. **Update settings.** Read `.claude/settings.json` (or `~/.claude/settings.json` for global installs). If the file doesn't exist, create it with just the statusline key. If it exists, add/update only the `statusline` key — preserve everything else.
+
    ```json
    {
-     "statusline": ".claude/statusline-ratchet.sh"
+     "statusline": "<STATUSLINE_PATH from step 1>"
    }
    ```
-   Preserve all other existing settings — only add/update the `statusline` key.
 
-4. Confirm: "Ratchet statusline installed. Restart Claude Code to see it."
+   Use the Edit tool to update an existing file, or Write to create a new one.
+
+3. **Confirm:** "Ratchet statusline installed. Restart Claude Code to see it."
 
 ### Remove (`--remove`)
 
-1. Read `.claude/settings.json`
-2. Remove the `statusline` key
+1. Read `.claude/settings.json` (check local, then global)
+2. Remove the `statusline` key — preserve everything else
 3. Confirm: "Statusline removed. Restart Claude Code to restore default."
