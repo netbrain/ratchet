@@ -166,6 +166,19 @@ func (a *App) loadAll(ctx context.Context) {
 		slog.Warn("failed to fetch status", "error", err)
 	}
 
+	if workspaces, err := a.Client.Workspaces(ctx); err == nil {
+		names := make([]string, len(workspaces))
+		for i, ws := range workspaces {
+			names[i] = ws.Name
+		}
+		a.Store.SetWorkspaces(names)
+		if len(names) > 0 && a.Store.CurrentWorkspace() == "" {
+			a.Store.SetCurrentWorkspace(names[0])
+		}
+	} else {
+		slog.Warn("failed to fetch workspaces", "error", err)
+	}
+
 	a.notifyUpdate()
 }
 

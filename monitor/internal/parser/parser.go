@@ -204,6 +204,7 @@ type DebateMeta struct {
 	Pair       string     `json:"pair"`
 	Phase      string     `json:"phase"`
 	Milestone  int        `json:"milestone"`
+	IssueRef   string     `json:"issue,omitempty"`
 	Files      []string   `json:"files"`
 	Status     string     `json:"status"`
 	RoundCount int        `json:"round_count"`

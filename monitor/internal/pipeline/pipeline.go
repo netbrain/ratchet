@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/netbrain/ratchet-monitor/internal/classifier"
@@ -94,9 +95,7 @@ func (p *Pipeline) enrich(ev events.Event) events.Event {
 
 	// Extract issue context from debate metadata (if applicable).
 	if meta, ok := parsed.(*parser.DebateMeta); ok && meta != nil {
-		// Debate IDs often include issue refs in v2 (format: pair-YYYYMMDDTHHMMSS-issue-ref)
-		// For now, we leave this empty - will be populated when debates include issue field.
-		ev.Issue = ""
+		ev.Issue = extractIssue(relPath, meta)
 	}
 
 	return ev
@@ -104,19 +103,42 @@ func (p *Pipeline) enrich(ev events.Event) events.Event {
 
 // extractWorkspace attempts to extract workspace name from a file path.
 // Returns empty string if not in a workspace-specific path.
+// Only matches when "workspaces/" appears at the start of the path.
 // Example: "workspaces/monitor/.ratchet/plan.yaml" -> "monitor"
 func extractWorkspace(path string) string {
-	// Check if path contains workspaces/ prefix
-	if !strings.Contains(path, "workspaces/") {
+	if !strings.HasPrefix(path, "workspaces/") {
 		return ""
 	}
 
 	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		if part == "workspaces" && i+1 < len(parts) {
-			return parts[i+1]
-		}
+	if len(parts) < 2 || parts[1] == "" {
+		return ""
 	}
+	return parts[1]
+}
+
+// issuePattern matches issue references embedded in debate IDs.
+// Format: "issue" followed by one or more digits, e.g., "issue23", "issue123".
+var issuePattern = regexp.MustCompile(`(issue\d+)`)
+
+// extractIssue extracts the issue reference from debate metadata.
+// It first checks the IssueRef field from meta.json, then falls back
+// to parsing the issue reference from the debate ID.
+func extractIssue(relPath string, meta *parser.DebateMeta) string {
+	if meta == nil {
+		return ""
+	}
+
+	// Primary: use the explicit issue field from meta.json.
+	if meta.IssueRef != "" {
+		return meta.IssueRef
+	}
+
+	// Fallback: extract from the debate ID (e.g., "script-robustness-issue23-20260317T083800").
+	if m := issuePattern.FindString(meta.ID); m != "" {
+		return m
+	}
+
 	return ""
 }
 

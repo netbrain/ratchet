@@ -58,6 +58,7 @@ type DataSource interface {
 	Plan() (any, error)
 	Status() (any, error)
 	Scores(pair string) (any, error)
+	Workspaces() (any, error)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
@@ -180,6 +181,23 @@ func StatusHandler(ds DataSource) http.Handler {
 		data, err := ds.Status()
 		if err != nil {
 			slog.Error("status data source failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeJSON(w, http.StatusOK, data)
+	})
+}
+
+// WorkspacesHandler returns a handler that serves GET /api/workspaces.
+func WorkspacesHandler(ds DataSource) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		data, err := ds.Workspaces()
+		if err != nil {
+			slog.Error("workspaces data source failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}

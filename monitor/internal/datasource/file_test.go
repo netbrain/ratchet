@@ -560,6 +560,131 @@ func TestFileDataSource_Status_MissingPlan(t *testing.T) {
 	}
 }
 
+// --- Workspaces ---
+
+// TestFileDataSource_Workspaces verifies that Workspaces() reads workspace
+// entries from workflow.yaml.
+func TestFileDataSource_Workspaces(t *testing.T) {
+	dir := t.TempDir()
+	workflow := `version: 2
+max_rounds: 3
+escalation: human
+progress:
+  adapter: none
+workspaces:
+  - name: frontend
+    path: /home/dev/frontend
+  - name: backend
+    path: /home/dev/backend
+pairs: []
+`
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Workspaces()
+	if err != nil {
+		t.Fatalf("Workspaces() error: %v", err)
+	}
+
+	workspaces, ok := result.([]WorkspaceInfo)
+	if !ok {
+		t.Fatalf("expected []WorkspaceInfo, got %T", result)
+	}
+	if len(workspaces) != 2 {
+		t.Fatalf("expected 2 workspaces, got %d", len(workspaces))
+	}
+	if workspaces[0].Name != "frontend" {
+		t.Errorf("first workspace name: got %q, want %q", workspaces[0].Name, "frontend")
+	}
+	if workspaces[0].Path != "/home/dev/frontend" {
+		t.Errorf("first workspace path: got %q, want %q", workspaces[0].Path, "/home/dev/frontend")
+	}
+	if workspaces[1].Name != "backend" {
+		t.Errorf("second workspace name: got %q, want %q", workspaces[1].Name, "backend")
+	}
+}
+
+// TestFileDataSource_Workspaces_MissingWorkflow verifies that Workspaces()
+// returns an empty slice when workflow.yaml is missing.
+func TestFileDataSource_Workspaces_MissingWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Workspaces()
+	if err != nil {
+		t.Fatalf("Workspaces() should not error for missing workflow.yaml: %v", err)
+	}
+	workspaces, ok := result.([]WorkspaceInfo)
+	if !ok {
+		t.Fatalf("expected []WorkspaceInfo, got %T", result)
+	}
+	if len(workspaces) != 0 {
+		t.Errorf("expected 0 workspaces, got %d", len(workspaces))
+	}
+}
+
+// TestFileDataSource_Workspaces_NoWorkspacesKey verifies that Workspaces()
+// returns an empty slice when workflow.yaml has no workspaces key.
+func TestFileDataSource_Workspaces_NoWorkspacesKey(t *testing.T) {
+	dir := t.TempDir()
+	workflow := `version: 2
+max_rounds: 3
+escalation: human
+progress:
+  adapter: none
+pairs: []
+`
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Workspaces()
+	if err != nil {
+		t.Fatalf("Workspaces() error: %v", err)
+	}
+	workspaces, ok := result.([]WorkspaceInfo)
+	if !ok {
+		t.Fatalf("expected []WorkspaceInfo, got %T", result)
+	}
+	if len(workspaces) != 0 {
+		t.Errorf("expected 0 workspaces, got %d", len(workspaces))
+	}
+}
+
+// TestFileDataSource_Workspaces_MalformedWorkflow verifies graceful degradation.
+func TestFileDataSource_Workspaces_MalformedWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Workspaces()
+	if err != nil {
+		t.Fatalf("Workspaces() should not error for malformed workflow.yaml: %v", err)
+	}
+	workspaces, ok := result.([]WorkspaceInfo)
+	if !ok {
+		t.Fatalf("expected []WorkspaceInfo, got %T", result)
+	}
+	if len(workspaces) != 0 {
+		t.Errorf("expected 0 workspaces, got %d", len(workspaces))
+	}
+}
+
+// TestFileDataSource_Workspaces_PermissionDenied verifies real I/O errors propagate.
+func TestFileDataSource_Workspaces_PermissionDenied(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping permission test when running as root")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	os.WriteFile(path, []byte("version: 2\n"), 0o000)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Workspaces()
+	if err == nil {
+		t.Fatal("Workspaces() should return an error for permission-denied workflow.yaml")
+	}
+}
+
 // TestFileDataSource_Status_NilCurrentFocus verifies that Status() handles a
 // plan with nil current_focus without error, returning zero-value StatusInfo.
 func TestFileDataSource_Status_NilCurrentFocus(t *testing.T) {

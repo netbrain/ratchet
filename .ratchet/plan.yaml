@@ -131,3 +131,25 @@ epic:
       pairs:
         - script-robustness
         - agent-effectiveness
+    - ref: disc-002
+      title: CONDITIONAL_ACCEPT is functionally identical to ACCEPT — false consensus
+      category: workflow-bug
+      severity: high
+      description: CONDITIONAL_ACCEPT breaks the debate loop identically to ACCEPT. Conditions are logged but never enforced. This creates false consensus where incomplete implementations pass through all phases. The debate-runner should either force Round 2 to address conditions, block phase progression until conditions are met, or make guards verify conditions before advancing.
+      source: human-observation
+      status: pending
+      issue_ref: null
+      pairs:
+        - skill-coherence
+        - agent-effectiveness
+    - ref: disc-003
+      title: Agents frequently break out of framework and implement directly
+      category: workflow-bug
+      severity: critical
+      description: 'Agents (especially debate-runners and generative agents) frequently ignore their role boundaries and start implementing code directly instead of staying within the debate/orchestration framework. This happens ALL the time. The debate-runner should ONLY orchestrate debates, not write code. The generative agent should only write code within its debate context, not break out to fix things ad-hoc. Need stronger guardrails: 1) Debate-runner system prompt must emphasize it NEVER writes code, 2) Add a guard that detects when an orchestrator-level agent modifies source files, 3) Consider structural enforcement (remove Write/Edit tools from debate-runner agents).'
+      source: human-observation
+      status: pending
+      issue_ref: null
+      pairs:
+        - agent-effectiveness
+        - skill-coherence

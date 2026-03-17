@@ -59,6 +59,7 @@ func main() {
 	mux.Handle("/api/plan", handler.PlanHandler(ds))
 	mux.Handle("/api/status", handler.StatusHandler(ds))
 	mux.Handle("/api/scores", handler.ScoresHandler(ds))
+	mux.Handle("/api/workspaces", handler.WorkspacesHandler(ds))
 
 	// Static file serving.
 	mux.Handle("/static/", handler.StaticHandler("static"))

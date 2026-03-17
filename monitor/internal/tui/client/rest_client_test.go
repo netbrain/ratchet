@@ -76,6 +76,14 @@ func newTestServer(t *testing.T) *httptest.Server {
 		})
 	})
 
+	mux.HandleFunc("GET /api/workspaces", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]Workspace{
+			{Name: "frontend", Path: "/home/dev/frontend"},
+			{Name: "backend", Path: "/home/dev/backend"},
+		})
+	})
+
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(HealthStatus{Status: "ok"})
@@ -305,6 +313,26 @@ func TestUnreachableServer(t *testing.T) {
 	_, err := c.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected connection error, got nil")
+	}
+}
+
+func TestFetchWorkspaces(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	workspaces, err := c.Workspaces(context.Background())
+	if err != nil {
+		t.Fatalf("Workspaces() error: %v", err)
+	}
+	if len(workspaces) != 2 {
+		t.Fatalf("expected 2 workspaces, got %d", len(workspaces))
+	}
+	if workspaces[0].Name != "frontend" {
+		t.Errorf("expected first workspace name 'frontend', got %q", workspaces[0].Name)
+	}
+	if workspaces[1].Path != "/home/dev/backend" {
+		t.Errorf("expected second workspace path '/home/dev/backend', got %q", workspaces[1].Path)
 	}
 }
 

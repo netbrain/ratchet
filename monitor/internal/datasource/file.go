@@ -23,6 +23,12 @@ func NewFileDataSource(rootDir string) *FileDataSource {
 	return &FileDataSource{rootDir: rootDir}
 }
 
+// WorkspaceInfo describes a workspace from workflow.yaml.
+type WorkspaceInfo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 // PairStatus summarizes a pair's current state derived from workflow config
 // and active debates.
 type PairStatus struct {
@@ -74,6 +80,35 @@ func (f *FileDataSource) Pairs() (any, error) {
 		})
 	}
 	return pairs, nil
+}
+
+// Workspaces reads workflow.yaml and returns workspace entries.
+// Returns an empty slice when workflow.yaml is missing or contains invalid YAML.
+// Real I/O errors (e.g., permission denied) are still propagated.
+func (f *FileDataSource) Workspaces() (any, error) {
+	data, err := os.ReadFile(filepath.Join(f.rootDir, "workflow.yaml"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			slog.Debug("workflow.yaml not found, returning empty workspaces")
+			return []WorkspaceInfo{}, nil
+		}
+		return nil, fmt.Errorf("read workflow.yaml: %w", err)
+	}
+
+	wf, err := parser.ParseWorkflow(data)
+	if err != nil {
+		slog.Warn("malformed workflow.yaml, returning empty workspaces", "error", err)
+		return []WorkspaceInfo{}, nil
+	}
+
+	workspaces := make([]WorkspaceInfo, 0, len(wf.Workspaces))
+	for _, ws := range wf.Workspaces {
+		workspaces = append(workspaces, WorkspaceInfo{
+			Name: ws.Name,
+			Path: ws.Path,
+		})
+	}
+	return workspaces, nil
 }
 
 // pairStatusMap scans debates/*/meta.json and derives a status string for

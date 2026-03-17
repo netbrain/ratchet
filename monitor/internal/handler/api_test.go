@@ -11,13 +11,14 @@ import (
 
 // mockDataSource implements DataSource for testing.
 type mockDataSource struct {
-	pairs   any
-	debates any
-	debate  map[string]any
-	plan    any
-	status  any
-	scores  any
-	err     error
+	pairs      any
+	debates    any
+	debate     map[string]any
+	plan       any
+	status     any
+	scores     any
+	workspaces any
+	err        error
 }
 
 func (m *mockDataSource) Pairs() (any, error) {
@@ -47,6 +48,10 @@ func (m *mockDataSource) Scores(pair string) (any, error) {
 	return m.scores, m.err
 }
 
+func (m *mockDataSource) Workspaces() (any, error) {
+	return m.workspaces, m.err
+}
+
 func newMockDS() *mockDataSource {
 	return &mockDataSource{
 		pairs: []map[string]string{
@@ -71,6 +76,10 @@ func newMockDS() *mockDataSource {
 		scores: []map[string]any{
 			{"debate_id": "d1", "pair": "api-design", "milestone": 1},
 			{"debate_id": "d2", "pair": "sse-correctness", "milestone": 2},
+		},
+		workspaces: []map[string]string{
+			{"name": "frontend", "path": "/home/dev/frontend"},
+			{"name": "backend", "path": "/home/dev/backend"},
 		},
 	}
 }
@@ -161,6 +170,7 @@ func newMockDS_V2() *mockDataSource {
 		scores: []map[string]any{
 			{"debate_id": "debate-v2-1", "pair": "api-contracts", "milestone": 1},
 		},
+		workspaces: []map[string]string{},
 	}
 }
 
@@ -169,12 +179,13 @@ func newMockDS_V2() *mockDataSource {
 func TestAPIHandlers_RejectNonGET(t *testing.T) {
 	ds := newMockDS()
 	handlers := map[string]http.Handler{
-		"pairs":   PairsHandler(ds),
-		"debates": DebatesHandler(ds),
-		"detail":  DebateDetailHandler(ds),
-		"plan":    PlanHandler(ds),
-		"status":  StatusHandler(ds),
-		"scores":  ScoresHandler(ds),
+		"pairs":      PairsHandler(ds),
+		"debates":    DebatesHandler(ds),
+		"detail":     DebateDetailHandler(ds),
+		"plan":       PlanHandler(ds),
+		"status":     StatusHandler(ds),
+		"scores":     ScoresHandler(ds),
+		"workspaces": WorkspacesHandler(ds),
 	}
 
 	for name, h := range handlers {
@@ -236,13 +247,14 @@ func TestAPIHandlers_XContentTypeOptions(t *testing.T) {
 		handler http.Handler
 		path    string
 	}{
-		"pairs":   {PairsHandler(ds), "/api/pairs"},
-		"debates": {DebatesHandler(ds), "/api/debates"},
-		"detail":  {DebateDetailHandler(ds), "/api/debates/debate-1"},
-		"plan":    {PlanHandler(ds), "/api/plan"},
-		"status":  {StatusHandler(ds), "/api/status"},
-		"scores":  {ScoresHandler(ds), "/api/scores"},
-		"health":  {HealthHandler(), "/health"},
+		"pairs":      {PairsHandler(ds), "/api/pairs"},
+		"debates":    {DebatesHandler(ds), "/api/debates"},
+		"detail":     {DebateDetailHandler(ds), "/api/debates/debate-1"},
+		"plan":       {PlanHandler(ds), "/api/plan"},
+		"status":     {StatusHandler(ds), "/api/status"},
+		"scores":     {ScoresHandler(ds), "/api/scores"},
+		"workspaces": {WorkspacesHandler(ds), "/api/workspaces"},
+		"health":     {HealthHandler(), "/health"},
 	}
 
 	for name, tc := range handlers {
@@ -917,5 +929,65 @@ func TestPlanHandler_V2IssueDependencies(t *testing.T) {
 	}
 	if dependsOn[0] != "issue-2-1" {
 		t.Errorf("issue2 depends_on[0]: got %q, want %q", dependsOn[0], "issue-2-1")
+	}
+}
+
+// --- GET /api/workspaces ---
+
+func TestWorkspacesHandler_StatusCode(t *testing.T) {
+	h := WorkspacesHandler(newMockDS())
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestWorkspacesHandler_ContentType(t *testing.T) {
+	h := WorkspacesHandler(newMockDS())
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
+	}
+}
+
+func TestWorkspacesHandler_ResponseShape(t *testing.T) {
+	h := WorkspacesHandler(newMockDS())
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	var body []any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 2 {
+		t.Errorf("expected 2 workspaces, got %d", len(body))
+	}
+}
+
+func TestWorkspacesHandler_DataSourceError(t *testing.T) {
+	ds := newMockDS()
+	ds.err = fmt.Errorf("disk failure")
+	h := WorkspacesHandler(ds)
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if body["error"] != "internal server error" {
+		t.Errorf("error message: got %q", body["error"])
 	}
 }

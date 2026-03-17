@@ -148,6 +148,12 @@ func (c *Client) Scores(ctx context.Context, pair string) ([]ScoreEntry, error) 
 	return out, err
 }
 
+func (c *Client) Workspaces(ctx context.Context) ([]Workspace, error) {
+	var out []Workspace
+	err := c.get(ctx, "/api/workspaces", &out)
+	return out, err
+}
+
 func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 	var out HealthStatus
 	err := c.get(ctx, "/health", &out)

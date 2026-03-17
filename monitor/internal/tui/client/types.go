@@ -76,6 +76,20 @@ type Milestone struct {
 	ProgressRef *string           `json:"progress_ref"`
 	DependsOn   []int             `json:"depends_on"`
 	Regressions int               `json:"regressions"`
+	Issues      []Issue           `json:"issues"`
+}
+
+// Issue represents a single issue within a milestone (v2 only).
+type Issue struct {
+	Ref         string            `json:"ref"`
+	Title       string            `json:"title"`
+	Pairs       []string          `json:"pairs"`
+	DependsOn   []string          `json:"depends_on"`
+	PhaseStatus map[string]string `json:"phase_status"`
+	Files       []string          `json:"files"`
+	Debates     []string          `json:"debates"`
+	Branch      *string           `json:"branch"`
+	Status      string            `json:"status"`
 }
 
 // CurrentFocus indicates what the system is currently working on.
@@ -89,6 +103,7 @@ type CurrentFocus struct {
 type StatusInfo struct {
 	MilestoneID   int    `json:"milestone_id"`
 	MilestoneName string `json:"milestone_name"`
+	IssueRef      string `json:"issue_ref"`
 	Phase         string `json:"phase"`
 }
 
@@ -102,6 +117,12 @@ type ScoreEntry struct {
 	Escalated         bool      `json:"escalated"`
 	IssuesFound       int       `json:"issues_found"`
 	IssuesResolved    int       `json:"issues_resolved"`
+}
+
+// Workspace represents a configured workspace.
+type Workspace struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 // HealthStatus represents the health check response.
