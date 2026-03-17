@@ -896,8 +896,12 @@ func TestParsePlan_V2_WithIssues(t *testing.T) {
 	if len(issue1.DependsOn) != 0 {
 		t.Errorf("Issue 1 DependsOn: got %d, want 0", len(issue1.DependsOn))
 	}
-	if issue1.Branch != "ratchet/milestone-1/issue-1-1" {
-		t.Errorf("Issue branch: got %q, want %q", issue1.Branch, "ratchet/milestone-1/issue-1-1")
+	if issue1.Branch == nil || *issue1.Branch != "ratchet/milestone-1/issue-1-1" {
+		var got string
+		if issue1.Branch != nil {
+			got = *issue1.Branch
+		}
+		t.Errorf("Issue branch: got %q, want %q", got, "ratchet/milestone-1/issue-1-1")
 	}
 	if issue1.Status != "in_progress" {
 		t.Errorf("Issue status: got %q, want %q", issue1.Status, "in_progress")
