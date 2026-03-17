@@ -6,11 +6,10 @@ result-*
 .ratchet/*
 !.ratchet/workflow.yaml
 !.ratchet/project.yaml
-!.ratchet/plan.yaml
+# plan.yaml is runtime state — GitHub issues are the durable source of truth
 !.ratchet/pairs/
 
 # Ratchet workspaces: Exclude runtime state in all workspace subdirs
-*/.ratchet/plan.yaml
 */.ratchet/worktrees/
 */.ratchet/debates/
 */.ratchet/reviews/
