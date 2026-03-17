@@ -1,11 +1,8 @@
 package handler
 
-import (
-	"io/fs"
-	"net/http"
-)
+import "net/http"
 
-// StaticHandler returns a handler that serves static files from the given fs.FS.
-func StaticHandler(fsys fs.FS) http.Handler {
-	return http.StripPrefix("/static/", http.FileServerFS(fsys))
+// StaticHandler returns a handler that serves files from the given directory.
+func StaticHandler(dir string) http.Handler {
+	return http.StripPrefix("/static/", http.FileServer(http.Dir(dir)))
 }
