@@ -1,0 +1,1 @@
+../../skills/tighten/SKILL.md

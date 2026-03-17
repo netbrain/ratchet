@@ -1,0 +1,1 @@
+../../skills/score/SKILL.md

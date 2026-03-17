@@ -1,0 +1,1 @@
+../../skills/debate/SKILL.md

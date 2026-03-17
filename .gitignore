@@ -1,6 +1,5 @@
 result
 result-*
-.claude/commands/ratchet/
 .claude/ratchet-scripts/
 
 # Ratchet: Exclude all runtime state, then include config

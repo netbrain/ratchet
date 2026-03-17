@@ -1,0 +1,1 @@
+../../skills/verdict/SKILL.md

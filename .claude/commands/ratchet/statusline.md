@@ -1,0 +1,1 @@
+../../skills/statusline/SKILL.md

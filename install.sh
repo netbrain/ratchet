@@ -103,6 +103,13 @@ do_install() {
     local commands_dir="$target/commands/ratchet"
     local scripts_dir="$target/ratchet-scripts"
 
+    # Use symlinks for local installs (source files are in the same repo)
+    # Use copies for global installs (source files won't be at a relative path)
+    local use_symlinks=false
+    if [ "$target" = ".claude" ] && [ "$SCRIPT_DIR" = "$(pwd)" ]; then
+        use_symlinks=true
+    fi
+
     echo "Installing ratchet to $target ..."
 
     # Clean previous install (both old plugin-style and new commands-style)
@@ -121,21 +128,33 @@ do_install() {
         rm -rf "$scripts_dir"
     fi
 
-    # Copy commands (skills -> commands)
+    # Install commands (skills -> commands)
     mkdir -p "$commands_dir" || die "Failed to create commands directory: $commands_dir"
     for skill_dir in "$SCRIPT_DIR"/skills/*/; do
         local skill_name
         skill_name="$(basename "$skill_dir")"
         local skill_file="$skill_dir/SKILL.md"
         [ -f "$skill_file" ] || continue
-        cp "$skill_file" "$commands_dir/$skill_name.md" || die "Failed to copy skill: $skill_name"
+        if [ "$use_symlinks" = true ]; then
+            ln -sf "../../skills/$skill_name/SKILL.md" "$commands_dir/$skill_name.md" || die "Failed to link skill: $skill_name"
+        else
+            cp "$skill_file" "$commands_dir/$skill_name.md" || die "Failed to copy skill: $skill_name"
+        fi
     done
     echo "  Installed commands to $commands_dir/"
 
-    # Copy agents alongside commands
+    # Install agents alongside commands
     if [ -d "$SCRIPT_DIR/agents" ] && ls "$SCRIPT_DIR"/agents/*.md >/dev/null 2>&1; then
         mkdir -p "$commands_dir/agents" || die "Failed to create agents directory: $commands_dir/agents"
-        cp "$SCRIPT_DIR"/agents/*.md "$commands_dir/agents/" || die "Failed to copy agent files"
+        for agent_file in "$SCRIPT_DIR"/agents/*.md; do
+            local agent_name
+            agent_name="$(basename "$agent_file")"
+            if [ "$use_symlinks" = true ]; then
+                ln -sf "../../../agents/$agent_name" "$commands_dir/agents/$agent_name" || die "Failed to link agent: $agent_name"
+            else
+                cp "$agent_file" "$commands_dir/agents/$agent_name" || die "Failed to copy agent: $agent_name"
+            fi
+        done
         echo "  Installed agents"
     fi
 

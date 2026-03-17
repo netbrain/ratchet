@@ -1,0 +1,1 @@
+../../skills/sidequest/SKILL.md

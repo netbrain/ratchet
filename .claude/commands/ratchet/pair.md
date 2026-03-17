@@ -1,0 +1,1 @@
+../../skills/pair/SKILL.md
