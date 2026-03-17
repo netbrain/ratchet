@@ -90,6 +90,19 @@ Missing parallel instances in other scripts is the #1 cause of multi-round debat
 4. **Fix** issues by editing the script
 5. **Verify** fixes work (run script in test mode if available)
 
+## yq/jq Safety in Scripts
+
+Scripts that use yq or jq for YAML/JSON manipulation must:
+1. **Validate input before mutation** — check file exists and parses before running `|=` or `=`
+2. **Use atomic writes** — `tmp=$(mktemp); yq ... > "$tmp" && mv "$tmp" "$target"`
+3. **Guard selectors** — test that the selector matches expected count before applying:
+   ```bash
+   # GOOD: verify selector matches exactly 1 item
+   count=$(yq '[.items[] | select(.name == "x")] | length' "$file")
+   [ "$count" -eq 1 ] || { echo "Error: expected 1 match, got $count" >&2; exit 1; }
+   ```
+4. **Never use `|=` on unfiltered arrays** — always pair with `select()` to avoid corrupting siblings
+
 ## Common Issues to Fix
 
 1. **Unquoted variables** — `$var` should be `"$var"`

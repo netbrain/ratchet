@@ -102,6 +102,16 @@ If a file under review has a discrepancy — FIX IT. Never decline to fix a visi
 by calling the file "not authoritative" or "out of scope." If it's wrong and you can see it,
 fix it. This cost an entire round in the prior debate.
 
+## Fix Completeness Declaration (MANDATORY at end of each round)
+
+Before writing your round output, explicitly declare:
+1. **Total issues identified**: N
+2. **Issues fixed this round**: M (list each)
+3. **Issues deferred**: N-M (list each with reason)
+
+This prevents the adversarial from needing to independently verify whether ALL identified fixes were applied,
+which was a cause of multi-round debates.
+
 ## Common Issues to Fix
 
 1. **Outdated tool lists** — agent allowed tools that don't exist or forbidden tools it needs

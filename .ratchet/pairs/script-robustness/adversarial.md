@@ -102,6 +102,13 @@ For each script, verify:
 **Cross-cutting sweep verification (6 occurrences - #1 cause of multi-round debates):**
 - [ ] Verify generative ran a grep sweep for the pattern class being fixed across ALL scripts. If they fixed a quoting issue in one script but missed the same pattern in 5 others, REJECT.
 
+**yq/jq mutation safety (new - derived from skill-coherence patterns):**
+- [ ] Any script using `yq` or `jq` with `|=` or `=` must:
+  - Validate input file exists and parses before mutation
+  - Use atomic writes (mktemp + mv) — never write directly to source file
+  - Guard selectors against zero-match and multi-match cases
+  - Run: `grep -n '|=' scripts/*.sh` to find all mutation operators
+
 **Examples must be runnable (8 occurrences - 62% of debates):**
 - [ ] Ensure usage examples are concrete and runnable, not abstract
 

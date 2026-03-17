@@ -98,6 +98,17 @@ grep -r 'escalation:\|workflow:\|phase:' .ratchet/ | grep -v 'json\|debates'
 
 This takes priority over syntax, completeness, or documentation quality checks.
 
+## Field Name Parity Check (when schema defines structures used by multiple consumers)
+
+Before declaring a schema change complete, diff all field names against consumers:
+```bash
+# Extract field names from schema
+jq '[.. | .properties? // empty | keys[]] | unique' schemas/workflow.schema.json
+# Find all consumers that reference these fields
+grep -rn 'field_name' skills/*/SKILL.md agents/*.md scripts/*.sh
+```
+This prevents schema drift where the schema defines a field name that consumers spell differently.
+
 ## Common Issues to Fix
 
 1. **Missing fields** — New v2 features not in schema

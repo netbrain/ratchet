@@ -113,6 +113,27 @@ When multiple skills define the same data structure (e.g., discovery schema):
 2. Diff EVERY file that uses that structure against the canonical list
 3. Fix ALL divergences in one round — don't fix one file and miss others
 
+## yq/jq Command Safety (MANDATORY for any data manipulation)
+
+When writing or reviewing yq/jq commands in skills:
+1. **Never use `|=` without verifying selector specificity** — `|=` on a broad selector silently corrupts non-matching items
+2. **Test selectors that might match zero items** — `select(.name == "x")` on an empty array returns nothing, not an error
+3. **Test selectors that might match multiple items** — updates may apply to unintended siblings
+4. **Always show the test command** alongside the yq/jq command:
+   ```bash
+   # GOOD: show how to verify before running
+   yq '.milestones[0].issues[] | select(.ref == "FOO-1")' .ratchet/plan.yaml  # dry-run
+   yq '.milestones[0].issues[] | select(.ref == "FOO-1").status = "done"' .ratchet/plan.yaml  # apply
+   ```
+
+## Data Flow Tracing (when skills gather or store user input)
+
+For skills that collect user input and store it in YAML/JSON:
+1. List every field the skill gathers (from AskUserQuestion, codebase scan, etc.)
+2. List every field the output schema expects
+3. Verify 1:1 mapping — every gathered field stored, every schema field populated
+4. Flag any field that is defined in the schema but never assigned a value
+
 ## Batching Strategy for Large Fix Sets
 
 For implementation tasks with 10+ similar fixes:

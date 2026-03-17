@@ -93,6 +93,7 @@ For each agent (analyst, debate-runner, tiebreaker):
   - Must show concrete error handling code with stderr messages
 - [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
 - [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
+- [ ] **Fix completeness declaration (new - from review suggestion 6)**: Verify the generative included an explicit fix tally at the end of their round: "N issues identified, M fixed, K deferred." If missing, or if the count doesn't match what you observe in the diff, REJECT. This prevents silent omissions.
 
 ## Cross-Reference Validation (Always Run) - ENHANCED
 

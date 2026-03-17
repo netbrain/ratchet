@@ -55,6 +55,17 @@ The user prioritized ALL of:
 - [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
 - [ ] **Cross-cutting sweep verification (6 occurrences - 50% of debates)**: Before accepting, verify the generative ran a grep sweep for the pattern class being fixed across ALL files in scope. If they fixed a field in one skill but missed the same gap in parallel skills, REJECT. This is the #1 cause of multi-round debates.
 - [ ] **Schema field parity (4 occurrences - 33% of debates)**: When skills define the same data structure, verify ALL instances match a canonical field list. Run: `grep -c "field" skills/*/SKILL.md | grep ':0$'` to find files missing fields.
+- [ ] **yq/jq command safety (4 occurrences - 57% of debates)**: Any yq/jq command in a skill must:
+  - Not use `|=` on broad selectors without verifying specificity
+  - Be tested against zero-match and multi-match scenarios
+  - Include a dry-run example showing how to verify before applying
+  - Run: `grep -n '|=' skills/*/SKILL.md` to find all mutation operators and verify each has guardrails
+- [ ] **Data flow completeness (3 occurrences - 43% of debates)**: For skills that gather user input and store it, verify:
+  - Every AskUserQuestion field maps to a stored YAML/JSON field
+  - Every schema field has a source (user input, codebase scan, default)
+  - No orphan fields (defined in schema but never populated)
+  - Run: `grep -c 'AskUserQuestion' skills/*/SKILL.md` to find input-gathering skills, then trace each field
+- [ ] **Canonical schema reference (3 occurrences)**: When the generative unifies a data structure across multiple skills, verify they created a canonical field list FIRST and diffed all files against it. If they fixed fields ad-hoc file-by-file, REJECT — this misses divergences.
 - [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Any instruction involving:
   - File format manipulation → Must show YAML/JSON snippet
   - Tool usage → Must show exact command syntax

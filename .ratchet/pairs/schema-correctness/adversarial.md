@@ -121,6 +121,7 @@ Verify:
 - [ ] **Error handling gaps**: Check that validation error messages would be clear for common failures
 - [ ] **Cross-reference verification**: Verify all `$ref` pointers resolve correctly via bash/jq
 - [ ] **Concrete examples in descriptions**: Ensure complex schema structures have example values in descriptions
+- [ ] **Field name parity across consumers**: After any schema field rename or addition, verify all consumers (skills, agents, scripts) use the same spelling. Run: `grep -rn 'new_field_name' skills/ agents/ scripts/` to confirm alignment.
 
 ## Enum Completeness Verification (CRITICAL - Priority 1)
 
