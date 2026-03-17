@@ -829,6 +829,14 @@ For each matched pair, prepare the context for the **debate-runner** agent:
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: Pair-level overrides take precedence over global. Pass resolved `generative`, `adversarial`, and `tiebreaker` models to the debate-runner.
+5. **Resolve publish config**: Read from the values already computed in Step 1b:
+   - `publish_debates`: the validated value (already corrected for adapter mismatch)
+   - `progress_ref`: read `epic.progress_ref` from `.ratchet/plan.yaml` (epic-level, NOT per-milestone):
+     ```bash
+     epic_progress_ref=$(yq eval '.epic.progress_ref // null' .ratchet/plan.yaml)
+     ```
+   - `adapter`: the resolved adapter from Step 1b
+   - If `adapter` is `"none"` or empty: pass all three as `null` (adapter not configured)
 
 #### 5e. Run Debates
 
@@ -886,6 +894,10 @@ Context:
     generative: [resolved model]
     adversarial: [resolved model]
     tiebreaker: [resolved model]
+  Publish:
+    publish_debates: [false | per-round | summary, or null if adapter is none]
+    progress_ref: [epic.progress_ref from plan.yaml, or null]
+    adapter: [adapter name from workflow.yaml, or null if adapter is none]
 ```
 
 **If Debate-Runner Cannot Be Spawned**
