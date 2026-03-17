@@ -47,10 +47,12 @@
             yq-go
             git
             bash
+            go
+            golangci-lint
           ];
           shellHook = ''
             echo "Ratchet development environment loaded"
-            echo "Available tools: shellcheck, jq, yq, git"
+            echo "Available tools: shellcheck, jq, yq, git, go, golangci-lint"
           '';
         };
       }

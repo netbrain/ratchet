@@ -874,8 +874,8 @@ func TestParsePlan_V2_WithIssues(t *testing.T) {
 	}
 
 	// Test regressions counter
-	if m1.Regressions != 1 {
-		t.Errorf("Milestone 1 Regressions: got %d, want 1", m1.Regressions)
+	if m1.Regressions != 0 {
+		t.Errorf("Milestone 1 Regressions: got %d, want 0", m1.Regressions)
 	}
 
 	// Test issues array
@@ -890,18 +890,14 @@ func TestParsePlan_V2_WithIssues(t *testing.T) {
 	if issue1.Title != "First issue" {
 		t.Errorf("Issue title: got %q, want %q", issue1.Title, "First issue")
 	}
-	if len(issue1.Pairs) != 1 || issue1.Pairs[0] != "parser-correctness" {
-		t.Errorf("Issue pairs: got %v, want [parser-correctness]", issue1.Pairs)
+	if len(issue1.Pairs) != 2 || issue1.Pairs[0] != "parser-correctness" || issue1.Pairs[1] != "api-contracts" {
+		t.Errorf("Issue pairs: got %v, want [parser-correctness api-contracts]", issue1.Pairs)
 	}
 	if len(issue1.DependsOn) != 0 {
 		t.Errorf("Issue 1 DependsOn: got %d, want 0", len(issue1.DependsOn))
 	}
-	if issue1.Branch == nil || *issue1.Branch != "ratchet/milestone-1/issue-1-1" {
-		var got string
-		if issue1.Branch != nil {
-			got = *issue1.Branch
-		}
-		t.Errorf("Issue branch: got %q, want %q", got, "ratchet/milestone-1/issue-1-1")
+	if issue1.Branch != nil {
+		t.Errorf("Issue branch: got %q, want nil", *issue1.Branch)
 	}
 	if issue1.Status != "in_progress" {
 		t.Errorf("Issue status: got %q, want %q", issue1.Status, "in_progress")

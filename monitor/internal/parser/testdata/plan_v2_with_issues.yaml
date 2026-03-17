@@ -1,5 +1,5 @@
 epic:
-  name: "Test Epic"
+  name: "test-epic-v2"
   description: "A test epic for v2 parsing"
   milestones:
     - id: 1
@@ -9,11 +9,11 @@ epic:
       done_when: "All tests pass"
       depends_on: []
       progress_ref: null
-      regressions: 1
+      regressions: 0
       issues:
         - ref: "issue-1-1"
           title: "First issue"
-          pairs: ["parser-correctness"]
+          pairs: ["parser-correctness", "api-contracts"]
           depends_on: []
           phase_status:
             plan: done
@@ -23,7 +23,7 @@ epic:
             harden: pending
           files: ["internal/parser/parser.go"]
           debates: ["debate-123"]
-          branch: "ratchet/milestone-1/issue-1-1"
+          branch: null
           status: in_progress
 
         - ref: "issue-1-2"
@@ -48,7 +48,7 @@ epic:
       done_when: "Integration complete"
       depends_on: [1]
       progress_ref: "ISSUE-42"
-      regressions: 0
+      regressions: 1
       issues:
         - ref: "issue-2-1"
           title: "Integration work"

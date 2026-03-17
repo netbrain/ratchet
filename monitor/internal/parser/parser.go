@@ -231,11 +231,78 @@ type PairDefinition struct {
 	Content string `json:"content"`
 }
 
+// validPRScopes is the set of allowed values for pr_scope.
+var validPRScopes = map[string]bool{
+	"debate":    true,
+	"phase":     true,
+	"milestone": true,
+	"issue":     true,
+}
+
 // ParseWorkflow parses a workflow.yaml file from raw bytes.
 func ParseWorkflow(data []byte) (*WorkflowConfig, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return &WorkflowConfig{}, nil
 	}
+
+	// Pre-parse into a generic map for validation of required fields and types.
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse workflow: %w", err)
+	}
+
+	// If the document parsed but has content, validate required fields and types.
+	if raw != nil {
+		// Check required fields: version, max_rounds, escalation.
+		// We only enforce required fields when at least one of them is present
+		// (i.e., the document looks like a workflow config, not an empty/whitespace doc).
+		hasVersion := raw["version"] != nil
+		hasMaxRounds := raw["max_rounds"] != nil
+		hasEscalation := raw["escalation"] != nil
+
+		if hasVersion || hasMaxRounds || hasEscalation {
+			if !hasVersion {
+				return nil, fmt.Errorf("parse workflow: missing required field: version")
+			}
+			if !hasMaxRounds {
+				return nil, fmt.Errorf("parse workflow: missing required field: max_rounds")
+			}
+			if !hasEscalation {
+				return nil, fmt.Errorf("parse workflow: missing required field: escalation")
+			}
+		}
+
+		// Type validation: escalation must be a string (YAML may coerce int to string).
+		if v, ok := raw["escalation"]; ok && v != nil {
+			switch v.(type) {
+			case string:
+				// OK
+			default:
+				return nil, fmt.Errorf("parse workflow: escalation must be a string, got %T", v)
+			}
+		}
+
+		// Type validation: max_rounds must be an int.
+		if v, ok := raw["max_rounds"]; ok && v != nil {
+			switch v.(type) {
+			case int:
+				// OK
+			default:
+				return nil, fmt.Errorf("parse workflow: max_rounds must be an integer, got %T", v)
+			}
+		}
+
+		// Type validation: max_regressions must be an int if present.
+		if v, ok := raw["max_regressions"]; ok && v != nil {
+			switch v.(type) {
+			case int:
+				// OK
+			default:
+				return nil, fmt.Errorf("parse workflow: max_regressions must be an integer, got %T", v)
+			}
+		}
+	}
+
 	var wf WorkflowConfig
 	if err := yaml.Unmarshal(data, &wf); err != nil {
 		return nil, fmt.Errorf("parse workflow: %w", err)
@@ -245,7 +312,19 @@ func ParseWorkflow(data []byte) (*WorkflowConfig, error) {
 	if wf.PRScope == "" {
 		wf.PRScope = "issue"
 	}
-	if wf.MaxRegressions == 0 {
+
+	// Validate pr_scope enum
+	if !validPRScopes[wf.PRScope] {
+		return nil, fmt.Errorf("parse workflow: invalid pr_scope value %q; must be one of: debate, phase, milestone, issue", wf.PRScope)
+	}
+
+	// Apply max_regressions default only when not explicitly set.
+	// Check the raw map to distinguish "absent" from "explicitly zero".
+	if raw != nil {
+		if _, explicit := raw["max_regressions"]; !explicit {
+			wf.MaxRegressions = 2
+		}
+	} else {
 		wf.MaxRegressions = 2
 	}
 

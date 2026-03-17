@@ -31,7 +31,6 @@ epic:
           debates: [schema-correctness-20260317T083900]
           branch: null
           status: done
-
     - id: 2
       name: "Script Hardening"
       description: "Systematic robustness pass on all bash scripts — atomic JSON, cleanup traps, bash 3.2+ portability"
@@ -61,7 +60,6 @@ epic:
           debates: [script-robustness-issue24-20260317T084300]
           branch: null
           status: done
-
     - id: 3
       name: "E2E Test Infrastructure"
       description: "Build a test harness that exercises install/uninstall and debate flows end-to-end"
@@ -91,7 +89,6 @@ epic:
           debates: [script-robustness-issue26-20260317T085300]
           branch: null
           status: done
-
     - id: 4
       name: "Sidequest Lifecycle Validation"
       description: "Verify discovery/sidequest feature works end-to-end across watch, retro, run, status, sidequest skills"
@@ -121,6 +118,16 @@ epic:
           debates: [skill-coherence-issue28-20260317T091500]
           branch: null
           status: done
-
   current_focus: null
-  discoveries: []
+  discoveries:
+    - ref: disc-001
+      title: PR test failures are guilty until proven innocent
+      category: workflow-principle
+      severity: high
+      description: New changes are GUILTY until proven innocent. Test failures on a PR branch are CAUSED by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master, not assuming it is unrelated.
+      source: human-observation
+      status: pending
+      issue_ref: null
+      pairs:
+        - script-robustness
+        - agent-effectiveness
