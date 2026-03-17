@@ -118,6 +118,54 @@ epic:
           debates: [skill-coherence-issue28-20260317T091500]
           branch: null
           status: done
+    - id: 6
+      name: Workflow Quality Fixes
+      description: Fix critical workflow bugs discovered during monitor M1 — false consensus, framework breakout, test guilt principle
+      status: pending
+      done_when: CONDITIONAL_ACCEPT forces Round 2, agents structurally prevented from writing code outside debates, guilt principle encoded in prompts
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: '#37'
+          title: Encode guilty-until-proven-innocent principle into agent prompts
+          pairs:
+            - agent-effectiveness
+            - skill-coherence
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: pending
+        - ref: '#38'
+          title: Fix CONDITIONAL_ACCEPT — currently identical to ACCEPT
+          pairs:
+            - skill-coherence
+          depends_on: []
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: pending
+        - ref: '#39'
+          title: Enforce agent role boundaries — prevent framework breakout
+          pairs:
+            - agent-effectiveness
+            - skill-coherence
+          depends_on:
+            - '#38'
+          phase_status:
+            review: pending
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          status: pending
   current_focus: null
   discoveries:
     - ref: disc-001
@@ -126,8 +174,8 @@ epic:
       severity: high
       description: New changes are GUILTY until proven innocent. Test failures on a PR branch are CAUSED by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master, not assuming it is unrelated.
       source: human-observation
-      status: pending
-      issue_ref: null
+      status: promoted
+      issue_ref: '#37'
       pairs:
         - script-robustness
         - agent-effectiveness
@@ -137,8 +185,8 @@ epic:
       severity: high
       description: CONDITIONAL_ACCEPT breaks the debate loop identically to ACCEPT. Conditions are logged but never enforced. This creates false consensus where incomplete implementations pass through all phases. The debate-runner should either force Round 2 to address conditions, block phase progression until conditions are met, or make guards verify conditions before advancing.
       source: human-observation
-      status: pending
-      issue_ref: null
+      status: promoted
+      issue_ref: '#38'
       pairs:
         - skill-coherence
         - agent-effectiveness
@@ -148,8 +196,8 @@ epic:
       severity: critical
       description: 'Agents (especially debate-runners and generative agents) frequently ignore their role boundaries and start implementing code directly instead of staying within the debate/orchestration framework. This happens ALL the time. The debate-runner should ONLY orchestrate debates, not write code. The generative agent should only write code within its debate context, not break out to fix things ad-hoc. Need stronger guardrails: 1) Debate-runner system prompt must emphasize it NEVER writes code, 2) Add a guard that detects when an orchestrator-level agent modifies source files, 3) Consider structural enforcement (remove Write/Edit tools from debate-runner agents).'
       source: human-observation
-      status: pending
-      issue_ref: null
+      status: promoted
+      issue_ref: '#39'
       pairs:
         - agent-effectiveness
         - skill-coherence
