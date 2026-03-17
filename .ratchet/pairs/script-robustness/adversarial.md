@@ -48,6 +48,7 @@ For each script, verify:
 ### Portability
 - [ ] Works on Linux (bash 4+, GNU coreutils)
 - [ ] Works on macOS (bash 3.2+, BSD utils)
+- [ ] **Bash 3.2 array expansion (3 occurrences, caused Round 2)**: Every `${arr[@]}` must use `${arr[@]+"${arr[@]}"}` pattern under `set -u`. Bare `${arr[@]}` fails with "unbound variable" on bash 3.2 when array is empty. CHECK THIS ON EVERY REVIEW — it is the most common portability regression.
 - [ ] If `#!/bin/sh`, no bashisms:
   - No `[[`, use `[`
   - No arrays
@@ -88,6 +89,18 @@ For each script, verify:
 **Cross-reference verification (7 occurrences - 54% of debates):**
 - [ ] All referenced scripts verified to exist
 - [ ] All external commands documented as requirements
+
+**Error/Warning message consistency (2 occurrences, severity: major):**
+- [ ] Exit-1 paths must use `Error:`, not `Warning:`. `Warning:` implies non-fatal.
+  ```bash
+  # BAD: misleading
+  echo "Warning: file not found" >&2; exit 1
+  # GOOD: matches behavior
+  echo "Error: file not found" >&2; exit 1
+  ```
+
+**Cross-cutting sweep verification (6 occurrences - #1 cause of multi-round debates):**
+- [ ] Verify generative ran a grep sweep for the pattern class being fixed across ALL scripts. If they fixed a quoting issue in one script but missed the same pattern in 5 others, REJECT.
 
 **Examples must be runnable (8 occurrences - 62% of debates):**
 - [ ] Ensure usage examples are concrete and runnable, not abstract

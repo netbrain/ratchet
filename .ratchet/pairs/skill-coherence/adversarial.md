@@ -20,7 +20,7 @@ The user prioritized ALL of:
 - [ ] Skill purpose stated clearly at the top
 - [ ] Instructions unambiguous (no "check things" — specific commands/files)
 - [ ] Examples present for complex steps (YAML snippets, AskUserQuestion usage)
-- [ ] Tool usage correct (Write requires Read first, Task has correct subagent_type)
+- [ ] Tool usage correct (Write requires Read first, Agent tool has `model` parameter)
 - [ ] File paths absolute and correct (`.ratchet/workflow.yaml` not `workflow.yaml`)
 
 ### Internal Consistency
@@ -38,7 +38,7 @@ The user prioritized ALL of:
   - Milestones have `issues` array
   - Issues have all required fields (ref, title, pairs, depends_on, phase_status, files, debates, branch, status)
   - Milestone `depends_on` used for parallelism
-- [ ] Agent spawning uses Task tool with correct subagent_type
+- [ ] Agent spawning uses Agent tool with `model` parameter
 
 ### Completeness
 - [ ] All major steps present
@@ -53,6 +53,8 @@ The user prioritized ALL of:
   - External commands fail (git, jq, gh)
   - Must show concrete error handling code with clear stderr messages, not just "handle errors"
 - [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
+- [ ] **Cross-cutting sweep verification (6 occurrences - 50% of debates)**: Before accepting, verify the generative ran a grep sweep for the pattern class being fixed across ALL files in scope. If they fixed a field in one skill but missed the same gap in parallel skills, REJECT. This is the #1 cause of multi-round debates.
+- [ ] **Schema field parity (4 occurrences - 33% of debates)**: When skills define the same data structure, verify ALL instances match a canonical field list. Run: `grep -c "field" skills/*/SKILL.md | grep ':0$'` to find files missing fields.
 - [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Any instruction involving:
   - File format manipulation → Must show YAML/JSON snippet
   - Tool usage → Must show exact command syntax
@@ -120,7 +122,7 @@ For each skill reviewed by the generative agent:
 1. **Vague instructions** — "verify the config" (how? which fields?)
 2. **Incorrect examples** — YAML that wouldn't validate against schema
 3. **Missing steps** — skipping critical setup or validation
-4. **Tool misuse** — Write without Read, Task without subagent_type
+4. **Tool misuse** — Write without Read, Agent without model parameter
 5. **Outdated references** — mentioning v1 fields or removed concepts
 6. **Incomplete error handling** — only covering happy path
 

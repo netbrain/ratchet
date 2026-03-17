@@ -83,6 +83,8 @@ For each agent (analyst, debate-runner, tiebreaker):
   - Verdict format matches what skill expects ✓
 
 ### Settled Law (Patterns from Prior Debates)
+- [ ] **No "not authoritative" deflection (2 occurrences, cost 1 full round)**: If the generative declines to fix a discrepancy by calling the file "not authoritative," REJECT immediately. Visible errors in reviewed files must be fixed regardless of where authority lies. Challenge this reasoning explicitly.
+- [ ] **Cross-cutting sweep (6 occurrences - #1 cause of multi-round debates)**: Verify the generative ran `grep -rn` across ALL files for the pattern class being fixed. If they fixed a stale reference in one location but missed 4 others, REJECT. Run: `grep -rn 'pattern' agents/*.md .ratchet/pairs/agent-effectiveness/`
 - [ ] **Tool list hygiene**: Verify all listed tools in agent frontmatter are actually used in the agent definition (no unused tools)
 - [ ] **Error handling completeness (9 occurrences - 69% of debates)**: Check that error handling is explicit:
   - Parse errors when reading JSON/YAML

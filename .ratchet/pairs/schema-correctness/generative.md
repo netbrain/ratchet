@@ -114,11 +114,13 @@ This takes priority over syntax, completeness, or documentation quality checks.
    jq empty schemas/workflow.schema.json
    ```
 
-2. **Validate against real config**:
+2. **Validate against real config (MANDATORY after any change)**:
    ```bash
-   # Use a JSON Schema validator (ajv, jsonschema, etc.)
-   # Or write a test script that checks .ratchet/workflow.yaml against schema
+   # Convert real config to JSON and verify it parses
+   nix develop --command bash -c 'yq -o=json .ratchet/workflow.yaml | jq empty'
+   # If this fails, the schema change broke a valid config — revert
    ```
+   This step was missed in 3/3 schema debates. It is now required before declaring any fix complete.
 
 3. **Edge case testing**:
    - Create test configs with optional fields omitted

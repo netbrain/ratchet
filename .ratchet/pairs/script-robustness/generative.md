@@ -54,6 +54,7 @@ Run `shellcheck <script>` and fix warnings:
 ### Portability
 - [ ] Works on Linux (bash 4+, GNU coreutils)
 - [ ] Works on macOS (bash 3.2+, BSD utils)
+- [ ] **Bash 3.2 array expansion**: Every `${arr[@]}` must use `${arr[@]+"${arr[@]}"}` under `set -u` — bare `${arr[@]}` fails with "unbound variable" on bash 3.2 when array is empty. This is the most common portability regression.
 - [ ] No bashisms if script uses `#!/bin/sh`:
   - No `[[`, use `[` instead
   - No `$((expr))`, use `expr` or `$(())`
@@ -68,6 +69,18 @@ Run `shellcheck <script>` and fix warnings:
 - [ ] Proper use of temp files (mktemp, cleanup)
 - [ ] Race conditions avoided (e.g., file changes between check and use)
 - [ ] Idempotent where possible (can run multiple times safely)
+
+## Cross-Cutting Sweep (MANDATORY before finishing any round)
+
+Before writing your round output, grep ALL scripts in scope for the pattern class you're fixing:
+```bash
+# Example: if you fixed unquoted variables, check all scripts
+grep -rn '\$[A-Z_]' scripts/*.sh | grep -v '"'  # unquoted vars
+# Example: if you added atomic writes, check all JSON-writing scripts
+grep -rn 'cat.*>' scripts/*.sh | grep -v 'mktemp\|tmp'  # non-atomic writes
+```
+
+Missing parallel instances in other scripts is the #1 cause of multi-round debates.
 
 ## Improvement Strategy
 
@@ -85,6 +98,7 @@ Run `shellcheck <script>` and fix warnings:
 4. **Hardcoded paths** — `/bin/bash` may be `/usr/bin/bash` on some systems
 5. **No cleanup on error** — temp files left behind
 6. **Silent failures** — errors not reported to user
+7. **Warning/Error mismatch** — `Warning:` followed by `exit 1` is misleading; exit-1 paths must use `Error:`
 
 ## Validation Commands
 

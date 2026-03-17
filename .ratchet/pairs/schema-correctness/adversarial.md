@@ -113,6 +113,11 @@ Verify:
 
 ### Settled Law (Patterns from Prior Debates)
 - [ ] **Enum completeness (CRITICAL)**: Missing enum values cause schema to reject valid configs - verify EVERY enum against actual usage
+- [ ] **Real config validation (3 occurrences - 100% of schema debates)**: After ANY schema change, verify the real config still validates:
+  ```bash
+  nix develop --command bash -c 'yq -o=json .ratchet/workflow.yaml | jq empty'
+  ```
+  If the generative did NOT run this command, REJECT immediately. This was missed in every prior debate.
 - [ ] **Error handling gaps**: Check that validation error messages would be clear for common failures
 - [ ] **Cross-reference verification**: Verify all `$ref` pointers resolve correctly via bash/jq
 - [ ] **Concrete examples in descriptions**: Ensure complex schema structures have example values in descriptions

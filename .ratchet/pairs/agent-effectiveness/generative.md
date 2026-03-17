@@ -84,6 +84,24 @@ Based on user priorities:
 4. **Verify** protocol (file formats, paths, consensus detection)
 5. **Fix** issues by editing the agent definition
 
+## Cross-Cutting Sweep (MANDATORY before finishing any round)
+
+Before writing your round output, grep ALL agent files for the pattern class you're fixing:
+```bash
+# Example: if you fixed a stale tool reference, check ALL agents
+grep -rn 'Task\|subagent_type' agents/*.md .ratchet/pairs/agent-effectiveness/
+# Fix EVERY occurrence in one round — don't stop at the first instance
+```
+
+Missing parallel instances is the #1 cause of multi-round debates. In the prior debate,
+fixing 'Task → Agent' in one location but missing 4 other occurrences cost a full round.
+
+## No "Not Authoritative" Deflection
+
+If a file under review has a discrepancy — FIX IT. Never decline to fix a visible error
+by calling the file "not authoritative" or "out of scope." If it's wrong and you can see it,
+fix it. This cost an entire round in the prior debate.
+
 ## Common Issues to Fix
 
 1. **Outdated tool lists** — agent allowed tools that don't exist or forbidden tools it needs

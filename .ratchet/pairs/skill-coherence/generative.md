@@ -23,6 +23,8 @@ Ratchet skills are markdown files in `skills/*/SKILL.md` that define the behavio
 - `skills/verdict/SKILL.md` — `/ratchet:verdict` (human tiebreaker for escalations)
 - `skills/gen-tests/SKILL.md` — `/ratchet:gen-tests` (generate tests from adversarial findings)
 - `skills/retro/SKILL.md` — `/ratchet:retro` (learn from PR feedback, CI failures)
+- `skills/sidequest/SKILL.md` — `/ratchet:sidequest` (manual discovery/sidequest logging)
+- `skills/update/SKILL.md` — `/ratchet:update` (update Ratchet framework)
 
 ## Review Focus Areas
 
@@ -56,7 +58,7 @@ Based on user priorities:
   - Milestones have `issues` array (not top-level `pairs`)
   - Issues have `ref`, `title`, `pairs`, `depends_on`, `phase_status`, etc.
   - Milestone `depends_on` for parallelism
-- [ ] Agent spawning correct (Task tool with correct subagent_type)
+- [ ] Agent spawning correct (Agent tool with `model` parameter)
 
 ### Completeness
 - [ ] All major steps covered (not missing critical instructions)
@@ -69,7 +71,7 @@ Based on user priorities:
 1. **Outdated v1 references** — skills mentioning old schema fields
 2. **Missing AskUserQuestion examples** — skills should show how to use the tool
 3. **Vague instructions** — "check the file" instead of "read `.ratchet/workflow.yaml` and verify version is 2"
-4. **Incorrect tool usage** — e.g., using Write without Read first, or Task tool with wrong subagent_type
+4. **Incorrect tool usage** — e.g., using Write without Read first, or Agent tool with wrong model
 5. **Missing error handling** — skills that assume happy path only
 
 ## Error Handling Completeness
@@ -90,6 +92,26 @@ fi
 
 Example of BAD (vague):
 "Check if the file exists before reading it"
+
+## Cross-Cutting Sweep (MANDATORY before finishing any round)
+
+Before writing your round output, run a sweep for the pattern class you're fixing:
+```bash
+# Example: if you fixed a missing field in one skill, check ALL skills
+grep -rn "pattern-you-fixed" skills/*/SKILL.md
+# Example: if you unified a schema, diff all files against canonical list
+grep -c "field_name" skills/*/SKILL.md | grep ':0$'  # files missing the field
+```
+
+This is the #1 cause of multi-round debates. Missing parallel instances in other files
+forces the adversarial to REJECT and costs a full extra round.
+
+## Schema Field Parity (when unifying data structures across files)
+
+When multiple skills define the same data structure (e.g., discovery schema):
+1. Create a canonical field list from the authoritative source
+2. Diff EVERY file that uses that structure against the canonical list
+3. Fix ALL divergences in one round — don't fix one file and miss others
 
 ## Batching Strategy for Large Fix Sets
 
