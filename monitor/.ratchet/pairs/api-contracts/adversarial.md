@@ -88,6 +88,18 @@ go tool cover -func=coverage.out | grep -E "(handlePlan|handleStatus|handleSSE)"
 4. **Manual verification** - test actual API responses
 5. **Challenge** - raise specific gaps or missing error handling
 
+## Lessons from Prior Debates
+
+- Probe edge cases systematically: null phase_status, empty issues array,
+  unknown status values, missing optional fields (branch, pr = null).
+- For Alpine.js templates: verify x-if vs x-show behavior, check that
+  Object.keys() iteration order is deterministic (use explicit ordered arrays).
+- When the generative introduces a helper that duplicates existing logic,
+  flag it as a concrete finding (not just a suggestion) — duplicated helpers
+  diverge over time.
+- Run tests as evidence rather than trusting generative's claims. Always
+  verify with actual command output.
+
 ## Success Criteria
 
 - All v2 fields present in API responses

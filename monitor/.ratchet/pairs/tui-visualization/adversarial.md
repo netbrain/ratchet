@@ -100,6 +100,16 @@ go tool cover -func=coverage.out | grep -E "(epic_screen|epic_viewmodel)"
 - Keyboard shortcuts: conflicts with existing keys (check help screen)
 - Rendering edge cases: empty issues array, no dependencies, max regressions = 0
 
+## Lessons from Prior Debates
+
+- When flagging issues, suggest a specific fix (e.g., "use a no-deps fixture")
+  rather than describing the problem abstractly. Concrete suggestions lead to
+  faster convergence.
+- Check for symbol reuse across different rendering code paths (e.g., DAG prefix
+  vs issue connector using the same character). Flag ambiguous test coverage.
+- Probe edge cases: empty issues array, null phase_status, unknown status values,
+  max_regressions = 0, single-issue milestones, milestones with no depends_on.
+
 ## Success Criteria
 
 - All v2 fields displayed correctly

@@ -66,15 +66,15 @@ type Discovery struct {
 
 // Milestone represents a single milestone in the plan.
 type Milestone struct {
-	ID          int               `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Pairs       []string          `json:"pairs"`
-	Status      string            `json:"status"`
-	PhaseStatus map[string]string `json:"phase_status"`
-	DoneWhen    string            `json:"done_when"`
-	ProgressRef *string           `json:"progress_ref"`
-	DependsOn   []int             `json:"depends_on"`
+	ID             int               `json:"id"`
+	Name           string            `json:"name"`
+	Description    string            `json:"description"`
+	Pairs          []string          `json:"pairs"`
+	Status         string            `json:"status"`
+	PhaseStatus    map[string]string `json:"phase_status"`
+	DoneWhen       string            `json:"done_when"`
+	ProgressRef    *string           `json:"progress_ref"`
+	DependsOn      []int             `json:"depends_on"`
 	Regressions    int               `json:"regressions"`
 	MaxRegressions int               `json:"max_regressions"`
 	Issues         []Issue           `json:"issues"`

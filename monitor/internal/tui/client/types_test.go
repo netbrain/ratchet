@@ -8,14 +8,14 @@ import (
 func TestIssueJSONRoundTrip(t *testing.T) {
 	branch := "feat/issue-1-1"
 	original := Issue{
-		Ref:   "issue-1-1",
-		Title: "Add user authentication",
-		Pairs: []string{"security-review", "api-design"},
+		Ref:       "issue-1-1",
+		Title:     "Add user authentication",
+		Pairs:     []string{"security-review", "api-design"},
 		DependsOn: []string{"issue-1-0"},
 		PhaseStatus: map[string]string{
-			"design":  "done",
-			"build":   "active",
-			"verify":  "pending",
+			"design": "done",
+			"build":  "active",
+			"verify": "pending",
 		},
 		Files:   []string{"auth.go", "auth_test.go"},
 		Debates: []string{"debate-001", "debate-002"},

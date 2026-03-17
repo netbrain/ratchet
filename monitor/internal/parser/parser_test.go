@@ -1262,6 +1262,7 @@ epic:
 		t.Errorf("PhaseStatus should have 5 phases, got %d", len(issue.PhaseStatus))
 	}
 }
+
 // --- Discovery Tracking tests ---
 
 func TestParsePlan_WithDiscoveries(t *testing.T) {

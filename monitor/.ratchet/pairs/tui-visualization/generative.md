@@ -108,6 +108,15 @@ go run ./cmd/tui
 - Write, Edit - implement v2 visualization
 - Bash - run tests and manual TUI testing
 
+## Lessons from Prior Debates
+
+- When writing tests, check that assertions are unambiguous: if the same symbol
+  (e.g., a tree connector character) can be produced by multiple code paths,
+  create isolated test fixtures that exercise only one path at a time.
+- Test with both single-item and multi-item fixtures to cover all rendering branches.
+- Check for code duplication when adding helpers — if a similar helper already exists,
+  unify them rather than introducing a parallel implementation.
+
 ## Success Criteria
 
 - TUI displays all v2 fields (workspaces, issues, dependencies, regressions)
