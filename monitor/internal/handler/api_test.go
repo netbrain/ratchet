@@ -14,6 +14,7 @@ type mockDataSource struct {
 	pairs      any
 	debates    any
 	debate     map[string]any
+	debateErr  map[string]error // per-debate error overrides
 	plan       any
 	status     any
 	scores     any
@@ -30,10 +31,16 @@ func (m *mockDataSource) Debates() (any, error) {
 }
 
 func (m *mockDataSource) Debate(id string) (any, error) {
+	// Check per-debate error overrides first (for testing 500 vs 404)
+	if m.debateErr != nil {
+		if err, ok := m.debateErr[id]; ok {
+			return nil, err
+		}
+	}
 	if v, ok := m.debate[id]; ok {
 		return v, nil
 	}
-	return nil, fmt.Errorf("debate %q not found", id)
+	return nil, &NotFoundError{Resource: "debate", ID: id}
 }
 
 func (m *mockDataSource) Plan() (any, error) {
@@ -334,11 +341,63 @@ func TestDebateDetailHandler_NotFoundHidesInternalError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
 	var body map[string]string
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode error response: %v", err)
 	}
 	// Must say "debate not found", not the raw error from the data source.
+	if body["error"] != "debate not found" {
+		t.Errorf("error message: got %q, want %q", body["error"], "debate not found")
+	}
+}
+
+func TestDebateDetailHandler_InternalError_Returns500(t *testing.T) {
+	ds := newMockDS()
+	ds.debateErr = map[string]error{
+		"broken-debate": fmt.Errorf("disk I/O failure"),
+	}
+	h := DebateDetailHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates/broken-debate", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if body["error"] != "internal server error" {
+		t.Errorf("error message: got %q, want %q", body["error"], "internal server error")
+	}
+	if strings.Contains(rec.Body.String(), "disk I/O failure") {
+		t.Error("internal error details leaked to client")
+	}
+}
+
+func TestDebateDetailHandler_NotFoundError_Returns404(t *testing.T) {
+	ds := newMockDS()
+	ds.debateErr = map[string]error{
+		"missing-debate": &NotFoundError{Resource: "debate", ID: "missing-debate"},
+	}
+	h := DebateDetailHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates/missing-debate", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
 	if body["error"] != "debate not found" {
 		t.Errorf("error message: got %q, want %q", body["error"], "debate not found")
 	}

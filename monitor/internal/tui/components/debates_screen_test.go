@@ -767,7 +767,131 @@ func TestDebatesScreenDetailRenderEmptyContent(t *testing.T) {
 	}
 }
 
-// --- 29. SelectFirst/SelectLast on DebatesViewModel ---
+// --- 29. Detail mode: n key advances to next round ---
+
+func TestDebatesScreenDetailNNextRound(t *testing.T) {
+	store := testStoreWithDebates(sampleDebates())
+	detail := sampleDebateWithRounds()
+	store.SetDebateDetail(detail)
+	ds := NewDebatesScreen(store, nil)
+
+	// Enter detail mode.
+	km := ds.KeyMap()
+	enterHandler := findKeyHandler(km, tui.KeyEnter, tui.ModNone)
+	enterHandler(tui.KeyEvent{Key: tui.KeyEnter})
+
+	if ds.detailVM == nil {
+		t.Fatal("expected detailVM to be non-nil")
+	}
+	if ds.detailVM.CurrentRound() != 0 {
+		t.Fatalf("expected initial round 0, got %d", ds.detailVM.CurrentRound())
+	}
+
+	km = ds.KeyMap()
+	nHandler := findRuneHandler(km, 'n')
+	if nHandler == nil {
+		t.Fatal("no handler found for key 'n' in detail mode")
+	}
+	nHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'n'})
+
+	if ds.detailVM.CurrentRound() != 1 {
+		t.Fatalf("expected round 1 after 'n', got %d", ds.detailVM.CurrentRound())
+	}
+}
+
+// --- 30. Detail mode: N key goes to previous round ---
+
+func TestDebatesScreenDetailNPrevRound(t *testing.T) {
+	store := testStoreWithDebates(sampleDebates())
+	detail := sampleDebateWithRounds()
+	store.SetDebateDetail(detail)
+	ds := NewDebatesScreen(store, nil)
+
+	// Enter detail.
+	km := ds.KeyMap()
+	enterHandler := findKeyHandler(km, tui.KeyEnter, tui.ModNone)
+	enterHandler(tui.KeyEvent{Key: tui.KeyEnter})
+
+	// Advance to round 1.
+	km = ds.KeyMap()
+	nHandler := findRuneHandler(km, 'n')
+	nHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'n'})
+	if ds.detailVM.CurrentRound() != 1 {
+		t.Fatalf("precondition: expected round 1, got %d", ds.detailVM.CurrentRound())
+	}
+
+	// Go back with N.
+	bigNHandler := findRuneHandler(km, 'N')
+	if bigNHandler == nil {
+		t.Fatal("no handler found for key 'N' in detail mode")
+	}
+	bigNHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'N'})
+
+	if ds.detailVM.CurrentRound() != 0 {
+		t.Fatalf("expected round 0 after 'N', got %d", ds.detailVM.CurrentRound())
+	}
+}
+
+// --- 31. Detail mode: F key toggles follow mode ---
+
+func TestDebatesScreenDetailFToggleFollow(t *testing.T) {
+	store := testStoreWithDebates(sampleDebates())
+	detail := sampleDebateWithRounds()
+	store.SetDebateDetail(detail)
+	ds := NewDebatesScreen(store, nil)
+
+	// Enter detail.
+	km := ds.KeyMap()
+	enterHandler := findKeyHandler(km, tui.KeyEnter, tui.ModNone)
+	enterHandler(tui.KeyEvent{Key: tui.KeyEnter})
+
+	if ds.detailVM.IsFollowing() {
+		t.Fatal("expected follow mode off initially")
+	}
+
+	km = ds.KeyMap()
+	fHandler := findRuneHandler(km, 'F')
+	if fHandler == nil {
+		t.Fatal("no handler found for key 'F' in detail mode")
+	}
+	fHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'F'})
+
+	if !ds.detailVM.IsFollowing() {
+		t.Fatal("expected follow mode on after 'F'")
+	}
+
+	// Toggle again.
+	fHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'F'})
+	if ds.detailVM.IsFollowing() {
+		t.Fatal("expected follow mode off after second 'F'")
+	}
+}
+
+// --- 32. Detail mode: n/N/F with nil detailVM doesn't panic ---
+
+func TestDebatesScreenDetailKeysNilVM(t *testing.T) {
+	store := testStoreWithDebates(sampleDebates())
+	ds := NewDebatesScreen(store, nil)
+
+	// Force detail mode without a detailVM.
+	ds.mode = modeDetail
+
+	km := ds.KeyMap()
+	nHandler := findRuneHandler(km, 'n')
+	if nHandler != nil {
+		nHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'n'}) // must not panic
+	}
+	bigNHandler := findRuneHandler(km, 'N')
+	if bigNHandler != nil {
+		bigNHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'N'}) // must not panic
+	}
+	fHandler := findRuneHandler(km, 'F')
+	if fHandler != nil {
+		fHandler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'F'}) // must not panic
+	}
+}
+
+// --- 33. SelectFirst/SelectLast on DebatesViewModel ---
 
 func TestDebatesViewModelSelectFirstLast(t *testing.T) {
 	store := testStoreWithDebates(sampleDebates())

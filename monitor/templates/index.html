@@ -464,6 +464,153 @@
             border-color: var(--accent);
         }
 
+        /* Issue ref badge in epic bar */
+        .issue-ref-badge {
+            color: var(--accent);
+            font-weight: 500;
+        }
+        .workspace-label {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Milestone cards */
+        .milestone-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+            overflow: hidden;
+        }
+        .milestone-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .milestone-header:hover {
+            background: var(--bg-surface);
+        }
+        .milestone-expand {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+        .milestone-expand.open {
+            transform: rotate(90deg);
+        }
+        .ms-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            flex: 1;
+        }
+        .ms-meta {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            font-size: 0.75rem;
+        }
+        .ms-deps {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }
+        .regression-counter {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .regression-counter.warn {
+            background: rgba(239,68,68,0.2);
+            color: var(--red);
+        }
+        .regression-counter.ok {
+            background: rgba(107,114,128,0.15);
+            color: var(--gray);
+        }
+
+        /* Issue rows */
+        .issue-list {
+            border-top: 1px solid var(--border);
+        }
+        .issue-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 2fr 1fr;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.5rem 1rem 0.5rem 2.25rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+        }
+        .issue-row:last-child {
+            border-bottom: none;
+        }
+        .issue-ref {
+            font-weight: 600;
+            color: var(--accent);
+        }
+        .issue-title {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+        .phase-pills {
+            display: flex;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+        .phase-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.15rem;
+            padding: 0.05rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .phase-pill.done        { background: rgba(34,197,94,0.2);  color: var(--green); }
+        .phase-pill.in_progress { background: rgba(234,179,8,0.2);  color: var(--yellow); }
+        .phase-pill.pending     { background: rgba(107,114,128,0.15); color: var(--gray); }
+        .phase-pill.skipped     { background: rgba(107,114,128,0.1); color: var(--gray); text-decoration: line-through; }
+        .issue-deps {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        /* Discoveries section */
+        .discoveries-section {
+            margin-top: 1.5rem;
+        }
+        .discovery-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            padding: 0.6rem 1rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+        }
+        .discovery-item .disc-title {
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .discovery-item .disc-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        .discovery-item.sidequest {
+            border-left-color: var(--yellow);
+        }
+        .discovery-item.blocker {
+            border-left-color: var(--red);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .pairs-grid, .score-cards {
@@ -507,6 +654,14 @@
         <span>
             Milestone: <span class="milestone-name" x-text="currentMilestone"></span>
         </span>
+        <template x-if="currentIssueRef">
+            <span class="issue-ref-badge">
+                Issue: <strong x-text="currentIssueRef"></strong>
+                <template x-if="currentPhase">
+                    <span> / <span x-text="currentPhase"></span></span>
+                </template>
+            </span>
+        </template>
         <template x-if="currentPhases.length > 0">
             <ul class="phase-list">
                 <template x-for="phase in currentPhases" :key="phase.name">
@@ -518,6 +673,9 @@
                 </template>
             </ul>
         </template>
+        <template x-if="activeWorkspace">
+            <span class="workspace-label">Workspace: <strong x-text="activeWorkspace"></strong></span>
+        </template>
     </div>
 
     <!-- Main content -->
@@ -528,6 +686,9 @@
             <button class="nav-tab" :class="{ active: view === 'overview' }"
                     @click="view = 'overview'; location.hash = ''"
                     role="tab" :aria-selected="view === 'overview'" id="tab-overview">Overview</button>
+            <button class="nav-tab" :class="{ active: view === 'plan' }"
+                    @click="view = 'plan'; location.hash = 'plan'"
+                    role="tab" :aria-selected="view === 'plan'" id="tab-plan">Plan</button>
             <button class="nav-tab" :class="{ active: view === 'scores' }"
                     @click="view = 'scores'; location.hash = 'scores'"
                     role="tab" :aria-selected="view === 'scores'" id="tab-scores">Scores</button>
@@ -627,6 +788,117 @@
                             </template>
                         </tbody>
                     </table>
+                </div>
+            </template>
+        </div>
+
+        <!-- Plan / Milestones -->
+        <div x-show="view === 'plan'" role="tabpanel" aria-labelledby="tab-plan">
+
+            <div x-show="loading" class="loading">Loading</div>
+
+            <template x-if="!loading">
+                <div>
+                    <!-- Epic name -->
+                    <template x-if="plan && plan.epic">
+                        <div>
+                            <div class="section-heading">
+                                <span x-text="plan.epic.name || 'Epic'"></span>
+                            </div>
+                            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;"
+                               x-show="plan.epic.description" x-text="plan.epic.description"></p>
+
+                            <!-- Milestones -->
+                            <template x-for="ms in (plan.epic.milestones || [])" :key="ms.id">
+                                <div class="milestone-card">
+                                    <div class="milestone-header"
+                                         @click="ms._expanded = !ms._expanded"
+                                         @keydown.enter="ms._expanded = !ms._expanded"
+                                         tabindex="0" role="button"
+                                         :aria-expanded="!!ms._expanded">
+                                        <span class="milestone-expand" :class="{ open: ms._expanded }">&#9654;</span>
+                                        <span class="ms-name" x-text="ms.name || ('M' + ms.id)"></span>
+                                        <div class="ms-meta">
+                                            <span class="badge"
+                                                  :class="'badge-' + (ms.status || 'pending')"
+                                                  x-text="ms.status || 'pending'"></span>
+                                            <span class="regression-counter"
+                                                  :class="(ms.regressions || 0) > 0 ? 'warn' : 'ok'"
+                                                  x-show="ms.regressions != null">
+                                                <span x-text="ms.regressions || 0"></span> regressions
+                                            </span>
+                                            <template x-if="ms.depends_on && ms.depends_on.length > 0">
+                                                <span class="ms-deps">
+                                                    depends on: <span x-text="ms.depends_on.map(d => 'M' + d).join(', ')"></span>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Expandable issue rows -->
+                                    <div class="issue-list" x-show="ms._expanded">
+                                        <template x-if="!ms.issues || ms.issues.length === 0">
+                                            <div style="padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.8rem; color: var(--text-muted);">
+                                                No issues defined
+                                            </div>
+                                        </template>
+                                        <template x-for="issue in (ms.issues || [])" :key="issue.ref">
+                                            <div class="issue-row">
+                                                <div>
+                                                    <span class="issue-ref" x-text="issue.ref"></span>
+                                                    <span class="issue-title" x-text="issue.title ? ' — ' + issue.title : ''"></span>
+                                                </div>
+                                                <div>
+                                                    <span class="badge"
+                                                          :class="'badge-' + (issue.status || 'pending')"
+                                                          x-text="issue.status || 'pending'"></span>
+                                                </div>
+                                                <div class="phase-pills">
+                                                    <template x-if="issue.phase_status">
+                                                        <template x-for="phaseName in Object.keys(issue.phase_status)" :key="phaseName">
+                                                            <span class="phase-pill"
+                                                                  :class="issue.phase_status[phaseName]"
+                                                                  x-text="phaseName"></span>
+                                                        </template>
+                                                    </template>
+                                                </div>
+                                                <div class="issue-deps" x-show="issue.depends_on && issue.depends_on.length > 0">
+                                                    <span x-text="'deps: ' + (issue.depends_on || []).join(', ')"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Discoveries -->
+                            <template x-if="plan.epic.discoveries && plan.epic.discoveries.length > 0">
+                                <div class="discoveries-section">
+                                    <div class="section-heading">
+                                        <span>Discoveries (<span x-text="plan.epic.discoveries.length"></span>)</span>
+                                    </div>
+                                    <template x-for="(disc, idx) in plan.epic.discoveries" :key="idx">
+                                        <div class="discovery-item" :class="disc.type || ''">
+                                            <div class="disc-title" x-text="disc.title || disc.description || 'Untitled'"></div>
+                                            <div class="disc-meta">
+                                                <template x-if="disc.type">
+                                                    <span class="badge" :class="'badge-' + disc.type" x-text="disc.type"></span>
+                                                </template>
+                                                <template x-if="disc.source">
+                                                    <span>from <strong x-text="disc.source"></strong></span>
+                                                </template>
+                                                <template x-if="disc.milestone_id">
+                                                    <span>M<span x-text="disc.milestone_id"></span></span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div x-show="!plan || !plan.epic" class="empty-state">No plan data available</div>
                 </div>
             </template>
         </div>
@@ -806,6 +1078,7 @@
             _hashHandler: null,
             _unloadHandler: null,
             _scoresAbort: null,
+            activeWorkspace: null,
 
             // Computed
             get filteredDebates() {
@@ -831,17 +1104,44 @@
                 return ms ? ms.name : '—';
             },
 
+            get currentIssueRef() {
+                if (!this.plan || !this.plan.epic) return '';
+                const focus = this.plan.epic.current_focus;
+                return focus ? (focus.issue_ref || '') : '';
+            },
+
+            get currentPhase() {
+                if (!this.plan || !this.plan.epic) return '';
+                const focus = this.plan.epic.current_focus;
+                return focus ? (focus.phase || '') : '';
+            },
+
             get currentPhases() {
                 if (!this.plan || !this.plan.epic) return [];
                 const focus = this.plan.epic.current_focus;
                 if (!focus) return [];
+                // v2: find the focused issue and use its phase_status
                 const ms = (this.plan.epic.milestones || []).find(m => m.id === focus.milestone_id);
-                if (!ms || !ms.phase_status) return [];
-                const order = ['plan', 'test', 'build', 'review', 'harden'];
-                return order.filter(p => p in ms.phase_status).map(p => ({
-                    name: p,
-                    status: ms.phase_status[p]
-                }));
+                if (!ms) return [];
+                if (focus.issue_ref && ms.issues) {
+                    const issue = ms.issues.find(i => i.ref === focus.issue_ref);
+                    if (issue && issue.phase_status) {
+                        const order = ['plan', 'test', 'build', 'review', 'harden'];
+                        return order.filter(p => p in issue.phase_status).map(p => ({
+                            name: p,
+                            status: issue.phase_status[p]
+                        }));
+                    }
+                }
+                // Fallback to milestone-level phase_status (v1 compat)
+                if (ms.phase_status) {
+                    const order = ['plan', 'test', 'build', 'review', 'harden'];
+                    return order.filter(p => p in ms.phase_status).map(p => ({
+                        name: p,
+                        status: ms.phase_status[p]
+                    }));
+                }
+                return [];
             },
 
             get scoreSummaries() {
@@ -982,6 +1282,10 @@
             },
 
             handleDomainEvent(type, data) {
+                // Track workspace context from SSE events
+                if (data && data.workspace) {
+                    this.activeWorkspace = data.workspace;
+                }
                 if (type === 'config:changed' || type === 'pair:modified') {
                     this.fetchPairs();
                 } else if (type.startsWith('debate:')) {
@@ -1152,6 +1456,11 @@
                 }
                 if (hash === 'scores') {
                     this.view = 'scores';
+                    this.currentDebate = null;
+                    return;
+                }
+                if (hash === 'plan') {
+                    this.view = 'plan';
                     this.currentDebate = null;
                     return;
                 }

@@ -9,6 +9,44 @@ import (
 	"github.com/netbrain/ratchet-monitor/internal/tui/state"
 )
 
+func testStoreWithEpicAndIssues() *state.Store {
+	s := state.NewStore()
+	s.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name:        "ratchet-monitor",
+			Description: "With issues",
+			Milestones: []client.Milestone{
+				{
+					ID: 1, Name: "M1", Status: "in_progress",
+					PhaseStatus:    map[string]string{"plan": "done", "build": "in_progress"},
+					MaxRegressions: 2,
+					Regressions:    2,
+					Issues: []client.Issue{
+						{
+							Ref:         "#10",
+							Title:       "Add widget",
+							PhaseStatus: map[string]string{"plan": "done", "build": "in_progress", "review": "pending"},
+							Status:      "in_progress",
+						},
+						{
+							Ref:         "#11",
+							Title:       "Fix layout",
+							PhaseStatus: map[string]string{"plan": "done", "build": "done", "review": "done"},
+							Status:      "done",
+						},
+					},
+				},
+				{
+					ID: 2, Name: "M2", Status: "pending",
+					PhaseStatus: map[string]string{"plan": "pending"},
+					DependsOn:   []int{1},
+				},
+			},
+		},
+	})
+	return s
+}
+
 func testStoreWithEpic() *state.Store {
 	s := state.NewStore()
 	s.SetPlan(client.Plan{
@@ -245,5 +283,96 @@ func TestEpicScreenSelectedMilestoneHighlighted(t *testing.T) {
 	}
 	if es.vm.SelectedIndex() != 0 {
 		t.Fatalf("expected initial selection 0, got %d", es.vm.SelectedIndex())
+	}
+}
+
+// --- 13. Issue rows rendered ---
+
+func TestEpicScreenRenderContainsIssueRefs(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// Issue refs should appear
+	if !strings.Contains(text, "#10") {
+		t.Fatalf("expected issue ref #10 in output, got: %q", text)
+	}
+	if !strings.Contains(text, "#11") {
+		t.Fatalf("expected issue ref #11 in output, got: %q", text)
+	}
+}
+
+func TestEpicScreenRenderContainsIssueTitles(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	if !strings.Contains(text, "Add widget") {
+		t.Fatalf("expected issue title 'Add widget' in output, got: %q", text)
+	}
+	if !strings.Contains(text, "Fix layout") {
+		t.Fatalf("expected issue title 'Fix layout' in output, got: %q", text)
+	}
+}
+
+func TestEpicScreenRenderIssuePhaseSymbols(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// Issue #10 has plan=done(✓), build=in_progress(●), review=pending(○)
+	if !strings.Contains(text, "✓") {
+		t.Fatal("expected ✓ for done phase")
+	}
+	if !strings.Contains(text, "●") {
+		t.Fatal("expected ● for in_progress phase")
+	}
+	if !strings.Contains(text, "○") {
+		t.Fatal("expected ○ for pending phase")
+	}
+}
+
+// --- 14. Regression warning in rendered output ---
+
+func TestEpicScreenRenderRegressionWarning(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M1 has regressions=2, should show regression indicator
+	if !strings.Contains(text, "↻2") {
+		t.Fatalf("expected regression indicator ↻2, got: %q", text)
+	}
+}
+
+// --- 15. DAG connector in rendered output ---
+
+func TestEpicScreenRenderDAGConnector(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M2 depends on M1 and is in a higher layer, DAG prefix should appear
+	if !strings.Contains(text, "└─") {
+		t.Fatalf("expected DAG connector └─ in output, got: %q", text)
+	}
+}
+
+// --- 16. Issue tree connector ---
+
+func TestEpicScreenRenderIssueTreeConnector(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// Issue rows use ├─ tree connector
+	if !strings.Contains(text, "├─") {
+		t.Fatalf("expected issue tree connector ├─ in output, got: %q", text)
 	}
 }

@@ -289,7 +289,7 @@ func (ds *DebatesScreen) renderDetail(app *tui.App) *tui.Element {
 
 	// Navigation hint bar.
 	hintEl := tui.New(
-		tui.WithText("Esc/Backspace:back  j/k:scroll  d/u:page  gg/G:top/bottom"),
+		tui.WithText("Esc/Backspace:back  j/k:scroll  d/u:page  gg/G:top/bottom  n/N:round  F:follow"),
 		tui.WithTextStyle(tui.NewStyle().Dim()),
 		tui.WithHeight(1),
 	)
@@ -475,6 +475,24 @@ func (ds *DebatesScreen) detailKeyMap() tui.KeyMap {
 				ds.lastKey = 0
 			} else {
 				ds.lastKey = 'g'
+			}
+		})),
+		tui.On(tui.Rune('n'), dirty(func(ke tui.KeyEvent) {
+			if ds.detailVM != nil {
+				ds.lastKey = 0
+				ds.detailVM.NextRound()
+			}
+		})),
+		tui.On(tui.Rune('N'), dirty(func(ke tui.KeyEvent) {
+			if ds.detailVM != nil {
+				ds.lastKey = 0
+				ds.detailVM.PrevRound()
+			}
+		})),
+		tui.On(tui.Rune('F'), dirty(func(ke tui.KeyEvent) {
+			if ds.detailVM != nil {
+				ds.lastKey = 0
+				ds.detailVM.ToggleFollow()
 			}
 		})),
 		tui.On(tui.KeyEscape, dirty(func(ke tui.KeyEvent) {

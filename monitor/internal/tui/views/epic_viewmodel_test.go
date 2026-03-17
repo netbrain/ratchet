@@ -30,6 +30,59 @@ func seedEpicStore() *state.Store {
 	return s
 }
 
+func seedEpicStoreWithIssues() *state.Store {
+	s := state.NewStore()
+	s.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name:        "ratchet-monitor",
+			Description: "Real-time observability dashboard",
+			Milestones: []client.Milestone{
+				{
+					ID: 1, Name: "M1", Status: "in_progress",
+					PhaseStatus:    map[string]string{"plan": "done", "build": "in_progress"},
+					MaxRegressions: 3,
+					Regressions:    1,
+					Issues: []client.Issue{
+						{
+							Ref:         "#10",
+							Title:       "Add widget",
+							Pairs:       []string{"tui-layout"},
+							DependsOn:   []string{},
+							PhaseStatus: map[string]string{"plan": "done", "build": "in_progress", "review": "pending"},
+							Status:      "in_progress",
+							Files:       []string{"widget.go"},
+							Debates:     []string{"debate-1"},
+						},
+						{
+							Ref:         "#11",
+							Title:       "Fix layout",
+							Pairs:       []string{"tui-layout"},
+							PhaseStatus: map[string]string{"plan": "done", "build": "done", "review": "done"},
+							Status:      "done",
+						},
+					},
+				},
+				{
+					ID: 2, Name: "M2", Status: "pending",
+					PhaseStatus:    map[string]string{"plan": "pending"},
+					DependsOn:      []int{1},
+					MaxRegressions: 2,
+					Regressions:    2,
+					Issues: []client.Issue{
+						{
+							Ref:         "#20",
+							Title:       "Backend API",
+							PhaseStatus: map[string]string{"plan": "pending"},
+							Status:      "pending",
+						},
+					},
+				},
+			},
+		},
+	})
+	return s
+}
+
 // ── Construction ────────────────────────────────────────────────────────
 
 func TestNewEpicViewModel(t *testing.T) {
@@ -645,5 +698,187 @@ func TestEpicRapidWrapCycling(t *testing.T) {
 		if idx < 0 || idx >= vm.TotalCount() {
 			t.Fatalf("SelectedIndex %d out of range after %d SelectPrev", idx, i+1)
 		}
+	}
+}
+
+// ── Issue-level data (Issue 32) ──────────────────────────────────────────
+
+func TestEpicMilestoneIssuesPopulated(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	if len(ms) != 2 {
+		t.Fatalf("expected 2 milestones, got %d", len(ms))
+	}
+
+	if len(ms[0].Issues) != 2 {
+		t.Fatalf("expected 2 issues in M1, got %d", len(ms[0].Issues))
+	}
+	if ms[0].Issues[0].Ref != "#10" {
+		t.Errorf("issue 0 Ref = %q, want #10", ms[0].Issues[0].Ref)
+	}
+	if ms[0].Issues[0].Title != "Add widget" {
+		t.Errorf("issue 0 Title = %q, want Add widget", ms[0].Issues[0].Title)
+	}
+	if ms[0].Issues[0].Status != "in_progress" {
+		t.Errorf("issue 0 Status = %q, want in_progress", ms[0].Issues[0].Status)
+	}
+	if ms[0].Issues[1].Ref != "#11" {
+		t.Errorf("issue 1 Ref = %q, want #11", ms[0].Issues[1].Ref)
+	}
+}
+
+func TestEpicIssuePhaseStatus(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	iss := ms[0].Issues[0]
+	if iss.PhaseStatus["plan"] != "done" {
+		t.Errorf("issue plan = %q, want done", iss.PhaseStatus["plan"])
+	}
+	if iss.PhaseStatus["build"] != "in_progress" {
+		t.Errorf("issue build = %q, want in_progress", iss.PhaseStatus["build"])
+	}
+	if iss.PhaseStatus["review"] != "pending" {
+		t.Errorf("issue review = %q, want pending", iss.PhaseStatus["review"])
+	}
+}
+
+func TestEpicIssueMapIsolation(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	ms[0].Issues[0].PhaseStatus["extra"] = "injected"
+
+	plan := store.Plan()
+	if _, exists := plan.Epic.Milestones[0].Issues[0].PhaseStatus["extra"]; exists {
+		t.Error("mutating issue PhaseStatus should not affect store data")
+	}
+}
+
+func TestEpicMilestoneNoIssues(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	for _, m := range ms {
+		if m.Issues != nil {
+			t.Errorf("milestone %q should have nil issues, got %d", m.Name, len(m.Issues))
+		}
+	}
+}
+
+// ── Regression budget warning (Issue 32) ─────────────────────────────────
+
+func TestRegressionWarningLevelNone(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M1: regressions=1, max=3 -> none
+	level := vm.RegressionWarningLevel(ms[0])
+	if level != "none" {
+		t.Errorf("M1 warning level = %q, want none", level)
+	}
+}
+
+func TestRegressionWarningLevelWarn(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M1: regressions=1, max=3 -> none; change to 2 to get warn
+	m := ms[0]
+	m.Regressions = 2 // at max-1
+	level := vm.RegressionWarningLevel(m)
+	if level != "warn" {
+		t.Errorf("warning level = %q, want warn", level)
+	}
+}
+
+func TestRegressionWarningLevelDanger(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M2: regressions=2, max=2 -> danger
+	level := vm.RegressionWarningLevel(ms[1])
+	if level != "danger" {
+		t.Errorf("M2 warning level = %q, want danger", level)
+	}
+}
+
+func TestRegressionWarningLevelDefaultMax(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// MaxRegressions=0 -> defaults to 2
+	level := vm.RegressionWarningLevel(ms[0])
+	if level != "none" {
+		t.Errorf("no regressions should be 'none', got %q", level)
+	}
+}
+
+func TestRegressionWarningNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	level := vm.RegressionWarningLevel(views.MilestoneStatus{})
+	if level != "none" {
+		t.Errorf("nil receiver should return 'none', got %q", level)
+	}
+}
+
+// ── DAG connectors (Issue 32) ────────────────────────────────────────────
+
+func TestDAGConnectors(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	connectors := vm.DAGConnectors()
+	// M2 depends on M1, so there should be 1 connector
+	if len(connectors) != 1 {
+		t.Fatalf("expected 1 DAG connector, got %d", len(connectors))
+	}
+	if connectors[0].FromID != 1 || connectors[0].ToID != 2 {
+		t.Errorf("connector: from=%d to=%d, want from=1 to=2", connectors[0].FromID, connectors[0].ToID)
+	}
+}
+
+func TestDAGConnectorsEmpty(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	connectors := vm.DAGConnectors()
+	// No dependencies in seedEpicStore
+	if len(connectors) != 0 {
+		t.Errorf("expected 0 DAG connectors with no deps, got %d", len(connectors))
+	}
+}
+
+func TestDAGConnectorsNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.DAGConnectors() != nil {
+		t.Error("nil receiver DAGConnectors should return nil")
+	}
+}
+
+func TestDAGPrefix(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1 has no deps -> "  "
+	prefix0 := vm.DAGPrefix(ms[0])
+	if prefix0 != "  " {
+		t.Errorf("DAGPrefix for root = %q, want \"  \"", prefix0)
+	}
+
+	// M2 depends on M1 -> "└─"
+	prefix1 := vm.DAGPrefix(ms[1])
+	if prefix1 != "└─" {
+		t.Errorf("DAGPrefix for dependent = %q, want \"└─\"", prefix1)
+	}
+}
+
+func TestDAGPrefixNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.DAGPrefix(views.MilestoneStatus{}) != "" {
+		t.Error("nil receiver DAGPrefix should return empty string")
 	}
 }

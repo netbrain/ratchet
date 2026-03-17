@@ -2,10 +2,23 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 )
+
+// NotFoundError signals that a requested resource does not exist.
+// Handlers use errors.As to distinguish 404 from 500.
+type NotFoundError struct {
+	Resource string
+	ID       string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("%s %q not found", e.Resource, e.ID)
+}
 
 // maxDebateIDLength caps the debate ID parameter to prevent abuse.
 const maxDebateIDLength = 256
@@ -147,7 +160,13 @@ func DebateDetailHandler(ds DataSource) http.Handler {
 
 		data, err := ds.Debate(id)
 		if err != nil {
-			writeError(w, http.StatusNotFound, "debate not found")
+			var nfe *NotFoundError
+			if errors.As(err, &nfe) {
+				writeError(w, http.StatusNotFound, "debate not found")
+			} else {
+				slog.Error("debate detail data source failed", "id", id, "error", err)
+				writeError(w, http.StatusInternalServerError, "internal server error")
+			}
 			return
 		}
 		writeJSON(w, http.StatusOK, data)

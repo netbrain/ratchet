@@ -7,16 +7,30 @@ import (
 	"github.com/netbrain/ratchet-monitor/internal/tui/state"
 )
 
+// IssueStatus holds display data for a single issue within a milestone.
+type IssueStatus struct {
+	Ref         string
+	Title       string
+	Pairs       []string
+	DependsOn   []string
+	PhaseStatus map[string]string
+	Status      string
+	Files       []string
+	Debates     []string
+}
+
 // MilestoneStatus holds display data for a single milestone.
 type MilestoneStatus struct {
-	ID          int
-	Name        string
-	Status      string
-	PhaseStatus map[string]string
-	DoneWhen    string
-	DependsOn   []int
-	Regressions int
-	Layer       int // DAG layer (0 = no dependencies, 1+ = dependent on earlier layers)
+	ID             int
+	Name           string
+	Status         string
+	PhaseStatus    map[string]string
+	DoneWhen       string
+	DependsOn      []int
+	Regressions    int
+	MaxRegressions int // budget threshold for warning colors
+	Layer          int // DAG layer (0 = no dependencies, 1+ = dependent on earlier layers)
+	Issues         []IssueStatus
 }
 
 // EpicViewModel is the view model for the epic status tab.
@@ -96,6 +110,25 @@ func (vm *EpicViewModel) CurrentFocus() *client.CurrentFocus {
 		return nil
 	}
 	return vm.plan.Epic.CurrentFocus
+}
+
+// RegressionWarningLevel returns the warning level for a milestone's regressions.
+// "none" = within budget, "warn" = at or near budget, "danger" = over budget.
+func (vm *EpicViewModel) RegressionWarningLevel(m MilestoneStatus) string {
+	if vm == nil {
+		return "none"
+	}
+	maxReg := m.MaxRegressions
+	if maxReg <= 0 {
+		maxReg = 2 // default budget
+	}
+	if m.Regressions >= maxReg {
+		return "danger"
+	}
+	if m.Regressions > 0 && m.Regressions >= maxReg-1 {
+		return "warn"
+	}
+	return "none"
 }
 
 // MilestoneStatusColor maps a milestone status to a color name.
@@ -231,6 +264,44 @@ func (vm *EpicViewModel) MaxLayer() int {
 	return maxLayer
 }
 
+// DAGConnector describes a visual connector between milestone layers.
+type DAGConnector struct {
+	FromID int
+	ToID   int
+	Symbol string // e.g., "│", "├", "└"
+}
+
+// DAGConnectors returns connectors for rendering between layers.
+func (vm *EpicViewModel) DAGConnectors() []DAGConnector {
+	if vm == nil || len(vm.milestones) == 0 {
+		return nil
+	}
+	var connectors []DAGConnector
+	for _, m := range vm.milestones {
+		for _, depID := range m.DependsOn {
+			symbol := "│"
+			connectors = append(connectors, DAGConnector{
+				FromID: depID,
+				ToID:   m.ID,
+				Symbol: symbol,
+			})
+		}
+	}
+	return connectors
+}
+
+// DAGPrefix returns a visual prefix string for a milestone indicating its DAG relationships.
+// Uses box-drawing characters to show dependency structure.
+func (vm *EpicViewModel) DAGPrefix(m MilestoneStatus) string {
+	if vm == nil {
+		return ""
+	}
+	if len(m.DependsOn) == 0 {
+		return "  " // root node, no connector
+	}
+	return "└─" // dependent node
+}
+
 func (vm *EpicViewModel) clampSelection() {
 	n := len(vm.milestones)
 	if n == 0 {
@@ -275,15 +346,47 @@ func (vm *EpicViewModel) loadPlan() {
 		deps := make([]int, len(m.DependsOn))
 		copy(deps, m.DependsOn)
 
+		// Deep copy Issues
+		var issues []IssueStatus
+		for _, iss := range m.Issues {
+			ips := make(map[string]string, len(iss.PhaseStatus))
+			maps.Copy(ips, iss.PhaseStatus)
+
+			pairs := make([]string, len(iss.Pairs))
+			copy(pairs, iss.Pairs)
+
+			depOn := make([]string, len(iss.DependsOn))
+			copy(depOn, iss.DependsOn)
+
+			files := make([]string, len(iss.Files))
+			copy(files, iss.Files)
+
+			debates := make([]string, len(iss.Debates))
+			copy(debates, iss.Debates)
+
+			issues = append(issues, IssueStatus{
+				Ref:         iss.Ref,
+				Title:       iss.Title,
+				Pairs:       pairs,
+				DependsOn:   depOn,
+				PhaseStatus: ips,
+				Status:      iss.Status,
+				Files:       files,
+				Debates:     debates,
+			})
+		}
+
 		vm.milestones = append(vm.milestones, MilestoneStatus{
-			ID:          m.ID,
-			Name:        m.Name,
-			Status:      m.Status,
-			PhaseStatus: ps,
-			DoneWhen:    m.DoneWhen,
-			DependsOn:   deps,
-			Regressions: m.Regressions,
-			Layer:       layers[m.ID],
+			ID:             m.ID,
+			Name:           m.Name,
+			Status:         m.Status,
+			PhaseStatus:    ps,
+			DoneWhen:       m.DoneWhen,
+			DependsOn:      deps,
+			Regressions:    m.Regressions,
+			MaxRegressions: m.MaxRegressions,
+			Layer:          layers[m.ID],
+			Issues:         issues,
 		})
 	}
 }

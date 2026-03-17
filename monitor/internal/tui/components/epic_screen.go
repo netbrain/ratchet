@@ -154,8 +154,26 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 	for i := offset; i < end; i++ {
 		m := milestones[i]
 		selected := i == es.vm.SelectedIndex()
+
+		// DAG connector row between layers
+		if i > 0 && m.Layer > milestones[i-1].Layer && len(m.DependsOn) > 0 {
+			connectorText := "  │"
+			connectorEl := tui.New(
+				tui.WithText(connectorText),
+				tui.WithTextStyle(tui.NewStyle().Foreground(tui.ANSIColor(243))),
+				tui.WithHeight(1),
+			)
+			table.AddChild(connectorEl)
+		}
+
 		row := es.buildMilestoneRow(cols, i+1, m, phases, selected)
 		table.AddChild(row)
+
+		// Render per-issue rows under each milestone
+		for _, iss := range m.Issues {
+			issueRow := es.buildIssueRow(cols, iss, phases, selected)
+			table.AddChild(issueRow)
+		}
 	}
 
 	root.AddChild(table)
@@ -227,7 +245,9 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 		tui.WithHeight(1),
 	)
 
-	idEl := tui.New(tui.WithText(fmt.Sprintf("%d", num)), tui.WithTextStyle(baseStyle), tui.WithWidth(4))
+	// DAG prefix + ID
+	dagPrefix := es.vm.DAGPrefix(m)
+	idEl := tui.New(tui.WithText(fmt.Sprintf("%s%d", dagPrefix, num)), tui.WithTextStyle(baseStyle), tui.WithWidth(6))
 
 	// Layer indicator with dependency arrow
 	layerSymbol := fmt.Sprintf("%d", m.Layer)
@@ -238,10 +258,21 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 
 	// Add regression indicator to milestone name if regressions > 0
 	nameText := m.Name
+	nameStyle := baseStyle
 	if m.Regressions > 0 {
 		nameText = fmt.Sprintf("%s [↻%d]", m.Name, m.Regressions)
+		warnLevel := es.vm.RegressionWarningLevel(m)
+		switch warnLevel {
+		case "danger":
+			nameStyle = tui.NewStyle().Foreground(tui.Red).Bold()
+		case "warn":
+			nameStyle = tui.NewStyle().Foreground(tui.Yellow)
+		}
+		if selected {
+			nameStyle = nameStyle.Reverse()
+		}
 	}
-	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
+	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(nameStyle), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText(m.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
 	row.AddChild(idEl, layerEl, nameEl, statusEl)
@@ -289,6 +320,73 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 		}
 		style := baseStyle
 		el := tui.New(tui.WithText(currentPhase), tui.WithTextStyle(style), tui.WithWidth(8))
+		row.AddChild(el)
+	}
+
+	return row
+}
+
+// buildIssueRow creates a sub-row for a single issue within a milestone.
+func (es *EpicScreen) buildIssueRow(cols int, iss views.IssueStatus, phases []string, parentSelected bool) *tui.Element {
+	statusColor := milestoneStatusTuiColor(iss.Status)
+	baseStyle := tui.NewStyle().Foreground(statusColor).Dim()
+
+	row := tui.New(
+		tui.WithDisplay(tui.DisplayFlex),
+		tui.WithDirection(tui.Row),
+		tui.WithHeight(1),
+	)
+
+	// Indented ref with tree connector
+	refText := fmt.Sprintf("    ├─ %s", iss.Ref)
+	refEl := tui.New(tui.WithText(refText), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
+
+	// Skip layer column for issues
+	spacerEl := tui.New(tui.WithText(""), tui.WithWidth(3))
+
+	// Issue title
+	titleEl := tui.New(tui.WithText(iss.Title), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
+
+	// Issue status
+	statusEl := tui.New(tui.WithText(iss.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
+
+	row.AddChild(refEl, spacerEl, titleEl, statusEl)
+
+	// Phase indicators
+	if cols >= 6 {
+		for _, phase := range phases[:3] {
+			ps := iss.PhaseStatus[phase]
+			sym := phaseSymbol(ps)
+			col := phaseColor(ps)
+			style := tui.NewStyle().Foreground(col)
+			el := tui.New(tui.WithText(sym), tui.WithTextStyle(style), tui.WithWidth(8))
+			row.AddChild(el)
+		}
+	}
+
+	if cols >= 8 {
+		for _, phase := range phases[3:] {
+			ps := iss.PhaseStatus[phase]
+			sym := phaseSymbol(ps)
+			col := phaseColor(ps)
+			style := tui.NewStyle().Foreground(col)
+			el := tui.New(tui.WithText(sym), tui.WithTextStyle(style), tui.WithWidth(8))
+			row.AddChild(el)
+		}
+	}
+
+	if cols < 6 {
+		currentPhase := ""
+		for _, phase := range phases {
+			if iss.PhaseStatus[phase] == "in_progress" {
+				currentPhase = phase
+				break
+			}
+		}
+		if currentPhase == "" && iss.Status == "done" {
+			currentPhase = "✓"
+		}
+		el := tui.New(tui.WithText(currentPhase), tui.WithTextStyle(baseStyle), tui.WithWidth(8))
 		row.AddChild(el)
 	}
 

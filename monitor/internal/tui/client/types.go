@@ -75,8 +75,9 @@ type Milestone struct {
 	DoneWhen    string            `json:"done_when"`
 	ProgressRef *string           `json:"progress_ref"`
 	DependsOn   []int             `json:"depends_on"`
-	Regressions int               `json:"regressions"`
-	Issues      []Issue           `json:"issues"`
+	Regressions    int               `json:"regressions"`
+	MaxRegressions int               `json:"max_regressions"`
+	Issues         []Issue           `json:"issues"`
 }
 
 // Issue represents a single issue within a milestone (v2 only).
