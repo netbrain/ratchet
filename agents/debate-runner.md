@@ -529,5 +529,5 @@ Return the result object to the caller.
 - Run guards (the caller handles pre/post debate guards)
 - Advance phases (the caller handles phase transitions)
 - Commit code or create PRs (the caller handles packaging)
-- Update plan.yaml (the caller handles plan state — except for issue file tracking, which you report back via `files_modified`)
+- Update plan.yaml (the orchestrator is the authoritative owner of plan state — you report back via `files_modified` and the structured completion summary)
 - Update scores (the caller handles score bookkeeping)
