@@ -780,8 +780,6 @@ When an adversarial issues REGRESS targeting an earlier phase:
 
 When all phases are done:
 - Set issue status to `done` in local plan.yaml (worktree copy — useful for crash recovery, but the orchestrator will write the authoritative update in Step 4c)
-- Run score updates for all debates in this issue
-
 **Output a structured completion summary as your final message.** This is critical — the orchestrator parses this to update the main repo's plan.yaml (Step 4c). The worktree is cleaned up after the agent returns, so this output is the only way results survive.
 
 ```
@@ -898,7 +896,7 @@ Present via `AskUserQuestion`:
 
 ### Step 9: Update Scores & Teardown Resources
 
-Score updates are handled within issue pipelines (Step 5h). The orchestrator does not need to run score updates separately.
+Score data is computed on-demand by `/ratchet:score` directly from debate artifacts (`debates/*/meta.json` and `reviews/**/*.json`). No score update step is needed.
 
 **Resource teardown**: tear down shared resources when no more pipelines need them:
 - **Sequential mode**: after all issue pipelines for the milestone complete

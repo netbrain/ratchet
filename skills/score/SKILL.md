@@ -17,37 +17,48 @@ View quality metrics and trends across all pairs or a specific pair.
 
 ### Step 1: Load Data
 
-Read `.ratchet/scores/scores.jsonl`. If the file does not exist or is empty, inform the user:
-> "No quality scores recorded yet. Scores are generated after debates complete. Run /ratchet:run to start your first debate."
+Read debate artifacts directly from the source of truth — no derived score files needed.
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
-
-If data exists, each line is a JSON object with:
+**Debate metadata**: Read all `.ratchet/debates/*/meta.json` files. Each contains:
 ```json
 {
-  "timestamp": "ISO date",
-  "debate_id": "id",
+  "id": "debate-id",
   "pair": "pair-name",
-  "milestone": "milestone id or null",
-  "rounds_to_consensus": N,
-  "escalated": bool,
-  "issues_found": N,
-  "issues_resolved": N,
-  "fast_path": bool
+  "phase": "review",
+  "milestone": "milestone-id or null",
+  "issue": "issue-ref or null",
+  "files": ["file1", "file2"],
+  "status": "consensus|resolved|escalated",
+  "rounds": 3,
+  "max_rounds": 3,
+  "started": "ISO timestamp",
+  "resolved": "ISO timestamp",
+  "verdict": "ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT|REJECT|REGRESS",
+  "fast_path": false
 }
 ```
 
+**Review data**: Read all `.ratchet/reviews/<pair-name>/review-*.json` files. Each contains effectiveness scores and missed issues from both agents.
+
+If no debate directories exist, inform the user:
+> "No debates found. Run /ratchet:run to start your first debate."
+
+Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
+
 ### Step 2: Compute Metrics
 
-Per pair, calculate:
-- **Total debates**: count
-- **Consensus rate**: % of debates reaching consensus without escalation
-- **Avg rounds to consensus**: mean rounds (excluding escalated)
-- **Issues found**: total across all debates
-- **Issues resolved**: total resolved
-- **Resolution rate**: resolved / found
+Per pair, calculate from meta.json files:
+- **Total debates**: count of meta.json files for this pair
+- **Consensus rate**: % with status "consensus" or "resolved" (not "escalated")
+- **Avg rounds to consensus**: mean of `rounds` field (excluding escalated)
+- **Verdict breakdown**: count of ACCEPT, CONDITIONAL_ACCEPT, TRIVIAL_ACCEPT
 - **Fast-path rate**: % of debates with `fast_path: true` (TRIVIAL_ACCEPT)
-- **Trend**: compare last 5 debates to previous 5 — improving, stable, or degrading. If fewer than 6 total debates exist, show `Trend: — (insufficient data)` rather than computing a comparison.
+- **Trend**: compare last 5 debates to previous 5 by avg rounds — improving, stable, or degrading. If fewer than 10 total debates exist, show `Trend: — (insufficient data for last-5-vs-previous-5)` and instead describe the trajectory narratively.
+
+From review files, calculate:
+- **Avg effectiveness**: mean of self_assessment.effectiveness and partner_assessment.effectiveness across all reviews
+- **Gen vs Adv split**: separate averages for generative and adversarial effectiveness
+- **Top missed issues**: most commonly flagged patterns from missed_issues arrays
 
 ### Step 3: Present
 
@@ -55,22 +66,24 @@ Per pair, calculate:
 Ratchet Quality Scores
 ═══════════════════════
 
-Pair: api-contracts
-  Debates: 12 | Consensus rate: 83% | Avg rounds: 1.8
-  Issues: 24 found, 22 resolved (92%)
-  Fast-path rate: 25% | Trend: ↑ improving (fewer rounds, higher resolution)
+Pair: [pair-name]
+  Debates: [N] | Consensus rate: [N]% | Avg rounds: [N.N]
+  Verdicts: [N] ACCEPT, [N] CONDITIONAL_ACCEPT, [N] TRIVIAL_ACCEPT
+  Fast-path rate: [N]% | Trend: [↑ improving | → stable | ↓ degrading | — insufficient data]
+  Effectiveness: gen [N.N] / adv [N.N]
 
-Pair: db-performance
-  Debates: 8 | Consensus rate: 62% | Avg rounds: 2.4
-  Issues: 15 found, 11 resolved (73%)
-  Fast-path rate: 0% | Trend: → stable
+[...repeat for each pair...]
 
 Overall:
-  Total debates: 20 | Overall consensus: 75%
-  Fast-path rate: 15% | Quality trajectory: ↑ improving
+  Total debates: [N] | Overall consensus: [N]%
+  Avg rounds: [N.N] | Fast-path rate: [N]%
+  Quality trajectory: [↑ improving | → stable | ↓ degrading]
 ```
 
-If a specific pair is requested, show more detail including recent debate summaries.
+If a specific pair is requested, show more detail including:
+- Recent debate summaries (last 5)
+- Top missed issues from reviews
+- Suggestions from reviews
 
 ### Step 4: Next Steps
 
