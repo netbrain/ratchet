@@ -579,10 +579,15 @@ Skip reviews only if the debate was escalated to human with no verdict (status: 
 
 Update `meta.json` with final state:
 - `resolved`: ISO timestamp
-- `verdict`: final verdict
-- `rounds`: total rounds executed
+- `verdict`: the adversarial's verdict keyword — MUST be one of: `ACCEPT`, `CONDITIONAL_ACCEPT`, `TRIVIAL_ACCEPT`, `REJECT`, `REGRESS`. Never use `"consensus"` (that is the `status` field, not the `verdict` field).
+- `rounds`: total rounds executed (MUST be >= 1 — if this is 0, something went wrong)
 - `fast_path`: true if TRIVIAL_ACCEPT
-- `status`: "consensus" or "resolved" or "escalated"
+- `status`: `"consensus"` or `"resolved"` or `"escalated"`
+
+**Validation check before writing:** Before writing the final meta.json, verify:
+1. `verdict` is one of `ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT|REJECT|REGRESS` — if not, review the adversarial's last round output and extract the correct keyword
+2. `rounds` is >= 1 — if 0, count the round files in the debate directory
+3. `status` is one of `consensus|resolved|escalated` — not a verdict keyword
 
 **Progress:** Mark TodoWrite item completed -- "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
 

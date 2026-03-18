@@ -92,18 +92,26 @@ fi
 Example of BAD (vague):
 "Check if the file exists before reading it"
 
-## Cross-Cutting Sweep (MANDATORY before finishing any round)
+## Cross-Cutting Sweep (MANDATORY — DO THIS FIRST, NOT LAST)
 
-Before writing your round output, run a sweep for the pattern class you're fixing:
+**Run the sweep BEFORE making edits, not after.** The #1 cause of multi-round debates
+(71% of skill-coherence debates need 2+ rounds) is fixing one file then missing the
+same pattern in parallel files. Prevent this by scanning first:
+
+1. **Before editing**: grep ALL files in scope for the pattern class you're about to fix
+2. **Build a hit list**: every file that needs the same fix
+3. **Fix ALL of them in one pass**: don't stop at the first instance
+4. **Verify after**: re-run the grep to confirm zero remaining instances
+
 ```bash
-# Example: if you fixed a missing field in one skill, check ALL skills
-grep -rn "pattern-you-fixed" skills/*/SKILL.md
-# Example: if you unified a schema, diff all files against canonical list
-grep -c "field_name" skills/*/SKILL.md | grep ':0$'  # files missing the field
+# BEFORE editing: find all instances of the pattern you're about to fix
+grep -rn "pattern-to-fix" skills/*/SKILL.md
+# After editing: verify zero remaining
+grep -c "pattern-to-fix" skills/*/SKILL.md | grep -v ':0$'  # should be empty
 ```
 
-This is the #1 cause of multi-round debates. Missing parallel instances in other files
-forces the adversarial to REJECT and costs a full extra round.
+**If the verification grep finds remaining instances, fix them before submitting
+your round output.** Every missed instance costs a full extra round.
 
 ## Schema Field Parity (when unifying data structures across files)
 

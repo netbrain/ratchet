@@ -71,3 +71,24 @@ guards:
     blocking: true
     timing: post-debate
     components: [schemas]
+
+  - name: meta-json-valid
+    command: |
+      failed=0
+      for f in .ratchet/debates/*/meta.json; do
+        [ -f "$f" ] || continue
+        verdict=$(jq -r '.verdict // ""' "$f" 2>/dev/null)
+        rounds=$(jq -r '.rounds // .round_count // 0' "$f" 2>/dev/null)
+        case "$verdict" in
+          ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT|REJECT|REGRESS) ;;
+          *) echo "INVALID verdict='$verdict' in $f" >&2; failed=1 ;;
+        esac
+        if [ "$rounds" -lt 1 ] 2>/dev/null; then
+          echo "INVALID rounds=$rounds in $f" >&2; failed=1
+        fi
+      done
+      exit $failed
+    phase: review
+    blocking: false
+    timing: post-debate
+    components: [skills, agents, scripts, schemas]
