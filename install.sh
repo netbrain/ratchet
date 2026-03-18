@@ -97,6 +97,79 @@ remove_git_hook() {
     rm -f "$tmp_file" 2>/dev/null || true
 }
 
+setup_gitignore() {
+    # Add .ratchet/ runtime-state entries to .gitignore, then safely untrack
+    # any files that are now ignored but were previously committed.
+    # CRITICAL ORDER: gitignore entry MUST be written before git rm --cached,
+    # otherwise git rm --cached removes the file from tracking without a safety
+    # net and a subsequent commit could re-add it.
+    local project_dir="$1"
+
+    # Only operate inside a git repo
+    git -C "$project_dir" rev-parse --git-dir >/dev/null 2>&1 || return 0
+
+    local gitignore="$project_dir/.gitignore"
+
+    # Entries to ensure are present
+    local marker="# Ratchet runtime state (auto-added by install.sh)"
+    local entries=(
+        ".ratchet/plan.yaml"
+        ".ratchet/debates/"
+        ".ratchet/reviews/"
+        ".ratchet/scores/"
+        ".ratchet/retros/"
+        ".ratchet/escalations/"
+        ".ratchet/guards/"
+        ".ratchet/reports/"
+        ".ratchet/progress/"
+        ".ratchet/worktrees/"
+        ".ratchet/locks/"
+        ".ratchet/archive/"
+    )
+
+    # Check if marker is already present (idempotent)
+    if grep -qF "$marker" "$gitignore" 2>/dev/null; then
+        return 0
+    fi
+
+    # Step 1 — Write gitignore entries FIRST (safety net before any untracking)
+    {
+        echo ""
+        echo "$marker"
+        for entry in "${entries[@]}"; do
+            echo "$entry"
+        done
+    } >> "$gitignore" || { echo "Error: Failed to write to $gitignore" >&2; return 1; }
+
+    echo "  Updated .gitignore with Ratchet runtime state entries"
+
+    # Step 2 — Untrack any files that are now ignored but were previously committed.
+    # Run AFTER the gitignore is updated so the patterns are active.
+    local tracked_runtime=()
+    while IFS= read -r tracked_file; do
+        [ -n "$tracked_file" ] && tracked_runtime+=("$tracked_file")
+    done < <(git -C "$project_dir" ls-files -- \
+        ".ratchet/plan.yaml" \
+        ".ratchet/debates/" \
+        ".ratchet/reviews/" \
+        ".ratchet/scores/" \
+        ".ratchet/retros/" \
+        ".ratchet/escalations/" \
+        ".ratchet/guards/" \
+        ".ratchet/reports/" \
+        ".ratchet/progress/" \
+        ".ratchet/worktrees/" \
+        ".ratchet/locks/" \
+        ".ratchet/archive/" \
+        2>/dev/null)
+
+    if [ "${#tracked_runtime[@]}" -gt 0 ]; then
+        git -C "$project_dir" rm --cached -- "${tracked_runtime[@]}" 2>/dev/null || \
+            echo "  Warning: Could not untrack some runtime files — commit manually with 'git rm --cached <file>'" >&2
+        echo "  Untracked ${#tracked_runtime[@]} runtime file(s) from git index"
+    fi
+}
+
 do_install() {
     local target="$1"
     local skip_hooks="$2"
@@ -199,6 +272,12 @@ do_install() {
             chmod +x "$target/$basename_file" || die "Failed to set permissions for: $basename_file"
         done
         echo "  Installed statusline scripts to $target/"
+    fi
+
+    # Gitignore entries + safe untracking (local installs only — global installs
+    # target ~/.claude, not the project repo, so there is no project .gitignore)
+    if [ "$target" != "$HOME/.claude" ]; then
+        setup_gitignore "$(pwd)"
     fi
 
     # Git pre-commit hook (local installs only)
