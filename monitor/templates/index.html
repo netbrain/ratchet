@@ -473,6 +473,13 @@
             color: var(--text-muted);
             font-size: 0.75rem;
         }
+        .workspace-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
 
         /* Milestone cards */
         .milestone-card {
@@ -703,9 +710,25 @@
     <!-- Header -->
     <header class="header">
         <h1>Ratchet Monitor</h1>
-        <div class="conn-status" aria-live="polite" role="status">
-            <span class="status-dot" :class="'status-' + status"></span>
-            <span x-text="status"></span>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <template x-if="workspaces.length > 1">
+                <div class="workspace-selector">
+                    <label for="workspace-select">Workspace:</label>
+                    <select id="workspace-select"
+                            class="filter-select"
+                            x-model="selectedWorkspace"
+                            @change="fetchAll()">
+                        <option value="">All</option>
+                        <template x-for="ws in workspaces" :key="ws.name">
+                            <option :value="ws.name" x-text="ws.name"></option>
+                        </template>
+                    </select>
+                </div>
+            </template>
+            <div class="conn-status" aria-live="polite" role="status">
+                <span class="status-dot" :class="'status-' + status"></span>
+                <span x-text="status"></span>
+            </div>
         </div>
     </header>
 
@@ -1161,6 +1184,8 @@
             _unloadHandler: null,
             _scoresAbort: null,
             activeWorkspace: null,
+            workspaces: [],
+            selectedWorkspace: '',
 
             // Computed
             get filteredDebates() {
@@ -1316,8 +1341,26 @@
             },
 
             // Methods
+            apiURL(path) {
+                if (this.selectedWorkspace) {
+                    return path + '?workspace=' + encodeURIComponent(this.selectedWorkspace);
+                }
+                return path;
+            },
+
+            async fetchWorkspaces() {
+                try {
+                    const res = await fetch('/api/workspaces');
+                    if (res.ok) {
+                        const data = await res.json();
+                        this.workspaces = Array.isArray(data) ? data : [];
+                    }
+                } catch (e) { /* endpoint may not be available */ }
+            },
+
             async init() {
                 this.connectSSE();
+                await this.fetchWorkspaces();
                 await this.fetchAll();
                 this.handleHash();
                 this._hashHandler = () => this.handleHash();
@@ -1455,7 +1498,7 @@
             },
 
             async fetchPairs() {
-                const res = await fetch('/api/pairs');
+                const res = await fetch(this.apiURL('/api/pairs'));
                 if (res.ok) {
                     const data = await res.json();
                     this.pairs = Array.isArray(data) ? data : [];
@@ -1465,7 +1508,7 @@
             },
 
             async fetchDebates() {
-                const res = await fetch('/api/debates');
+                const res = await fetch(this.apiURL('/api/debates'));
                 if (res.ok) {
                     const data = await res.json();
                     this.debates = Array.isArray(data) ? data : [];
@@ -1476,7 +1519,7 @@
 
             async fetchPlan() {
                 try {
-                    const res = await fetch('/api/plan');
+                    const res = await fetch(this.apiURL('/api/plan'));
                     if (res.ok) {
                         this.plan = await res.json();
                     }
@@ -1485,7 +1528,7 @@
 
             async fetchStatus() {
                 try {
-                    const res = await fetch('/api/status');
+                    const res = await fetch(this.apiURL('/api/status'));
                     if (res.ok) {
                         const data = await res.json();
                         if (data) {
@@ -1500,7 +1543,7 @@
                 if (this._scoresAbort) this._scoresAbort.abort();
                 this._scoresAbort = new AbortController();
                 try {
-                    const res = await fetch('/api/scores', { signal: this._scoresAbort.signal });
+                    const res = await fetch(this.apiURL('/api/scores'), { signal: this._scoresAbort.signal });
                     if (res.ok) {
                         const data = await res.json();
                         this.scores = Array.isArray(data) ? data : [];
