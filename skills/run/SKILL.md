@@ -860,6 +860,7 @@ Pair definitions:
   Adversarial: .ratchet/pairs/<name>/adversarial.md
 
 Context:
+  Worktree: [absolute path to issue worktree, e.g. /workspace/main/.ratchet/worktrees/issue-43]
   Phase: [current phase]
   Milestone: [id, name, description]
   Issue: [issue ref]
@@ -979,7 +980,50 @@ When creating a PR for an issue:
   - Summary of phases completed, debate outcomes, guard results
   - `Closes [issue ref]` if using a progress adapter with issue tracking
   - **If this issue has `depends_on`**: "Depends on [dep-ref PR URL] being merged first." This tells reviewers the merge order.
+  - **Debate Summary section** (see below)
 - Push and create via `gh pr create`
+
+**Building the Debate Summary section:**
+
+Load the issue's `debates` array from `plan.yaml` (the list of debate IDs recorded during the pipeline). If the array is empty, omit the section entirely — do not include a blank table.
+
+For each debate ID, load `.ratchet/debates/<id>/meta.json` and extract: `pair`, `phase`, `rounds_completed`, `verdict_detail`, `verdict` (use `verdict_detail` if present, else `verdict`), `decided_by` (use `"consensus"` if `verdict` is `"consensus"` or `verdict_detail` is `"ACCEPT"`/`"TRIVIAL_ACCEPT"`), and `conditions` array.
+
+```bash
+# For each debate_id in the issue's debates array:
+meta=$(cat .ratchet/debates/${debate_id}/meta.json)
+pair=$(echo "$meta" | jq -r '.pair')
+phase=$(echo "$meta" | jq -r '.phase')
+rounds=$(echo "$meta" | jq -r '.rounds_completed')
+verdict=$(echo "$meta" | jq -r '.verdict_detail // .verdict')
+decided_by=$(echo "$meta" | jq -r '.decided_by // (if .verdict == "consensus" or .verdict_detail == "ACCEPT" or .verdict_detail == "TRIVIAL_ACCEPT" then "consensus" elif .verdict_detail == "ESCALATED" or .verdict == "ESCALATED" then "tiebreaker" else "consensus" end)')
+conditions=$(echo "$meta" | jq -r '.conditions[]? // empty')
+```
+
+Append this section to the PR body after all existing content:
+
+```markdown
+## Debate Summary
+
+| Pair | Phase | Rounds | Verdict | Decided By |
+|------|-------|--------|---------|------------|
+| api-contracts | review | 2 | ACCEPT | consensus |
+```
+
+If **any** debate had `verdict_detail == "CONDITIONAL_ACCEPT"`, append a conditions details block after the table:
+
+```markdown
+<details>
+<summary>Conditions</summary>
+- [pair]: [condition text from meta.json conditions array]
+</details>
+```
+
+**Rules:**
+- Data sourced exclusively from `meta.json` `conditions` array — do NOT summarize adversarial narrative or round text
+- Conditions block only shown when at least one `CONDITIONAL_ACCEPT` verdict exists
+- If `meta.json` is missing or unreadable for a debate ID, skip that row and log a warning: `"Warning: could not load debate metadata for [id]"` to stderr
+- Section omitted entirely when `debates` array is empty
 
 Store the branch name and PR URL in the issue's `branch` and return them to the orchestrator.
 
