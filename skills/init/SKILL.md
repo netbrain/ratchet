@@ -259,6 +259,7 @@ plan.yaml format:
 epic:
   name: "<project name>"
   description: "<one-line description>"
+  progress_ref: null   # set after init when github-issues adapter creates the tracking issue
   milestones:
     - id: 1
       name: "<milestone name>"
@@ -392,6 +393,24 @@ for f in .ratchet/project.yaml .ratchet/workflow.yaml .ratchet/plan.yaml; do
 done
 ```
 If a write fails mid-generation, inform the user which files were created successfully and which failed. Do NOT leave a partially-generated `.ratchet/` directory without warning — the user must know the state is incomplete.
+
+**GitHub Plan Tracking Issue (Step 8 — after all files written)**: If the `github-issues` adapter was selected in Step 6e, create the plan tracking issue immediately after generating `.ratchet/plan.yaml`:
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/create-plan-issue.sh ]; then
+  tracking_issue_number=$(bash .claude/ratchet-scripts/progress/github-issues/create-plan-issue.sh \
+    || echo "")
+  if [ -n "$tracking_issue_number" ]; then
+    # Store the tracking issue number as epic.progress_ref in plan.yaml
+    yq eval -i ".epic.progress_ref = \"$tracking_issue_number\"" .ratchet/plan.yaml
+    echo "Plan tracking issue created: #${tracking_issue_number}"
+  else
+    echo "Warning: Failed to create plan tracking issue (non-blocking). You can create it manually later." >&2
+  fi
+else
+  echo "Note: create-plan-issue.sh not found — plan tracking issue not created. Install Ratchet scripts to enable this feature." >&2
+fi
+```
+The tracking issue body mirrors `plan.yaml` as human-readable markdown with HTML comment metadata for deterministic recovery (see the "GitHub Plan Tracking Issue" section in `skills/run/SKILL.md` for the canonical format). The returned issue number is stored as `epic.progress_ref` in `plan.yaml` so the sync helper can update the correct issue on subsequent runs.
 
 IMPORTANT:
 - If code exists, scan it FIRST — never ask what you can read

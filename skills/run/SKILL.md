@@ -67,6 +67,68 @@ through a debate. The orchestrator's job is to detect the conflict (via
 `gh pr view`) and re-launch the issue pipeline to handle it — not to
 resolve it directly.
 
+### GitHub Plan Tracking Issue
+
+When the `github-issues` progress adapter is enabled, a single GitHub issue mirrors
+`plan.yaml` as a human-readable roadmap. This tracking issue serves as a backup for
+`plan.yaml` and enables deterministic recovery without LLM assistance.
+
+**Canonical body format:**
+
+```markdown
+<!-- ratchet-plan-tracking -->
+<!-- epic_name: My Project -->
+<!-- epic_description: One-line description -->
+
+# My Project — Ratchet Roadmap
+
+## Milestone 1: Foundation
+<!-- milestone_id: 1 -->
+<!-- milestone_status: done -->
+<!-- milestone_done_when: All core APIs passing tests -->
+<!-- milestone_depends_on: [] -->
+
+- [x] issue-1: Setup project scaffold
+<!-- issue_ref: issue-1 -->
+<!-- issue_status: done -->
+<!-- issue_pairs: ["code-quality"] -->
+<!-- issue_depends_on: [] -->
+<!-- issue_phase_status: {"plan":"done","test":"done","build":"done","review":"done","harden":"done"} -->
+<!-- issue_branch: ratchet/foundation/issue-1 -->
+<!-- issue_pr: https://github.com/owner/repo/pull/42 -->
+
+## Milestone 2: Features
+<!-- milestone_id: 2 -->
+<!-- milestone_status: in_progress -->
+<!-- milestone_done_when: Feature complete and reviewed -->
+<!-- milestone_depends_on: [1] -->
+
+- [ ] issue-2: Implement core feature
+<!-- issue_ref: issue-2 -->
+<!-- issue_status: pending -->
+<!-- issue_pairs: ["code-quality", "security"] -->
+<!-- issue_depends_on: [] -->
+<!-- issue_phase_status: {"plan":"pending","test":"pending","build":"pending","review":"pending","harden":"pending"} -->
+<!-- issue_branch: null -->
+<!-- issue_pr: null -->
+```
+
+**HTML comment metadata rules:**
+- Every milestone block MUST have `milestone_id`, `milestone_status`, `milestone_done_when`, `milestone_depends_on`
+- Every issue block MUST have `issue_ref`, `issue_status`, `issue_pairs`, `issue_depends_on`, `issue_phase_status`, `issue_branch`, `issue_pr`
+- The `<!-- ratchet-plan-tracking -->` sentinel on line 1 identifies the issue for deterministic parsing
+- Checkbox state (`[x]` vs `[ ]`) reflects `issue_status == "done"` but is NOT the parse source — `issue_status` in the HTML comment is authoritative
+- Fields NOT stored (not recoverable from tracking issue): `files`, `debates` arrays — these are runtime artifacts
+
+**Sync helper — existence-guarded call pattern:**
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+fi
+```
+Adapter failures NEVER block pipeline execution. Always wrap sync calls with `|| echo "Warning..."` or equivalent.
+
 **AGENT GATE — check EVERY Agent tool invocation before spawning it:**
 
 The orchestrator may ONLY spawn agents in these four categories:
@@ -302,7 +364,27 @@ Build a picture of:
 - Any unresolved conditions from previous CONDITIONAL_ACCEPT verdicts
 - Which **phases** apply based on component workflows
 
-If no `plan.yaml` exists, skip epic tracking and fall through to file-based detection.
+If no `plan.yaml` exists, check whether the github-issues adapter is configured:
+```bash
+adapter=$(yq eval '.progress.adapter' .ratchet/workflow.yaml 2>/dev/null)
+if [ "$adapter" = "github-issues" ]; then
+  # Attempt recovery from GitHub tracking issue
+  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+    echo "plan.yaml missing — attempting recovery from GitHub tracking issue..."
+    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh --recover
+    if [ -f .ratchet/plan.yaml ]; then
+      echo "Recovery successful. Review recovered plan.yaml before continuing."
+    else
+      echo "Recovery attempted but plan.yaml could not be restored. Check the tracking issue manually." >&2
+      echo "What was NOT recoverable: file-level change lists (files: []), debate IDs (debates: [])," >&2
+      echo "  branch names, and PR URLs — these are runtime artifacts not stored in the tracking issue." >&2
+    fi
+  else
+    echo "plan.yaml missing and sync-plan.sh not installed. Skipping epic tracking." >&2
+  fi
+fi
+```
+If recovery fails or adapter is not github-issues, skip epic tracking and fall through to file-based detection.
 
 If `plan.yaml` exists but fails to parse (malformed YAML or missing `epic` key):
 ```bash
@@ -354,7 +436,13 @@ Options:
 - "View quality metrics (/ratchet:score)"
 - "Done for now"
 
-When creating a new epic: replace the existing `epic` block in plan.yaml (archive the old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries).
+When creating a new epic: replace the existing `epic` block in plan.yaml (archive the old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync the tracking issue:
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+fi
+```
 
 **Otherwise** (milestones remain):
 
@@ -411,6 +499,13 @@ Options:
   ```bash
   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"done\"" .ratchet/plan.yaml
   ```
+- Sync plan tracking issue after discovery status change:
+  ```bash
+  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+  fi
+  ```
 
 **Action: Promote to issue** — converts a discovery into a full plan.yaml issue:
 1. Determine target milestone:
@@ -441,7 +536,14 @@ Options:
    yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"promoted\"" .ratchet/plan.yaml
    yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).issue_ref = \"$new_ref\"" .ratchet/plan.yaml
    ```
-6. Confirm to user: "Discovery promoted to issue [new_ref] in milestone [milestone_id]. Run /ratchet:run to start working on it."
+6. Sync plan tracking issue after adding the new issue:
+   ```bash
+   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+   fi
+   ```
+7. Confirm to user: "Discovery promoted to issue [new_ref] in milestone [milestone_id]. Run /ratchet:run to start working on it."
 
 **Action: Dismiss** — marks a discovery as non-actionable:
 1. Use `AskUserQuestion` (freeform): "Reason for dismissal (optional)"
@@ -646,13 +748,21 @@ For each completed issue:
    - Set `debates` (debate IDs created)
    - Update directly based on Step 5h execution results
 
-2. **Clean up the worktree**: Remove `.ratchet/worktrees/<issue-ref>` after recording results
+2. **Sync plan tracking issue** (if github-issues adapter configured):
+   ```bash
+   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+   fi
+   ```
 
-3. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
+3. **Clean up the worktree**: Remove `.ratchet/worktrees/<issue-ref>` after recording results
 
-4. If newly unblocked issues exist → execute them as the next batch (back to 4b)
+4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
 
-5. Report progress after each issue: `"[N]/[total] issues complete in milestone [id]"`
+5. If newly unblocked issues exist → execute them as the next batch (back to 4b)
+
+6. Report progress after each issue: `"[N]/[total] issues complete in milestone [id]"`
 
 **[TodoWrite — Issue Complete]**: After recording the issue result, update the todo list: set the issue item to `"completed"` and update its content to include the progress count (e.g., `"[ref]: [title] (2/4 issues done)"`). Remove the phase sub-items for the completed issue to keep the list concise. If the issue halted, keep its status as `"in_progress"` and append the halt reason in the content (e.g., `"[ref]: [title] -- BLOCKED: guard failure"`). Note: TodoWrite has no `"blocked"` status; `"in_progress"` is the closest approximation for halted issues — the content string communicates the actual state.
 
@@ -908,12 +1018,26 @@ Process each debate-runner result:
     ```
   - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
   - If TRIVIAL_ACCEPT: note `fast_path: true`
+  - Sync plan tracking issue:
+    ```bash
+    if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+      bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+        || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+    fi
+    ```
 
 - **`verdict: "consensus"` with `verdict_detail: "CONDITIONAL_ACCEPT"`**:
   - This means the debate-runner resolved conditions internally (generative addressed them, adversarial confirmed in a follow-up round). Treat as consensus with noted conditions:
     - Update file-hash cache (same as ACCEPT)
     - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
     - Log the conditions from the debate result's `conditions` array in the issue's metadata for traceability
+    - Sync plan tracking issue (same as ACCEPT — files/debates updated):
+      ```bash
+      if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+        bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+          || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+      fi
+      ```
 
 - **`verdict: "escalated"` with `escalation_reason: "conditions_unresolved"`**:
   - CONDITIONAL_ACCEPT conditions were never fully resolved within max_rounds
@@ -963,6 +1087,13 @@ Guard result storage: `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard
 - Auto-advance on fast-path (all TRIVIAL_ACCEPT) without user confirmation
 - If next phase exists → set to `in_progress`, loop back to Step 5a
 - If all phases done → issue is complete
+- Sync plan tracking issue after phase state change:
+  ```bash
+  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+  fi
+  ```
 
 **[TodoWrite — Phase Complete]**: After marking the phase done, update the todo list: set the phase item to `"completed"`. The content should retain the verdict info from Step 5e (e.g., `"Build phase — ACCEPT R1"`). If advancing to the next phase, Step 5a's TodoWrite will set the next phase to `"in_progress"`.
 
@@ -1043,6 +1174,13 @@ When an adversarial issues REGRESS targeting an earlier phase:
    - Reset the issue's `phase_status` for target phase and later to `pending`
    - Set target phase to `in_progress`
    - Preserve debate history
+   - Sync plan tracking issue (phase_status changed):
+     ```bash
+     if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+       bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+         || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+     fi
+     ```
    - Loop back to Step 5a
 
 #### 5h. Issue Complete
@@ -1141,6 +1279,13 @@ After all issues in the milestone are `done`:
 **8a. Mark milestone done:**
 - Set milestone `status: done`, record completion timestamp
 - Update `plan.yaml`
+- Sync plan tracking issue:
+  ```bash
+  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+  fi
+  ```
 
 **[TodoWrite — Milestone Complete]**: After marking the milestone done, update the todo list: set the milestone item to `"completed"`. Remove all issue/phase sub-items for this milestone to keep the list compact. Update the milestone content to include the summary (e.g., `"M2: [name] — 4/4 issues done"`). If other milestones remain, they retain their current statuses.
 
