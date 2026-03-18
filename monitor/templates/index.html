@@ -537,6 +537,62 @@
             background: rgba(34,197,94,0.15);
             color: var(--green);
         }
+        .badge-done { background: rgba(34,197,94,0.2); color: var(--green); }
+
+        /* DAG visualization */
+        .dag-layers {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        .dag-layer-row {
+            display: flex;
+            flex-direction: column;
+        }
+        .dag-layer-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .dag-layer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .dag-node {
+            flex: 1;
+            min-width: 280px;
+        }
+        .dag-node .milestone-card {
+            margin-bottom: 0;
+        }
+        .dag-connector {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0.1rem 2rem;
+            color: var(--border);
+            font-size: 1rem;
+            margin-bottom: 0.4rem;
+        }
+        .dag-arrow {
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+        .ms-blocked {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            background: rgba(239,68,68,0.2);
+            color: var(--red);
+            letter-spacing: 0.05em;
+        }
 
         /* Issue rows */
         .issue-list {
@@ -812,67 +868,90 @@
                             <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;"
                                x-show="plan.epic.description" x-text="plan.epic.description"></p>
 
-                            <!-- Milestones -->
-                            <template x-for="ms in (plan.epic.milestones || [])" :key="ms.id">
-                                <div class="milestone-card">
-                                    <div class="milestone-header"
-                                         @click="ms._expanded = !ms._expanded"
-                                         @keydown.enter="ms._expanded = !ms._expanded"
-                                         tabindex="0" role="button"
-                                         :aria-expanded="!!ms._expanded">
-                                        <span class="milestone-expand" :class="{ open: ms._expanded }">&#9654;</span>
-                                        <span class="ms-name" x-text="ms.name || ('M' + ms.id)"></span>
-                                        <div class="ms-meta">
-                                            <span class="badge"
-                                                  :class="'badge-' + (ms.status || 'pending')"
-                                                  x-text="ms.status || 'pending'"></span>
-                                            <span class="regression-counter"
-                                                  :class="regressionClass(ms.regressions || 0, plan.max_regressions ?? 2)">
-                                                Regressions: <span x-text="(ms.regressions || 0) + '/' + (plan.max_regressions ?? 2)"></span>
-                                            </span>
-                                            <template x-if="ms.depends_on && ms.depends_on.length > 0">
-                                                <span class="ms-deps">
-                                                    depends on: <span x-text="ms.depends_on.map(d => 'M' + d).join(', ')"></span>
-                                                </span>
+                            <!-- Milestone DAG (grouped by dependency layer) -->
+                            <div class="dag-layers">
+                                <template x-for="(layer, layerIdx) in dagLayers" :key="layerIdx">
+                                    <div class="dag-layer-row">
+                                        <!-- Connector arrows between layers -->
+                                        <template x-if="layerIdx > 0">
+                                            <div class="dag-connector">
+                                                <template x-for="n in layer" :key="n.id">
+                                                    <span class="dag-arrow">&#9660;</span>
+                                                </template>
+                                            </div>
+                                        </template>
+                                        <div class="dag-layer-label"
+                                             x-text="'Layer ' + layerIdx + (layerIdx === 0 ? ' — independent (parallel)' : ' — depends on layer ' + (layerIdx - 1))">
+                                        </div>
+                                        <div class="dag-layer">
+                                            <template x-for="ms in layer" :key="ms.id">
+                                                <div class="dag-node">
+                                                    <div class="milestone-card">
+                                                        <div class="milestone-header"
+                                                             @click="ms._expanded = !ms._expanded"
+                                                             @keydown.enter="ms._expanded = !ms._expanded"
+                                                             tabindex="0" role="button"
+                                                             :aria-expanded="!!ms._expanded">
+                                                            <span class="milestone-expand" :class="{ open: ms._expanded }">&#9654;</span>
+                                                            <span class="ms-name" x-text="ms.name || ('M' + ms.id)"></span>
+                                                            <div class="ms-meta">
+                                                                <span class="badge"
+                                                                      :class="'badge-' + (ms.status || 'pending')"
+                                                                      x-text="ms.status || 'pending'"></span>
+                                                                <template x-if="isBlocked(ms)">
+                                                                    <span class="ms-blocked">&#9632; BLOCKED</span>
+                                                                </template>
+                                                                <span class="regression-counter"
+                                                                      :class="regressionClass(ms.regressions || 0, plan.max_regressions ?? 2)">
+                                                                    Regressions: <span x-text="(ms.regressions || 0) + '/' + (plan.max_regressions ?? 2)"></span>
+                                                                </span>
+                                                                <template x-if="ms.depends_on && ms.depends_on.length > 0">
+                                                                    <span class="ms-deps">
+                                                                        deps: <span x-text="ms.depends_on.map(d => 'M' + d).join(', ')"></span>
+                                                                    </span>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Expandable issue rows -->
+                                                        <div class="issue-list" x-show="ms._expanded">
+                                                            <template x-if="!ms.issues || ms.issues.length === 0">
+                                                                <div style="padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.8rem; color: var(--text-muted);">
+                                                                    No issues defined
+                                                                </div>
+                                                            </template>
+                                                            <template x-for="issue in (ms.issues || [])" :key="issue.ref">
+                                                                <div class="issue-row">
+                                                                    <div>
+                                                                        <span class="issue-ref" x-text="issue.ref"></span>
+                                                                        <span class="issue-title" x-text="issue.title ? ' — ' + issue.title : ''"></span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span class="badge"
+                                                                              :class="'badge-' + (issue.status || 'pending')"
+                                                                              x-text="issue.status || 'pending'"></span>
+                                                                    </div>
+                                                                    <div class="phase-pills">
+                                                                        <template x-if="issue.phase_status">
+                                                                            <template x-for="phaseName in Object.keys(issue.phase_status)" :key="phaseName">
+                                                                                <span class="phase-pill"
+                                                                                      :class="issue.phase_status[phaseName]"
+                                                                                      x-text="phaseName"></span>
+                                                                            </template>
+                                                                        </template>
+                                                                    </div>
+                                                                    <div class="issue-deps" x-show="issue.depends_on && issue.depends_on.length > 0">
+                                                                        <span x-text="'deps: ' + (issue.depends_on || []).join(', ')"></span>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </template>
                                         </div>
                                     </div>
-
-                                    <!-- Expandable issue rows -->
-                                    <div class="issue-list" x-show="ms._expanded">
-                                        <template x-if="!ms.issues || ms.issues.length === 0">
-                                            <div style="padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.8rem; color: var(--text-muted);">
-                                                No issues defined
-                                            </div>
-                                        </template>
-                                        <template x-for="issue in (ms.issues || [])" :key="issue.ref">
-                                            <div class="issue-row">
-                                                <div>
-                                                    <span class="issue-ref" x-text="issue.ref"></span>
-                                                    <span class="issue-title" x-text="issue.title ? ' — ' + issue.title : ''"></span>
-                                                </div>
-                                                <div>
-                                                    <span class="badge"
-                                                          :class="'badge-' + (issue.status || 'pending')"
-                                                          x-text="issue.status || 'pending'"></span>
-                                                </div>
-                                                <div class="phase-pills">
-                                                    <template x-if="issue.phase_status">
-                                                        <template x-for="phaseName in Object.keys(issue.phase_status)" :key="phaseName">
-                                                            <span class="phase-pill"
-                                                                  :class="issue.phase_status[phaseName]"
-                                                                  x-text="phaseName"></span>
-                                                        </template>
-                                                    </template>
-                                                </div>
-                                                <div class="issue-deps" x-show="issue.depends_on && issue.depends_on.length > 0">
-                                                    <span x-text="'deps: ' + (issue.depends_on || []).join(', ')"></span>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                            </template>
+                                </template>
+                            </div>
 
                             <!-- Discoveries -->
                             <template x-if="plan.epic.discoveries && plan.epic.discoveries.length > 0">
@@ -1145,6 +1224,49 @@
                     }));
                 }
                 return [];
+            },
+
+            // Compute DAG layers: Layer 0 = no deps, Layer N = max(dep layers) + 1.
+            get dagLayers() {
+                if (!this.plan || !this.plan.epic) return [];
+                const milestones = this.plan.epic.milestones || [];
+                if (milestones.length === 0) return [];
+                const msMap = {};
+                for (const ms of milestones) msMap[ms.id] = ms;
+                const layerCache = {};
+                const inProgress = new Set();
+                const layerOf = (id) => {
+                    if (layerCache[id] !== undefined) return layerCache[id];
+                    if (inProgress.has(id)) return 0; // cycle guard
+                    inProgress.add(id);
+                    const ms = msMap[id];
+                    if (!ms || !ms.depends_on || ms.depends_on.length === 0) {
+                        inProgress.delete(id);
+                        return (layerCache[id] = 0);
+                    }
+                    const result = Math.max(...ms.depends_on.map(layerOf)) + 1;
+                    inProgress.delete(id);
+                    return (layerCache[id] = result);
+                };
+                for (const ms of milestones) layerOf(ms.id);
+                const maxLayer = Math.max(...Object.values(layerCache));
+                const layers = [];
+                for (let i = 0; i <= maxLayer; i++)
+                    layers.push(milestones.filter(ms => layerCache[ms.id] === i));
+                return layers;
+            },
+
+            // A milestone is blocked when any dependency is not yet done.
+            isBlocked(ms) {
+                if (ms.status === 'done') return false;
+                if (!ms.depends_on || ms.depends_on.length === 0) return false;
+                const milestones = (this.plan && this.plan.epic && this.plan.epic.milestones) || [];
+                const msMap = {};
+                for (const m of milestones) msMap[m.id] = m;
+                return ms.depends_on.some(depId => {
+                    const dep = msMap[depId];
+                    return !dep || dep.status !== 'done';
+                });
             },
 
             get scoreSummaries() {
