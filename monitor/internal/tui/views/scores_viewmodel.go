@@ -163,11 +163,24 @@ func (vm *ScoresViewModel) loadSummaries() {
 		vm.summaries = nil
 		return
 	}
+	ws := vm.store.CurrentWorkspace()
 	pairs := vm.store.Pairs()
 	vm.summaries = nil
 
 	for _, p := range pairs {
+		if ws != "" && p.Workspace != ws {
+			continue
+		}
 		scores := vm.store.Scores(p.Name)
+		if ws != "" {
+			filtered := scores[:0:0]
+			for _, sc := range scores {
+				if sc.Workspace == ws {
+					filtered = append(filtered, sc)
+				}
+			}
+			scores = filtered
+		}
 		if len(scores) == 0 {
 			continue
 		}

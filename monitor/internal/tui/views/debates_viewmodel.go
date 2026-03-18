@@ -203,8 +203,15 @@ func (vm *DebatesViewModel) loadDebates() {
 }
 
 func (vm *DebatesViewModel) applyFilters() {
+	var ws string
+	if vm.store != nil {
+		ws = vm.store.CurrentWorkspace()
+	}
 	vm.filtered = nil
 	for _, d := range vm.debates {
+		if ws != "" && d.Workspace != ws {
+			continue
+		}
 		if !vm.matchesTextFilter(d) {
 			continue
 		}

@@ -402,3 +402,78 @@ func TestPairWithEmptyScoresExcluded(t *testing.T) {
 		t.Errorf("expected has-scores, got %s", summaries[0].Pair)
 	}
 }
+
+// ── Workspace filtering ──────────────────────────────────────────────────
+
+func TestScoresWorkspaceFilterExcludesPairsFromOtherWorkspace(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+	})
+	store.SetScores("pair-a", []client.ScoreEntry{
+		{Pair: "pair-a", DebateID: "d1", Workspace: "ws-a", RoundsToConsensus: 1, Timestamp: time.Now()},
+	})
+	store.SetScores("pair-b", []client.ScoreEntry{
+		{Pair: "pair-b", DebateID: "d2", Workspace: "ws-b", RoundsToConsensus: 2, Timestamp: time.Now()},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewScoresViewModel(store)
+
+	summaries := vm.PairSummaries()
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 summary for ws-a, got %d", len(summaries))
+	}
+	if summaries[0].Pair != "pair-a" {
+		t.Errorf("expected pair-a, got %q", summaries[0].Pair)
+	}
+}
+
+func TestScoresWorkspaceFilterEmptyShowsAll(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+	})
+	store.SetScores("pair-a", []client.ScoreEntry{
+		{Pair: "pair-a", DebateID: "d1", Workspace: "ws-a", RoundsToConsensus: 1, Timestamp: time.Now()},
+	})
+	store.SetScores("pair-b", []client.ScoreEntry{
+		{Pair: "pair-b", DebateID: "d2", Workspace: "ws-b", RoundsToConsensus: 1, Timestamp: time.Now()},
+	})
+	// No workspace set
+	vm := views.NewScoresViewModel(store)
+
+	summaries := vm.PairSummaries()
+	if len(summaries) != 2 {
+		t.Fatalf("empty workspace should show all summaries, got %d", len(summaries))
+	}
+}
+
+func TestScoresWorkspaceFilterScoreEntriesFilteredToo(t *testing.T) {
+	// pair-a belongs to ws-a but has scores from both ws-a and ws-b.
+	// When ws-a is active, only ws-a scores should count in the summary.
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+	})
+	store.SetScores("pair-a", []client.ScoreEntry{
+		{Pair: "pair-a", DebateID: "d1", Workspace: "ws-a", RoundsToConsensus: 1, IssuesFound: 2, Timestamp: time.Now()},
+		{Pair: "pair-a", DebateID: "d2", Workspace: "ws-b", RoundsToConsensus: 3, IssuesFound: 10, Timestamp: time.Now()},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewScoresViewModel(store)
+
+	summaries := vm.PairSummaries()
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 summary, got %d", len(summaries))
+	}
+	s := summaries[0]
+	// Only the ws-a score entry should be counted
+	if s.DebateCount != 1 {
+		t.Errorf("DebateCount = %d, want 1 (only ws-a entries)", s.DebateCount)
+	}
+	if s.IssuesFound != 2 {
+		t.Errorf("IssuesFound = %d, want 2 (only ws-a entries)", s.IssuesFound)
+	}
+}

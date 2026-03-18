@@ -11,6 +11,7 @@ type PairStatus struct {
 	Enabled   bool   `json:"enabled"`
 	Active    bool   `json:"active"`
 	Status    string `json:"status"`
+	Workspace string `json:"workspace"`
 }
 
 // DebateMeta contains metadata about a debate.
@@ -26,6 +27,7 @@ type DebateMeta struct {
 	Started    time.Time  `json:"started"`
 	Resolved   *time.Time `json:"resolved"`
 	Verdict    *string    `json:"verdict"`
+	Workspace  string     `json:"workspace"`
 }
 
 // Round represents a single round in a debate.
@@ -118,6 +120,7 @@ type ScoreEntry struct {
 	Escalated         bool      `json:"escalated"`
 	IssuesFound       int       `json:"issues_found"`
 	IssuesResolved    int       `json:"issues_resolved"`
+	Workspace         string    `json:"workspace"`
 }
 
 // Workspace represents a configured workspace.
