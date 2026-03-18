@@ -163,6 +163,31 @@ epic:
           branch: ratchet/dag-visualization/issue-4-2
           pr: null
           status: done
+    - id: 5
+      name: SSE Reconnect Improvements
+      description: Refresh workspace list and other stale data on SSE reconnect
+      status: done
+      done_when: fetchWorkspaces() is called on SSE reconnect so the workspace dropdown stays current
+      depends_on: []
+      progress_ref: null
+      regressions: 0
+      issues:
+        - ref: issue-5-1
+          title: Refresh workspace list on SSE reconnect
+          pairs:
+            - api-contracts
+          depends_on: []
+          phase_status:
+            plan: done
+            build: done
+            review: done
+            harden: done
+          files: []
+          debates:
+            - api-contracts-review-issue-5-1-20260318T110536
+          branch: ratchet/sse-reconnect/issue-5-1
+          pr: null
+          status: done
   current_focus: null
   discoveries:
     - ref: discovery-manual-1773814932
@@ -211,8 +236,8 @@ epic:
         debate: null
       pairs:
         - api-contracts
-      status: pending
-      issue_ref: null
+      status: promoted
+      issue_ref: issue-5-1
       affected_scope: templates/index.html
       retro_type: null
       created_at: "2026-03-18T07:07:59+00:00"
