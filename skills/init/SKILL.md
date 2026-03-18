@@ -407,6 +407,7 @@ Create the `.ratchet/` directory structure:
 
 ```
 # Ratchet runtime artifacts (regenerable, environment-specific)
+.ratchet/plan.yaml
 .ratchet/debates/
 .ratchet/reviews/
 .ratchet/scores/
@@ -415,6 +416,9 @@ Create the `.ratchet/` directory structure:
 .ratchet/guards/
 .ratchet/reports/
 .ratchet/progress/
+.ratchet/worktrees/
+.ratchet/locks/
+.ratchet/archive/
 ```
 
 **Error handling for file generation (Step 8)**: If any file write fails during generation:
@@ -461,7 +465,7 @@ IMPORTANT:
 After generation, verify:
 - `.ratchet/project.yaml` exists and contains valid stack/testing info
 - `.ratchet/workflow.yaml` exists with `version: 2` and at least one pair registered
-- `.gitignore` contains the Ratchet runtime artifact entries (if git repo)
+- `.gitignore` contains the Ratchet runtime artifact entries (if git repo), including `.ratchet/plan.yaml`
 - Each registered pair has both `generative.md` and `adversarial.md` in `.ratchet/pairs/`
 - All directories created: `debates/`, `reviews/`, `scores/`
 
