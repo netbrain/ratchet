@@ -232,7 +232,11 @@ For each round (1 to max_rounds):
 
 Read the generative agent definition from `.ratchet/pairs/<name>/generative.md`.
 
-**Worktree enforcement:** If a `Worktree` path was provided in the task context, ALL file paths in the generative and adversarial prompts MUST be prefixed with the worktree path. For example, if `Worktree: /workspace/main/.ratchet/worktrees/issue-43` and `Files in scope: [skills/run/SKILL.md]`, the prompt must reference `/workspace/main/.ratchet/worktrees/issue-43/skills/run/SKILL.md`. The generative agent must Read, Write, and Edit files at the worktree path — never at the main repo path. Include the WORKTREE ISOLATION constraint (see "All phases include these constraints" below) in every generative and adversarial prompt.
+**Worktree enforcement:** If a `Worktree` path was provided in the task context, ALL source file paths in the generative and adversarial prompts MUST be prefixed with the worktree path. For example, if `Worktree: /workspace/main/.ratchet/worktrees/issue-43` and `Files in scope: [skills/run/SKILL.md]`, the prompt must reference `/workspace/main/.ratchet/worktrees/issue-43/skills/run/SKILL.md`. The generative agent must Read, Write, and Edit source files at the worktree path — never at the main repo path.
+
+**Exception — debate artifacts:** Your own Write/Edit calls for `.ratchet/debates/`, `.ratchet/escalations/`, and `.ratchet/reviews/` always target the MAIN repo's `.ratchet/` directory (not the worktree), because debate artifacts are shared state that must persist after the worktree is cleaned up.
+
+Include the WORKTREE ISOLATION and SOURCE vs SYMLINK constraints (see "All phases include these constraints" below) in every generative and adversarial prompt.
 
 Spawn an Agent with `model` set to the generative model from the task context (e.g., `model: "opus"`). Use the phase-specific prompt:
 
@@ -345,6 +349,22 @@ NOT:
   /workspace/main/skills/run/SKILL.md
 The main repo is READ-ONLY. All writes go to the worktree copy.
 If no Worktree path was provided, use the main repo paths as normal.
+
+CRITICAL CONSTRAINT — SOURCE vs SYMLINK vs CONFIG PATHS:
+The repo has three path types — know which you are editing:
+  SOURCE files (the real code to modify):
+    skills/*/SKILL.md, agents/*.md, scripts/**/*.sh, schemas/*.json
+  SYMLINKS (never edit these directly — they follow to source):
+    .claude/commands/ratchet/*.md → ../../../skills/*/SKILL.md
+    .claude/commands/ratchet/agents/*.md → ../../../../agents/*.md
+  CONFIG files (project config, not source code — do NOT modify):
+    .ratchet/workflow.yaml, .ratchet/project.yaml
+    .ratchet/pairs/*/generative.md, .ratchet/pairs/*/adversarial.md
+Always edit the SOURCE path, never the .claude/ symlink path.
+Read pair definitions from .ratchet/pairs/ but do NOT write to them
+(pair definitions are config managed by /ratchet:pair and /ratchet:tighten).
+Debate artifacts (.ratchet/debates/, .ratchet/reviews/, .ratchet/escalations/)
+are always written to the MAIN repo .ratchet/ directory, not the worktree.
 
 CRITICAL CONSTRAINT — DEBATE BOUNDARY:
 You may ONLY create, modify, or delete code during this debate round.
