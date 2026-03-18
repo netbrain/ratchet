@@ -26,6 +26,9 @@ const maxDebateIDLength = 256
 // maxPairParamLength caps the pair query parameter to prevent abuse.
 const maxPairParamLength = 128
 
+// maxWorkspaceParamLength caps the workspace query parameter to prevent abuse.
+const maxWorkspaceParamLength = 128
+
 // isCleanParam rejects strings that contain path traversal sequences,
 // path separators, null bytes, or control characters.
 // This is the single validation gate for all user-supplied path segments;
@@ -58,6 +61,26 @@ func isValidPairParam(pair string) bool {
 	return isCleanParam(pair, maxPairParamLength)
 }
 
+// isValidWorkspaceParam validates the optional ?workspace= query parameter.
+func isValidWorkspaceParam(workspace string) bool {
+	return isCleanParam(workspace, maxWorkspaceParamLength)
+}
+
+// extractWorkspace reads and validates the ?workspace= query parameter.
+// Returns ("", false) when absent (caller proceeds without filtering).
+// Returns ("", true) when present but syntactically invalid (caller returns 400).
+// Returns (workspace, false) when valid.
+func extractWorkspace(r *http.Request) (string, bool) {
+	workspace := r.URL.Query().Get("workspace")
+	if workspace == "" {
+		return "", false
+	}
+	if !isValidWorkspaceParam(workspace) {
+		return "", true
+	}
+	return workspace, false
+}
+
 // setSecurityHeaders writes common security headers to every API response.
 func setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -65,8 +88,8 @@ func setSecurityHeaders(w http.ResponseWriter) {
 
 // DataSource provides read access to parsed .ratchet/ data for API handlers.
 type DataSource interface {
-	Pairs() (any, error)
-	Debates() (any, error)
+	Pairs(workspace string) (any, error)
+	Debates(workspace string) (any, error)
 	Debate(id string) (any, error)
 	Plan() (any, error)
 	Status() (any, error)
@@ -100,14 +123,25 @@ func methodNotAllowed(w http.ResponseWriter, allowed string) {
 }
 
 // PairsHandler returns a handler that serves GET /api/pairs.
+// An optional ?workspace= query parameter filters results by workspace name.
 func PairsHandler(ds DataSource) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
-		data, err := ds.Pairs()
+		workspace, invalid := extractWorkspace(r)
+		if invalid {
+			writeError(w, http.StatusBadRequest, "invalid workspace parameter")
+			return
+		}
+		data, err := ds.Pairs(workspace)
 		if err != nil {
+			var nfe *NotFoundError
+			if errors.As(err, &nfe) {
+				writeError(w, http.StatusNotFound, "workspace not found")
+				return
+			}
 			slog.Error("pairs data source failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
@@ -117,14 +151,25 @@ func PairsHandler(ds DataSource) http.Handler {
 }
 
 // DebatesHandler returns a handler that serves GET /api/debates.
+// An optional ?workspace= query parameter filters results by workspace name.
 func DebatesHandler(ds DataSource) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
-		data, err := ds.Debates()
+		workspace, invalid := extractWorkspace(r)
+		if invalid {
+			writeError(w, http.StatusBadRequest, "invalid workspace parameter")
+			return
+		}
+		data, err := ds.Debates(workspace)
 		if err != nil {
+			var nfe *NotFoundError
+			if errors.As(err, &nfe) {
+				writeError(w, http.StatusNotFound, "workspace not found")
+				return
+			}
 			slog.Error("debates data source failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return

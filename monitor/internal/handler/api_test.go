@@ -11,22 +11,33 @@ import (
 
 // mockDataSource implements DataSource for testing.
 type mockDataSource struct {
-	pairs      any
-	debates    any
-	debate     map[string]any
-	debateErr  map[string]error // per-debate error overrides
-	plan       any
-	status     any
-	scores     any
-	workspaces any
-	err        error
+	pairs           any
+	debates         any
+	debate          map[string]any
+	debateErr       map[string]error // per-debate error overrides
+	plan            any
+	status          any
+	scores          any
+	workspaces      any
+	err             error
+	knownWorkspaces map[string]bool // non-nil means workspace validation is active
 }
 
-func (m *mockDataSource) Pairs() (any, error) {
+func (m *mockDataSource) Pairs(workspace string) (any, error) {
+	if workspace != "" && m.knownWorkspaces != nil {
+		if !m.knownWorkspaces[workspace] {
+			return nil, &NotFoundError{Resource: "workspace", ID: workspace}
+		}
+	}
 	return m.pairs, m.err
 }
 
-func (m *mockDataSource) Debates() (any, error) {
+func (m *mockDataSource) Debates(workspace string) (any, error) {
+	if workspace != "" && m.knownWorkspaces != nil {
+		if !m.knownWorkspaces[workspace] {
+			return nil, &NotFoundError{Resource: "workspace", ID: workspace}
+		}
+	}
 	return m.debates, m.err
 }
 
@@ -87,6 +98,10 @@ func newMockDS() *mockDataSource {
 		workspaces: []map[string]string{
 			{"name": "frontend", "path": "/home/dev/frontend"},
 			{"name": "backend", "path": "/home/dev/backend"},
+		},
+		knownWorkspaces: map[string]bool{
+			"frontend": true,
+			"backend":  true,
 		},
 	}
 }
@@ -178,7 +193,8 @@ func newMockDS_V2() *mockDataSource {
 		scores: []map[string]any{
 			{"debate_id": "debate-v2-1", "pair": "api-contracts", "milestone": 1},
 		},
-		workspaces: []map[string]string{},
+		workspaces:      []map[string]string{},
+		knownWorkspaces: map[string]bool{},
 	}
 }
 
@@ -1058,5 +1074,181 @@ func TestWorkspacesHandler_DataSourceError(t *testing.T) {
 	}
 	if body["error"] != "internal server error" {
 		t.Errorf("error message: got %q", body["error"])
+	}
+}
+
+// --- ?workspace= query parameter ---
+
+func TestIsValidWorkspaceParam(t *testing.T) {
+	tests := []struct {
+		workspace string
+		want      bool
+	}{
+		{"frontend", true},
+		{"my-workspace", true},
+		{"ws_1", true},
+		{"ws.v2", true},
+		{strings.Repeat("a", maxWorkspaceParamLength), true},
+		{"", false},
+		{"../etc", false},
+		{"foo/bar", false},
+		{"foo\\bar", false},
+		{string([]byte{0x00}), false},
+		{string([]byte{0x1F}), false},
+		{strings.Repeat("x", maxWorkspaceParamLength+1), false},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%q", tc.workspace), func(t *testing.T) {
+			got := isValidWorkspaceParam(tc.workspace)
+			if got != tc.want {
+				t.Errorf("isValidWorkspaceParam(%q) = %v, want %v", tc.workspace, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPairsHandler_InvalidWorkspaceParam(t *testing.T) {
+	ds := newMockDS()
+	h := PairsHandler(ds)
+
+	badWorkspaces := []string{
+		"../etc/passwd",
+		"foo/bar",
+		"foo\\bar",
+		strings.Repeat("x", maxWorkspaceParamLength+1),
+	}
+
+	for _, ws := range badWorkspaces {
+		t.Run(ws, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/pairs?workspace="+ws, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status for workspace %q: got %d, want %d", ws, rec.Code, http.StatusBadRequest)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if body["error"] != "invalid workspace parameter" {
+				t.Errorf("error: got %q, want %q", body["error"], "invalid workspace parameter")
+			}
+		})
+	}
+}
+
+func TestDebatesHandler_InvalidWorkspaceParam(t *testing.T) {
+	ds := newMockDS()
+	h := DebatesHandler(ds)
+
+	badWorkspaces := []string{
+		"../etc/passwd",
+		"foo/bar",
+		strings.Repeat("x", maxWorkspaceParamLength+1),
+	}
+
+	for _, ws := range badWorkspaces {
+		t.Run(ws, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/debates?workspace="+ws, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status for workspace %q: got %d, want %d", ws, rec.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func TestPairsHandler_UnknownWorkspace_Returns404(t *testing.T) {
+	ds := newMockDS()
+	h := PairsHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pairs?workspace=nonexistent", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if body["error"] != "workspace not found" {
+		t.Errorf("error: got %q, want %q", body["error"], "workspace not found")
+	}
+}
+
+func TestDebatesHandler_UnknownWorkspace_Returns404(t *testing.T) {
+	ds := newMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?workspace=nonexistent", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if body["error"] != "workspace not found" {
+		t.Errorf("error: got %q, want %q", body["error"], "workspace not found")
+	}
+}
+
+func TestPairsHandler_KnownWorkspace_Returns200(t *testing.T) {
+	ds := newMockDS()
+	h := PairsHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pairs?workspace=frontend", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestDebatesHandler_KnownWorkspace_Returns200(t *testing.T) {
+	ds := newMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?workspace=backend", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestPairsHandler_NoWorkspaceParam_Returns200(t *testing.T) {
+	ds := newMockDS()
+	h := PairsHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pairs", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestDebatesHandler_NoWorkspaceParam_Returns200(t *testing.T) {
+	ds := newMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
 	}
 }
