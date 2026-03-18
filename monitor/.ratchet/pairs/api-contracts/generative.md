@@ -79,6 +79,19 @@ curl http://localhost:9100/api/status | jq .
 - Write, Edit - implement v2 API changes
 - Bash - run tests and manual verification
 
+## Lessons from Prior Debates
+
+- When implementing the same feature across parallel methods (e.g., Pairs and
+  Debates both getting a workspace param), immediately diff the two implementations
+  after writing to check for behavioral asymmetry. Common pitfalls: different error
+  handling paths, inconsistent graceful degradation, missing tests for the second
+  method that exist for the first.
+- Scan for redundant I/O operations when introducing new validation layers. If two
+  methods both need to read the same file, extract a shared helper rather than
+  reading twice.
+- After each new error path introduced in one method, check all peer methods for
+  the same gap. Consistency across handlers is critical.
+
 ## Success Criteria
 
 - All API endpoints return v2 data structures
