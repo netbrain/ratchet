@@ -95,6 +95,8 @@ Context:
 
 **Publish field defaults:** If the `Publish:` block is absent from the task context (e.g., orchestrators that predate this feature), treat all fields as their defaults: `publish_debates = false`, `progress_ref = null`, `adapter = "none"`. No comments are posted and no warnings are emitted.
 
+> **Forward reference:** The `/ratchet:run` skill learns to populate these Publish fields in [issue 45].
+
 ## Progress Reporting
 
 The debate-runner operates inside the orchestrator's TodoWrite context. Use TodoWrite to report debate progress so users see real-time status in their terminal.
