@@ -1409,6 +1409,7 @@
                     const wasReconnecting = this.status === 'reconnecting';
                     this.status = 'connected';
                     if (wasReconnecting) {
+                        this.fetchWorkspaces();
                         this.fetchAll();
                     }
                 };
