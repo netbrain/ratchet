@@ -122,7 +122,7 @@ func TestFileDataSource_Pairs(t *testing.T) {
 	dir := setupTestDir(t)
 	ds := NewFileDataSource(dir)
 
-	result, err := ds.Pairs()
+	result, err := ds.Pairs("")
 	if err != nil {
 		t.Fatalf("Pairs() error: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestFileDataSource_Debates(t *testing.T) {
 	dir := setupTestDir(t)
 	ds := NewFileDataSource(dir)
 
-	result, err := ds.Debates()
+	result, err := ds.Debates("")
 	if err != nil {
 		t.Fatalf("Debates() error: %v", err)
 	}
@@ -498,7 +498,7 @@ func TestFileDataSource_Pairs_MissingWorkflow(t *testing.T) {
 	dir := t.TempDir() // no workflow.yaml
 	ds := NewFileDataSource(dir)
 
-	result, err := ds.Pairs()
+	result, err := ds.Pairs("")
 	if err != nil {
 		t.Fatalf("Pairs() should return empty slice for missing workflow.yaml, got error: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestFileDataSource_Pairs_MalformedWorkflow(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
 	ds := NewFileDataSource(dir)
 
-	result, err := ds.Pairs()
+	result, err := ds.Pairs("")
 	if err != nil {
 		t.Fatalf("Pairs() should return empty slice for malformed workflow.yaml, got error: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestFileDataSource_Pairs_PermissionDenied(t *testing.T) {
 	os.WriteFile(path, []byte("version: 2\n"), 0o000)
 	ds := NewFileDataSource(dir)
 
-	_, err := ds.Pairs()
+	_, err := ds.Pairs("")
 	if err == nil {
 		t.Fatal("Pairs() should return an error for permission-denied workflow.yaml")
 	}
@@ -793,7 +793,7 @@ func TestFileDataSource_Debates_SkipsMalformed(t *testing.T) {
 	os.WriteFile(filepath.Join(goodDir, "meta.json"), data, 0o644)
 
 	ds := NewFileDataSource(dir)
-	result, err := ds.Debates()
+	result, err := ds.Debates("")
 	if err != nil {
 		t.Fatalf("Debates() should not fail with malformed files: %v", err)
 	}
@@ -1031,5 +1031,210 @@ func TestFileDataSource_Status_V2WithIssue(t *testing.T) {
 	// V2 field: issue reference.
 	if info.IssueRef != "issue-1-1" {
 		t.Errorf("IssueRef: got %q, want %q", info.IssueRef, "issue-1-1")
+	}
+}
+
+// --- Workspace filtering integration tests ---
+
+// workflowWithWorkspaces returns a workflow.yaml fixture containing two workspaces.
+func workflowWithWorkspaces() string {
+	return `version: 2
+max_rounds: 3
+escalation: human
+progress:
+  adapter: none
+workspaces:
+  - name: frontend
+    path: /home/dev/frontend
+  - name: backend
+    path: /home/dev/backend
+pairs:
+  - name: api-design
+    component: backend
+    phase: review
+    scope: internal/handler
+    enabled: true
+`
+}
+
+// TestFileDataSource_Pairs_KnownWorkspace verifies Pairs("frontend") returns
+// data when the workspace is listed in workflow.yaml.
+func TestFileDataSource_Pairs_KnownWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Pairs("frontend")
+	if err != nil {
+		t.Fatalf("Pairs(frontend) error: %v", err)
+	}
+	pairs, ok := result.([]PairStatus)
+	if !ok {
+		t.Fatalf("expected []PairStatus, got %T", result)
+	}
+	if len(pairs) != 1 {
+		t.Errorf("expected 1 pair, got %d", len(pairs))
+	}
+}
+
+// TestFileDataSource_Pairs_KnownWorkspace_Second verifies Pairs("backend") also
+// returns data for the second listed workspace.
+func TestFileDataSource_Pairs_KnownWorkspace_Second(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Pairs("backend")
+	if err != nil {
+		t.Fatalf("Pairs(backend) error: %v", err)
+	}
+	pairs, ok := result.([]PairStatus)
+	if !ok {
+		t.Fatalf("expected []PairStatus, got %T", result)
+	}
+	if len(pairs) != 1 {
+		t.Errorf("expected 1 pair, got %d", len(pairs))
+	}
+}
+
+// TestFileDataSource_Pairs_UnknownWorkspace verifies Pairs("nonexistent")
+// returns a NotFoundError with Resource="workspace".
+func TestFileDataSource_Pairs_UnknownWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Pairs("nonexistent")
+	if err == nil {
+		t.Fatal("Pairs(nonexistent) should return NotFoundError")
+	}
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+	if nfe.Resource != "workspace" {
+		t.Errorf("NotFoundError.Resource: got %q, want %q", nfe.Resource, "workspace")
+	}
+	if nfe.ID != "nonexistent" {
+		t.Errorf("NotFoundError.ID: got %q, want %q", nfe.ID, "nonexistent")
+	}
+}
+
+// TestFileDataSource_Pairs_WorkspaceOnMissingFile verifies that Pairs("frontend")
+// with an absent workflow.yaml returns NotFoundError (cannot validate workspace).
+func TestFileDataSource_Pairs_WorkspaceOnMissingFile(t *testing.T) {
+	dir := t.TempDir() // no workflow.yaml
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Pairs("frontend")
+	if err == nil {
+		t.Fatal("Pairs(frontend) with missing workflow.yaml should return NotFoundError")
+	}
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+	if nfe.Resource != "workspace" {
+		t.Errorf("NotFoundError.Resource: got %q, want %q", nfe.Resource, "workspace")
+	}
+}
+
+// TestFileDataSource_Pairs_MalformedWorkflow_WithWorkspace verifies that
+// Pairs("frontend") with malformed workflow.yaml returns NotFoundError, not
+// an empty 200. The caller explicitly named a workspace; we cannot validate it.
+func TestFileDataSource_Pairs_MalformedWorkflow_WithWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Pairs("frontend")
+	if err == nil {
+		t.Fatal("Pairs(frontend) with malformed workflow.yaml should return NotFoundError")
+	}
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+	if nfe.Resource != "workspace" {
+		t.Errorf("NotFoundError.Resource: got %q, want %q", nfe.Resource, "workspace")
+	}
+}
+
+// TestFileDataSource_Pairs_NoWorkspacesInWorkflow verifies that Pairs("frontend")
+// with a workflow that has no workspaces key returns NotFoundError.
+func TestFileDataSource_Pairs_NoWorkspacesInWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	workflow := `version: 2
+max_rounds: 3
+escalation: human
+pairs: []
+`
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Pairs("frontend")
+	if err == nil {
+		t.Fatal("Pairs(frontend) with no workspaces in workflow should return NotFoundError")
+	}
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+}
+
+// TestFileDataSource_Debates_KnownWorkspace verifies Debates("frontend") returns
+// the debate list when the workspace is valid.
+func TestFileDataSource_Debates_KnownWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+
+	// Create one debate.
+	debateDir := filepath.Join(dir, "debates", "test-debate-1")
+	os.MkdirAll(debateDir, 0o755)
+	meta := map[string]any{
+		"id":         "test-debate-1",
+		"pair":       "api-design",
+		"phase":      "review",
+		"milestone":  1,
+		"files":      []string{},
+		"status":     "consensus",
+		"max_rounds": 3,
+		"started":    time.Now().Format(time.RFC3339),
+	}
+	data, _ := json.Marshal(meta)
+	os.WriteFile(filepath.Join(debateDir, "meta.json"), data, 0o644)
+
+	ds := NewFileDataSource(dir)
+
+	result, err := ds.Debates("frontend")
+	if err != nil {
+		t.Fatalf("Debates(frontend) error: %v", err)
+	}
+	debates, ok := result.([]parser.DebateMeta)
+	if !ok {
+		t.Fatalf("expected []parser.DebateMeta, got %T", result)
+	}
+	if len(debates) != 1 {
+		t.Errorf("expected 1 debate, got %d", len(debates))
+	}
+}
+
+// TestFileDataSource_Debates_UnknownWorkspace verifies Debates("nonexistent")
+// returns a NotFoundError with Resource="workspace".
+func TestFileDataSource_Debates_UnknownWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	ds := NewFileDataSource(dir)
+
+	_, err := ds.Debates("nonexistent")
+	if err == nil {
+		t.Fatal("Debates(nonexistent) should return NotFoundError")
+	}
+	var nfe *handler.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("expected handler.NotFoundError, got %T: %v", err, err)
+	}
+	if nfe.Resource != "workspace" {
+		t.Errorf("NotFoundError.Resource: got %q, want %q", nfe.Resource, "workspace")
 	}
 }

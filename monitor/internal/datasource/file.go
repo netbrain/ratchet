@@ -42,25 +42,69 @@ type PairStatus struct {
 	Status    string `json:"status"`
 }
 
-// Pairs reads workflow.yaml and derives pair status from active debates.
-// Returns an empty slice when workflow.yaml is missing or contains invalid YAML.
-// Real I/O errors (e.g., permission denied) are still propagated.
-func (f *FileDataSource) Pairs() (any, error) {
+// loadWorkflowRaw reads workflow.yaml bytes.
+// Returns (nil, nil) when the file does not exist (graceful missing).
+// Real I/O errors (e.g., permission denied) are propagated.
+func (f *FileDataSource) loadWorkflowRaw() ([]byte, error) {
 	data, err := os.ReadFile(filepath.Join(f.rootDir, "workflow.yaml"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			slog.Debug("workflow.yaml not found, returning empty pairs")
-			return []PairStatus{}, nil
+			return nil, nil
 		}
 		return nil, fmt.Errorf("read workflow.yaml: %w", err)
+	}
+	return data, nil
+}
+
+// validateWorkspace checks that workspace is a known entry in the parsed config.
+// Returns NotFoundError when not found.
+func validateWorkspace(workspace string, wf *parser.WorkflowConfig) error {
+	for _, ws := range wf.Workspaces {
+		if ws.Name == workspace {
+			return nil
+		}
+	}
+	return &handler.NotFoundError{Resource: "workspace", ID: workspace}
+}
+
+// Pairs reads workflow.yaml and derives pair status from active debates.
+// When workspace is non-empty, validates it against the workspace list and
+// returns NotFoundError for unknown workspaces.
+// Returns an empty slice when workflow.yaml is missing or contains invalid YAML.
+// Real I/O errors (e.g., permission denied) are still propagated.
+func (f *FileDataSource) Pairs(workspace string) (any, error) {
+	data, err := f.loadWorkflowRaw()
+	if err != nil {
+		return nil, err
+	}
+
+	if data == nil {
+		// workflow.yaml missing
+		if workspace != "" {
+			return nil, &handler.NotFoundError{Resource: "workspace", ID: workspace}
+		}
+		slog.Debug("workflow.yaml not found, returning empty pairs")
+		return []PairStatus{}, nil
 	}
 
 	wf, err := parser.ParseWorkflow(data)
 	if err != nil {
-		// Graceful degradation: treat unparseable YAML the same as a missing
-		// file so the dashboard renders an empty state instead of an error.
+		if workspace != "" {
+			// When a specific workspace is requested, we cannot validate it
+			// against a malformed config. Return 404 — the caller asked for
+			// a named workspace and we cannot confirm it exists.
+			return nil, &handler.NotFoundError{Resource: "workspace", ID: workspace}
+		}
+		// Graceful degradation for the unfiltered case: treat unparseable YAML
+		// the same as a missing file so the dashboard renders an empty state.
 		slog.Warn("malformed workflow.yaml, returning empty pairs", "error", err)
 		return []PairStatus{}, nil
+	}
+
+	if workspace != "" {
+		if err := validateWorkspace(workspace, wf); err != nil {
+			return nil, err
+		}
 	}
 
 	// Build a map of pair name → derived status from debate metadata.
@@ -172,8 +216,27 @@ func (f *FileDataSource) pairStatusMap() map[string]string {
 }
 
 // Debates returns all debate metadata by globbing debates/*/meta.json.
+// When workspace is non-empty, validates it against the workspace list and
+// returns NotFoundError for unknown workspaces.
 // Malformed or unreadable files are skipped.
-func (f *FileDataSource) Debates() (any, error) {
+func (f *FileDataSource) Debates(workspace string) (any, error) {
+	if workspace != "" {
+		data, err := f.loadWorkflowRaw()
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			return nil, &handler.NotFoundError{Resource: "workspace", ID: workspace}
+		}
+		wf, err := parser.ParseWorkflow(data)
+		if err != nil {
+			return nil, &handler.NotFoundError{Resource: "workspace", ID: workspace}
+		}
+		if err := validateWorkspace(workspace, wf); err != nil {
+			return nil, err
+		}
+	}
+
 	pattern := filepath.Join(f.rootDir, "debates", "*", "meta.json")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
