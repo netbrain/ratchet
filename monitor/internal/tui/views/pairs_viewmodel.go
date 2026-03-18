@@ -190,20 +190,26 @@ func (vm *PairsViewModel) loadPairs() {
 }
 
 func (vm *PairsViewModel) applyFilter() {
-	if vm.filter == "" {
-		vm.filtered = make([]client.PairStatus, len(vm.pairs))
-		copy(vm.filtered, vm.pairs)
-		return
+	var ws string
+	if vm.store != nil {
+		ws = vm.store.CurrentWorkspace()
 	}
 	q := strings.ToLower(vm.filter)
 	vm.filtered = nil
 	for _, p := range vm.pairs {
-		if strings.Contains(strings.ToLower(p.Name), q) ||
+		if ws != "" && p.Workspace != ws {
+			continue
+		}
+		if q != "" && !(strings.Contains(strings.ToLower(p.Name), q) ||
 			strings.Contains(strings.ToLower(p.Component), q) ||
 			strings.Contains(strings.ToLower(p.Phase), q) ||
-			strings.Contains(strings.ToLower(p.Status), q) {
-			vm.filtered = append(vm.filtered, p)
+			strings.Contains(strings.ToLower(p.Status), q)) {
+			continue
 		}
+		vm.filtered = append(vm.filtered, p)
+	}
+	if vm.filtered == nil {
+		vm.filtered = []client.PairStatus{}
 	}
 }
 

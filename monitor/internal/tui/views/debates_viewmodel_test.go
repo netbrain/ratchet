@@ -444,3 +444,84 @@ func TestDebateFilterGetter(t *testing.T) {
 		t.Errorf("Filter after set = %q, want tui", vm.Filter())
 	}
 }
+
+// ── Workspace filtering ──────────────────────────────────────────────────
+
+func TestDebatesWorkspaceFilterIncludesMatchingDebates(t *testing.T) {
+	store := state.NewStore()
+	store.SetDebates([]client.DebateMeta{
+		{ID: "d1", Pair: "api-design", Workspace: "ws-a", Status: "consensus"},
+		{ID: "d2", Pair: "tui-layout", Workspace: "ws-b", Status: "consensus"},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewDebatesViewModel(store)
+
+	filtered := vm.FilteredDebates()
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 debate for ws-a, got %d", len(filtered))
+	}
+	if filtered[0].ID != "d1" {
+		t.Errorf("expected d1, got %q", filtered[0].ID)
+	}
+}
+
+func TestDebatesWorkspaceFilterEmptyShowsAll(t *testing.T) {
+	store := state.NewStore()
+	store.SetDebates([]client.DebateMeta{
+		{ID: "d1", Workspace: "ws-a", Status: "consensus"},
+		{ID: "d2", Workspace: "ws-b", Status: "in_progress"},
+	})
+	// No workspace set
+	vm := views.NewDebatesViewModel(store)
+
+	filtered := vm.FilteredDebates()
+	if len(filtered) != 2 {
+		t.Fatalf("empty workspace should show all debates, got %d", len(filtered))
+	}
+}
+
+func TestDebatesWorkspaceFilterCombinedWithStatusFilter(t *testing.T) {
+	store := state.NewStore()
+	store.SetDebates([]client.DebateMeta{
+		{ID: "d1", Pair: "api-design", Workspace: "ws-a", Status: "consensus"},
+		{ID: "d2", Pair: "tui-layout", Workspace: "ws-a", Status: "escalated"},
+		{ID: "d3", Pair: "other", Workspace: "ws-b", Status: "consensus"},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewDebatesViewModel(store)
+	vm.SetStatusFilter("consensus")
+
+	filtered := vm.FilteredDebates()
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 debate for ws-a+consensus, got %d", len(filtered))
+	}
+	if filtered[0].ID != "d1" {
+		t.Errorf("expected d1, got %q", filtered[0].ID)
+	}
+}
+
+func TestDebatesWorkspaceFilterRefreshUpdatesFilter(t *testing.T) {
+	store := state.NewStore()
+	store.SetDebates([]client.DebateMeta{
+		{ID: "d1", Workspace: "ws-a", Status: "consensus"},
+		{ID: "d2", Workspace: "ws-b", Status: "consensus"},
+	})
+	vm := views.NewDebatesViewModel(store)
+
+	// Initially no workspace — all visible
+	if len(vm.FilteredDebates()) != 2 {
+		t.Fatalf("precondition: expected 2 debates, got %d", len(vm.FilteredDebates()))
+	}
+
+	// Set workspace, then refresh
+	store.SetCurrentWorkspace("ws-b")
+	vm.Refresh()
+
+	filtered := vm.FilteredDebates()
+	if len(filtered) != 1 {
+		t.Fatalf("after workspace change+Refresh expected 1 debate, got %d", len(filtered))
+	}
+	if filtered[0].ID != "d2" {
+		t.Errorf("expected d2, got %q", filtered[0].ID)
+	}
+}

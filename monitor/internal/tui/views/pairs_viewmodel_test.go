@@ -666,3 +666,103 @@ func TestRefreshPicksUpNewData(t *testing.T) {
 		t.Errorf("pair name = %q, want %q", pairs[0].Name, "new-pair")
 	}
 }
+
+// ── Workspace filtering ──────────────────────────────────────────────────
+
+func TestPairsWorkspaceFilterIncludesMatchingPairs(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewPairsViewModel(store)
+
+	filtered := vm.FilteredPairs()
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 pair for ws-a, got %d", len(filtered))
+	}
+	if filtered[0].Name != "pair-a" {
+		t.Errorf("expected pair-a, got %q", filtered[0].Name)
+	}
+}
+
+func TestPairsWorkspaceFilterExcludesOtherWorkspace(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+		{Name: "pair-c", Workspace: "ws-b"},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewPairsViewModel(store)
+
+	filtered := vm.FilteredPairs()
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 pair for ws-a, got %d", len(filtered))
+	}
+	if filtered[0].Name != "pair-a" {
+		t.Errorf("expected pair-a, got %q", filtered[0].Name)
+	}
+}
+
+func TestPairsWorkspaceFilterEmptyWorkspaceShowsAll(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+	})
+	// No workspace set — empty string means show all
+	vm := views.NewPairsViewModel(store)
+
+	filtered := vm.FilteredPairs()
+	if len(filtered) != 2 {
+		t.Fatalf("empty workspace should show all pairs, got %d", len(filtered))
+	}
+}
+
+func TestPairsWorkspaceFilterCombinedWithTextFilter(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "api-design", Workspace: "ws-a"},
+		{Name: "api-contracts", Workspace: "ws-a"},
+		{Name: "api-other", Workspace: "ws-b"},
+	})
+	store.SetCurrentWorkspace("ws-a")
+	vm := views.NewPairsViewModel(store)
+	vm.SetFilter("contracts")
+
+	filtered := vm.FilteredPairs()
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 pair matching ws-a+contracts, got %d", len(filtered))
+	}
+	if filtered[0].Name != "api-contracts" {
+		t.Errorf("expected api-contracts, got %q", filtered[0].Name)
+	}
+}
+
+func TestPairsWorkspaceFilterRefreshUpdatesFilter(t *testing.T) {
+	store := state.NewStore()
+	store.SetPairs([]client.PairStatus{
+		{Name: "pair-a", Workspace: "ws-a"},
+		{Name: "pair-b", Workspace: "ws-b"},
+	})
+	vm := views.NewPairsViewModel(store)
+
+	// Initially no workspace filter — all visible
+	if len(vm.FilteredPairs()) != 2 {
+		t.Fatalf("precondition: expected 2 pairs, got %d", len(vm.FilteredPairs()))
+	}
+
+	// Set workspace, then refresh
+	store.SetCurrentWorkspace("ws-b")
+	vm.Refresh()
+
+	filtered := vm.FilteredPairs()
+	if len(filtered) != 1 {
+		t.Fatalf("after workspace change+Refresh expected 1 pair, got %d", len(filtered))
+	}
+	if filtered[0].Name != "pair-b" {
+		t.Errorf("expected pair-b, got %q", filtered[0].Name)
+	}
+}
