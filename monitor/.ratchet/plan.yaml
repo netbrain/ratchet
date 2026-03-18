@@ -64,8 +64,8 @@ epic:
             harden: done
           files: []
           debates:
-            - tui-visualization-review-issue-2-1-20260317T150000
-          branch: ratchet/workspace-filtering/issue-2-1-v2
+            - tui-visualization-review-issue-2-1-20260318T063419
+          branch: ratchet/workspace-filtering/issue-2-1-v3
           pr: null
           status: done
         - ref: "issue-2-2"
@@ -79,8 +79,8 @@ epic:
             harden: done
           files: []
           debates:
-            - api-contracts-review-issue-2-2-20260317T230449
-          branch: ratchet/workspace-filtering/issue-2-2
+            - api-contracts-review-issue-2-2-20260318T140000
+          branch: ratchet/workspace-filtering/issue-2-2-v2
           pr: null
           status: done
         - ref: "issue-2-3"
@@ -95,8 +95,8 @@ epic:
             harden: done
           files: []
           debates:
-            - api-contracts-review-issue-2-3-20260317T224601
-          branch: ratchet/workspace-filtering/issue-2-3
+            - api-contracts-review-issue-2-3-20260318T120000
+          branch: ratchet/workspace-filtering/issue-2-3-v2
           pr: null
           status: done
     - id: 3
@@ -164,4 +164,38 @@ epic:
           pr: null
           status: done
   current_focus: null
-  discoveries: []
+  discoveries:
+    - ref: discovery-manual-1773814932
+      title: Push all ratchet branches and create PRs
+      description: All 8 issue branches from the completed Monitor V2 Visualization epic have only local commits. Push them to origin and create PRs for each.
+      category: tech-debt
+      severity: major
+      source: manual
+      context:
+        milestone: null
+        issue: null
+        debate: null
+      pairs: []
+      status: done
+      issue_ref: null
+      affected_scope: null
+      retro_type: null
+      created_at: "2026-03-18T06:22:12+00:00"
+    - ref: discovery-retro-1773815485
+      title: Re-run M2 workspace filtering (changes lost from worktree cleanup)
+      description: M2 workspace filtering issues (issue-2-1, issue-2-3, issue-2-2) had their debate changes lost when worktrees were cleaned up without committing. The debates ran successfully (ACCEPT verdicts) but the code changes were never committed to branches. M2 needs to be re-run with proper commit-before-cleanup flow.
+      category: bug
+      severity: critical
+      source: retro
+      context:
+        milestone: 2
+        issue: null
+        debate: null
+      pairs:
+        - tui-visualization
+        - api-contracts
+      status: done
+      issue_ref: null
+      affected_scope: M2 workspace filtering
+      retro_type: null
+      created_at: "2026-03-18T06:31:25+00:00"
