@@ -335,17 +335,34 @@ func TestEpicScreenRenderIssuePhaseSymbols(t *testing.T) {
 	}
 }
 
-// --- 14. Regression warning in rendered output ---
+// --- 14. Regression budget column in rendered output ---
 
-func TestEpicScreenRenderRegressionWarning(t *testing.T) {
+func TestEpicScreenRenderRegressionBudgetColumn(t *testing.T) {
 	store := testStoreWithEpicAndIssues()
 	es := NewEpicScreen(store)
 
 	el := es.Render(nil)
 	text := collectAllText(el)
-	// M1 has regressions=2, should show regression indicator
-	if !strings.Contains(text, "↻2") {
-		t.Fatalf("expected regression indicator ↻2, got: %q", text)
+	// Header should contain "Reg"
+	if !strings.Contains(text, "Reg") {
+		t.Fatalf("expected 'Reg' header in output, got: %q", text)
+	}
+	// M1: regressions=2, max_regressions=2 -> "2/2"
+	if !strings.Contains(text, "2/2") {
+		t.Fatalf("expected regression budget '2/2' in output, got: %q", text)
+	}
+}
+
+func TestEpicScreenRenderRegressionBudgetDefault(t *testing.T) {
+	// Milestone with no MaxRegressions set defaults to /2
+	store := testStoreWithEpic()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// All milestones have 0 regressions and default max=2 -> "0/2"
+	if !strings.Contains(text, "0/2") {
+		t.Fatalf("expected default budget '0/2' in output, got: %q", text)
 	}
 }
 

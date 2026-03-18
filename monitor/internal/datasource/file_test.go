@@ -248,13 +248,17 @@ func TestFileDataSource_Plan(t *testing.T) {
 		t.Fatalf("Plan() error: %v", err)
 	}
 
-	plan, ok := result.(*parser.Plan)
+	resp, ok := result.(*PlanResponse)
 	if !ok {
-		t.Fatalf("expected *parser.Plan, got %T", result)
+		t.Fatalf("expected *PlanResponse, got %T", result)
 	}
 
-	if plan.Epic.Name != "ratchet-monitor" {
-		t.Errorf("Epic.Name: got %q, want %q", plan.Epic.Name, "ratchet-monitor")
+	if resp.Epic.Name != "ratchet-monitor" {
+		t.Errorf("Epic.Name: got %q, want %q", resp.Epic.Name, "ratchet-monitor")
+	}
+	// workflow.yaml in setupTestDir has no max_regressions → defaults to 2
+	if resp.MaxRegressions != 2 {
+		t.Errorf("MaxRegressions: got %d, want 2", resp.MaxRegressions)
 	}
 }
 
@@ -546,21 +550,24 @@ func TestFileDataSource_Pairs_PermissionDenied(t *testing.T) {
 }
 
 // TestFileDataSource_Plan_MissingFile verifies that Plan() returns a zero-value
-// Plan (not an error) when plan.yaml does not exist.
+// PlanResponse (not an error) when plan.yaml does not exist.
 func TestFileDataSource_Plan_MissingFile(t *testing.T) {
-	dir := t.TempDir() // no plan.yaml
+	dir := t.TempDir() // no plan.yaml, no workflow.yaml
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Plan()
 	if err != nil {
-		t.Fatalf("Plan() should return zero-value Plan for missing plan.yaml, got error: %v", err)
+		t.Fatalf("Plan() should return zero-value PlanResponse for missing plan.yaml, got error: %v", err)
 	}
-	plan, ok := result.(*parser.Plan)
+	resp, ok := result.(*PlanResponse)
 	if !ok {
-		t.Fatalf("expected *parser.Plan, got %T", result)
+		t.Fatalf("expected *PlanResponse, got %T", result)
 	}
-	if plan.Epic.Name != "" {
-		t.Errorf("expected empty epic name for missing plan.yaml, got %q", plan.Epic.Name)
+	if resp.Epic.Name != "" {
+		t.Errorf("expected empty epic name for missing plan.yaml, got %q", resp.Epic.Name)
+	}
+	if resp.MaxRegressions != 2 {
+		t.Errorf("MaxRegressions: got %d, want 2 (default)", resp.MaxRegressions)
 	}
 }
 
@@ -875,10 +882,17 @@ func TestFileDataSource_Plan_V2WithIssues(t *testing.T) {
 		t.Fatalf("Plan() error: %v", err)
 	}
 
-	plan, ok := result.(*parser.Plan)
+	resp, ok := result.(*PlanResponse)
 	if !ok {
-		t.Fatalf("expected *parser.Plan, got %T", result)
+		t.Fatalf("expected *PlanResponse, got %T", result)
 	}
+
+	// No workflow.yaml in this dir → defaults to 2.
+	if resp.MaxRegressions != 2 {
+		t.Errorf("MaxRegressions: got %d, want 2 (default)", resp.MaxRegressions)
+	}
+
+	plan := resp.Plan
 
 	// Verify v2 milestone fields.
 	if len(plan.Epic.Milestones) != 2 {
@@ -914,6 +928,46 @@ func TestFileDataSource_Plan_V2WithIssues(t *testing.T) {
 	}
 	if len(m2.Issues[1].DependsOn) != 1 || m2.Issues[1].DependsOn[0] != "issue-2-1" {
 		t.Errorf("issue-2-2 depends_on: got %v, want [issue-2-1]", m2.Issues[1].DependsOn)
+	}
+}
+
+// TestFileDataSource_Plan_MaxRegressionsFromWorkflow verifies that Plan()
+// reads max_regressions from workflow.yaml and includes it in PlanResponse.
+func TestFileDataSource_Plan_MaxRegressionsFromWorkflow(t *testing.T) {
+	dir := t.TempDir()
+
+	workflow := `version: 2
+max_rounds: 3
+escalation: human
+max_regressions: 5
+`
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+
+	plan := `epic:
+  name: test-epic
+  milestones:
+    - id: 1
+      name: M1
+      status: in_progress
+      regressions: 3
+`
+	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644)
+
+	ds := NewFileDataSource(dir)
+	result, err := ds.Plan()
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	resp, ok := result.(*PlanResponse)
+	if !ok {
+		t.Fatalf("expected *PlanResponse, got %T", result)
+	}
+	if resp.MaxRegressions != 5 {
+		t.Errorf("MaxRegressions: got %d, want 5", resp.MaxRegressions)
+	}
+	if resp.Epic.Milestones[0].Regressions != 3 {
+		t.Errorf("milestone regressions: got %d, want 3", resp.Epic.Milestones[0].Regressions)
 	}
 }
 

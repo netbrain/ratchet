@@ -218,8 +218,9 @@ func (es *EpicScreen) buildHeaderRow(cols int) *tui.Element {
 	layerEl := tui.New(tui.WithText("L"), tui.WithTextStyle(style), tui.WithWidth(3))
 	nameEl := tui.New(tui.WithText("Milestone"), tui.WithTextStyle(style), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText("Status"), tui.WithTextStyle(style), tui.WithWidth(14))
+	regEl := tui.New(tui.WithText("Reg"), tui.WithTextStyle(style), tui.WithWidth(8))
 
-	row.AddChild(idEl, layerEl, nameEl, statusEl)
+	row.AddChild(idEl, layerEl, nameEl, statusEl, regEl)
 
 	if cols >= 6 {
 		for _, phase := range []string{"plan", "test", "build"} {
@@ -268,26 +269,27 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 	}
 	layerEl := tui.New(tui.WithText(layerSymbol), tui.WithTextStyle(baseStyle), tui.WithWidth(3))
 
-	// Add regression indicator to milestone name if regressions > 0
-	nameText := m.Name
-	nameStyle := baseStyle
-	if m.Regressions > 0 {
-		nameText = fmt.Sprintf("%s [↻%d]", m.Name, m.Regressions)
-		warnLevel := es.vm.RegressionWarningLevel(m)
-		switch warnLevel {
-		case "danger":
-			nameStyle = tui.NewStyle().Foreground(tui.Red).Bold()
-		case "warn":
-			nameStyle = tui.NewStyle().Foreground(tui.Yellow)
-		}
-		if selected {
-			nameStyle = nameStyle.Reverse()
-		}
-	}
-	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(nameStyle), tui.WithFlexGrow(1))
+	nameEl := tui.New(tui.WithText(m.Name), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText(m.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
-	row.AddChild(idEl, layerEl, nameEl, statusEl)
+	// Regression budget cell: "X/Y" with color coding
+	regText := es.vm.RegressionBudgetText(m)
+	var regColor tui.Color
+	switch es.vm.RegressionWarningLevel(m) {
+	case "danger":
+		regColor = tui.Red
+	case "warn":
+		regColor = tui.Yellow
+	default:
+		regColor = tui.Green
+	}
+	regStyle := tui.NewStyle().Foreground(regColor)
+	if selected {
+		regStyle = regStyle.Reverse()
+	}
+	regEl := tui.New(tui.WithText(regText), tui.WithTextStyle(regStyle), tui.WithWidth(8))
+
+	row.AddChild(idEl, layerEl, nameEl, statusEl, regEl)
 
 	if cols >= 6 {
 		for _, phase := range phases[:3] {
@@ -362,7 +364,10 @@ func (es *EpicScreen) buildIssueRow(cols int, iss views.IssueStatus, phases []st
 	// Issue status
 	statusEl := tui.New(tui.WithText(iss.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
-	row.AddChild(refEl, spacerEl, titleEl, statusEl)
+	// Empty spacer for Reg column alignment
+	regSpacerEl := tui.New(tui.WithText(""), tui.WithWidth(8))
+
+	row.AddChild(refEl, spacerEl, titleEl, statusEl, regSpacerEl)
 
 	// Phase indicators
 	if cols >= 6 {

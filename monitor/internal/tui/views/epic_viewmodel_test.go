@@ -770,6 +770,41 @@ func TestEpicMilestoneNoIssues(t *testing.T) {
 	}
 }
 
+// ── Regression budget text ───────────────────────────────────────────────
+
+func TestRegressionBudgetText(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1: regressions=1, max=3 -> "1/3"
+	if got := vm.RegressionBudgetText(ms[0]); got != "1/3" {
+		t.Errorf("M1 RegressionBudgetText = %q, want 1/3", got)
+	}
+	// M2: regressions=2, max=2 -> "2/2"
+	if got := vm.RegressionBudgetText(ms[1]); got != "2/2" {
+		t.Errorf("M2 RegressionBudgetText = %q, want 2/2", got)
+	}
+}
+
+func TestRegressionBudgetTextDefaultMax(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// MaxRegressions=0 -> defaults to 2; regressions=0 -> "0/2"
+	if got := vm.RegressionBudgetText(ms[0]); got != "0/2" {
+		t.Errorf("default max RegressionBudgetText = %q, want 0/2", got)
+	}
+}
+
+func TestRegressionBudgetTextNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	// nil receiver uses default max=2
+	if got := vm.RegressionBudgetText(views.MilestoneStatus{}); got != "0/2" {
+		t.Errorf("nil receiver RegressionBudgetText = %q, want 0/2", got)
+	}
+}
+
 // ── Regression budget warning (Issue 32) ─────────────────────────────────
 
 func TestRegressionWarningLevelNone(t *testing.T) {

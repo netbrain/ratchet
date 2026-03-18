@@ -326,15 +326,21 @@ func (f *FileDataSource) Scores(pair string) (any, error) {
 	return entries, nil
 }
 
-// Plan reads and parses plan.yaml.
-// Returns a zero-value Plan when plan.yaml is missing.
+// PlanResponse wraps the parsed plan with the global regression budget from workflow.yaml.
+type PlanResponse struct {
+	*parser.Plan
+	MaxRegressions int `json:"max_regressions"`
+}
+
+// Plan reads and parses plan.yaml, enriched with max_regressions from workflow.yaml.
+// Returns a zero-value PlanResponse when plan.yaml is missing.
 // Real I/O errors (e.g., permission denied) are still propagated.
 func (f *FileDataSource) Plan() (any, error) {
 	data, err := os.ReadFile(filepath.Join(f.rootDir, "plan.yaml"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			slog.Debug("plan.yaml not found, returning zero-value Plan")
-			return &parser.Plan{}, nil
+			slog.Debug("plan.yaml not found, returning zero-value PlanResponse")
+			return &PlanResponse{Plan: &parser.Plan{}, MaxRegressions: 2}, nil
 		}
 		return nil, fmt.Errorf("read plan.yaml: %w", err)
 	}
@@ -342,7 +348,16 @@ func (f *FileDataSource) Plan() (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse plan.yaml: %w", err)
 	}
-	return plan, nil
+
+	maxRegressions := 2 // default when workflow.yaml absent or unparseable
+	wfData, wfErr := os.ReadFile(filepath.Join(f.rootDir, "workflow.yaml"))
+	if wfErr == nil {
+		if wf, wfErr := parser.ParseWorkflow(wfData); wfErr == nil {
+			maxRegressions = wf.MaxRegressions
+		}
+	}
+
+	return &PlanResponse{Plan: plan, MaxRegressions: maxRegressions}, nil
 }
 
 // StatusInfo summarizes the current milestone, issue, and phase.

@@ -529,9 +529,13 @@
             background: rgba(239,68,68,0.2);
             color: var(--red);
         }
+        .regression-counter.caution {
+            background: rgba(234,179,8,0.15);
+            color: var(--yellow);
+        }
         .regression-counter.ok {
-            background: rgba(107,114,128,0.15);
-            color: var(--gray);
+            background: rgba(34,197,94,0.15);
+            color: var(--green);
         }
 
         /* Issue rows */
@@ -823,9 +827,8 @@
                                                   :class="'badge-' + (ms.status || 'pending')"
                                                   x-text="ms.status || 'pending'"></span>
                                             <span class="regression-counter"
-                                                  :class="(ms.regressions || 0) > 0 ? 'warn' : 'ok'"
-                                                  x-show="ms.regressions != null">
-                                                <span x-text="ms.regressions || 0"></span> regressions
+                                                  :class="regressionClass(ms.regressions || 0, plan.max_regressions ?? 2)">
+                                                Regressions: <span x-text="(ms.regressions || 0) + '/' + (plan.max_regressions ?? 2)"></span>
                                             </span>
                                             <template x-if="ms.depends_on && ms.depends_on.length > 0">
                                                 <span class="ms-deps">
@@ -1532,6 +1535,12 @@
                     month: 'short', day: 'numeric',
                     hour: '2-digit', minute: '2-digit'
                 });
+            },
+
+            regressionClass(regressions, max) {
+                if (regressions <= 0) return 'ok';
+                if (regressions >= max) return 'warn';
+                return 'caution';
             },
         };
     }

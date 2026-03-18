@@ -104,6 +104,7 @@ func newMockDS_V2() *mockDataSource {
 			"debate-v2-1": map[string]string{"id": "debate-v2-1", "status": "consensus", "pair": "api-contracts"},
 		},
 		plan: map[string]any{
+			"max_regressions": 5,
 			"epic": map[string]any{
 				"name":        "test-epic",
 				"description": "Testing v2 plan",
@@ -833,6 +834,15 @@ func TestPlanHandler_V2Plan(t *testing.T) {
 	}
 	if focus["issue_ref"] != "issue-2-1" {
 		t.Errorf("current_focus issue_ref: got %q, want %q", focus["issue_ref"], "issue-2-1")
+	}
+
+	// Check max_regressions is present and correct at the top level.
+	maxReg, ok := response["max_regressions"].(float64)
+	if !ok {
+		t.Fatalf("max_regressions missing or wrong type: got %T (%v)", response["max_regressions"], response["max_regressions"])
+	}
+	if maxReg != 5 {
+		t.Errorf("max_regressions: got %v, want 5", maxReg)
 	}
 }
 

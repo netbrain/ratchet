@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"maps"
 
 	"github.com/netbrain/ratchet-monitor/internal/tui/client"
@@ -110,6 +111,15 @@ func (vm *EpicViewModel) CurrentFocus() *client.CurrentFocus {
 		return nil
 	}
 	return vm.plan.Epic.CurrentFocus
+}
+
+// RegressionBudgetText returns the formatted regression budget string "X/Y".
+func (vm *EpicViewModel) RegressionBudgetText(m MilestoneStatus) string {
+	maxReg := m.MaxRegressions
+	if maxReg <= 0 {
+		maxReg = 2 // default budget
+	}
+	return fmt.Sprintf("%d/%d", m.Regressions, maxReg)
 }
 
 // RegressionWarningLevel returns the warning level for a milestone's regressions.
