@@ -393,3 +393,76 @@ func TestEpicScreenRenderIssueTreeConnector(t *testing.T) {
 		t.Fatalf("expected issue tree connector ├─ in output, got: %q", text)
 	}
 }
+
+// --- 17. DAG layer separator row ---
+
+func TestEpicScreenRenderLayerSeparator(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M2 is in Layer 1; a separator row "Layer 1" should appear between M1 and M2
+	if !strings.Contains(text, "Layer 1") {
+		t.Fatalf("expected layer separator 'Layer 1' in output, got: %q", text)
+	}
+	// Connector symbol │ should appear in the separator
+	if !strings.Contains(text, "│") {
+		t.Fatalf("expected box-drawing │ in layer separator, got: %q", text)
+	}
+}
+
+// --- 18. BLOCKED indicator ---
+
+func TestEpicScreenRenderBlockedIndicator(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M2 depends on M1 (in_progress, not done) → should show BLOCKED
+	if !strings.Contains(text, "BLOCKED") {
+		t.Fatalf("expected 'BLOCKED' indicator for M2 in output, got: %q", text)
+	}
+	// BLOCKED symbol ⊘ should also appear
+	if !strings.Contains(text, "⊘") {
+		t.Fatalf("expected ⊘ symbol in BLOCKED indicator, got: %q", text)
+	}
+}
+
+// --- 19. No layer separator when all milestones share the same layer ---
+
+func TestEpicScreenNoLayerSeparatorSameLayer(t *testing.T) {
+	// testStoreWithEpic() has 4 milestones all with no DependsOn → all layer 0
+	store := testStoreWithEpic()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// No milestone is in a higher layer, so no layer separator row should appear.
+	// Separators use the format "── Layer N ──"; the header line uses "Layer 0" but not "── Layer".
+	if strings.Contains(text, "── Layer") {
+		t.Fatalf("expected no layer separator row when all milestones share layer 0, got: %q", text)
+	}
+}
+
+func TestEpicScreenRenderNoBlockedWhenDepDone(t *testing.T) {
+	s := state.NewStore()
+	s.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "pending", DependsOn: []int{1}},
+			},
+		},
+	})
+	es := NewEpicScreen(s)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M1 is done → M2 is not blocked
+	if strings.Contains(text, "BLOCKED") {
+		t.Fatalf("expected no 'BLOCKED' when dep is done, got: %q", text)
+	}
+}

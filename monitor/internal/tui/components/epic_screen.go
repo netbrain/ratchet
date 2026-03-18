@@ -155,12 +155,12 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 		m := milestones[i]
 		selected := i == es.vm.SelectedIndex()
 
-		// DAG connector row between layers
-		if i > 0 && m.Layer > milestones[i-1].Layer && len(m.DependsOn) > 0 {
+		// DAG layer separator row between layers
+		if i > 0 && m.Layer > milestones[i-1].Layer {
 			if rowsRendered >= maxRows {
 				break
 			}
-			connectorText := "  │"
+			connectorText := fmt.Sprintf("  │  ── Layer %d ──", m.Layer)
 			connectorEl := tui.New(
 				tui.WithText(connectorText),
 				tui.WithTextStyle(tui.NewStyle().Foreground(tui.ANSIColor(243))),
@@ -269,7 +269,11 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 	}
 	layerEl := tui.New(tui.WithText(layerSymbol), tui.WithTextStyle(baseStyle), tui.WithWidth(3))
 
-	nameEl := tui.New(tui.WithText(m.Name), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
+	nameText := m.Name
+	if es.vm.IsBlocked(m) {
+		nameText = m.Name + " ⊘ BLOCKED"
+	}
+	nameEl := tui.New(tui.WithText(nameText), tui.WithTextStyle(baseStyle), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText(m.Status), tui.WithTextStyle(baseStyle), tui.WithWidth(14))
 
 	// Regression budget cell: "X/Y" with color coding

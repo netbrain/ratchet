@@ -917,3 +917,70 @@ func TestDAGPrefixNilReceiver(t *testing.T) {
 		t.Error("nil receiver DAGPrefix should return empty string")
 	}
 }
+
+// ── IsBlocked ─────────────────────────────────────────────────────────────
+
+func TestIsBlockedNoDeps(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M1 has no deps — never blocked
+	if vm.IsBlocked(ms[0]) {
+		t.Error("M1 has no deps, should not be blocked")
+	}
+}
+
+func TestIsBlockedTrue(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M2 depends on M1 which is "in_progress" (not done) → blocked
+	if !vm.IsBlocked(ms[1]) {
+		t.Error("M2 should be blocked: dep M1 is in_progress")
+	}
+}
+
+func TestIsBlockedFalseWhenDepDone(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "pending", DependsOn: []int{1}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M2 depends on M1 which is "done" → not blocked
+	if vm.IsBlocked(ms[1]) {
+		t.Error("M2 should not be blocked: dep M1 is done")
+	}
+}
+
+func TestIsBlockedNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.IsBlocked(views.MilestoneStatus{DependsOn: []int{1}}) {
+		t.Error("nil receiver IsBlocked should return false")
+	}
+}
+
+func TestIsBlockedDoneMilestoneNotBlocked(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "in_progress"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+	// M2 is "done" — should never show as blocked even though dep M1 is not done
+	if vm.IsBlocked(ms[1]) {
+		t.Error("done milestone should not be blocked even if dep is not done")
+	}
+}

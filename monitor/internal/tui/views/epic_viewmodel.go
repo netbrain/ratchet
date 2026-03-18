@@ -312,6 +312,26 @@ func (vm *EpicViewModel) DAGPrefix(m MilestoneStatus) string {
 	return "└─" // dependent node
 }
 
+// IsBlocked returns true if the milestone has unmet dependencies (any dep not "done").
+func (vm *EpicViewModel) IsBlocked(m MilestoneStatus) bool {
+	if vm == nil || len(m.DependsOn) == 0 {
+		return false
+	}
+	if m.Status == "done" {
+		return false
+	}
+	statusByID := make(map[int]string, len(vm.milestones))
+	for _, ms := range vm.milestones {
+		statusByID[ms.ID] = ms.Status
+	}
+	for _, depID := range m.DependsOn {
+		if statusByID[depID] != "done" {
+			return true
+		}
+	}
+	return false
+}
+
 func (vm *EpicViewModel) clampSelection() {
 	n := len(vm.milestones)
 	if n == 0 {
