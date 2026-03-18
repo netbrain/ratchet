@@ -47,6 +47,11 @@
         "options": {
           "type": "object",
           "description": "Adapter-specific configuration options (e.g., repo owner, project ID)"
+        },
+        "publish_debates": {
+          "enum": [false, "per-round", "summary"],
+          "default": false,
+          "description": "Publish debate transcripts as GitHub issue comments. false (default) — no publishing. per-round — post a comment after each agent completes a round. summary — post one consolidated comment when the debate finishes. Silent no-op when adapter is not github-issues; a runtime warning is emitted when this is non-false and adapter is not github-issues."
         }
       },
       "required": ["adapter"]

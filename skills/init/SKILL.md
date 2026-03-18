@@ -235,7 +235,16 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 - Question: "How do you want to track milestone progress?"
 - Options: `"None (just local)"`, `"Markdown files in .ratchet/progress/"`, `"GitHub Issues (requires gh CLI)"`, `"Other / configure later"`
 
-**6f. Final review** — only after walking through each area, present the complete config for approval:
+**6f. Debate publishing (only when adapter is `github-issues`):** After the user selects `"GitHub Issues"` in Step 6e, immediately ask a follow-up using `AskUserQuestion`:
+- Question: "Publish debate rounds as GitHub issue comments?"
+- Options:
+  - `"No (default — debates stay local)"` — sets `publish_debates: false`
+  - `"Yes — post each round as a comment (per-round)"` — sets `publish_debates: per-round`
+  - `"Yes — post a summary when debates conclude (summary)"` — sets `publish_debates: summary`
+
+Skip this step entirely if the adapter selected in Step 6e is anything other than `github-issues` (i.e., `none`, `markdown`, `linear`, or `jira`).
+
+**6g. Final review** — only after walking through each area, present the complete config for approval:
 - Question: "[full formatted config]. Everything look right?"
 - Options: `"Approve (Recommended)"`, `"Modify [section]"`, `"Start over"`
 
@@ -333,6 +342,12 @@ escalation: human  # human | tiebreaker | both
 
 progress:
   adapter: none  # none | markdown | github-issues | linear | jira
+  # publish_debates: false  # Only valid when adapter is github-issues.
+  #   false (default) — debates stay local
+  #   per-round       — post each debate round as a GitHub issue comment
+  #   summary         — post a summary comment when the debate concludes
+  # WARNING: If publish_debates is non-false and adapter is not github-issues,
+  # ratchet:run will emit a warning and treat it as false.
 
 components:
   - name: <component-name>
@@ -348,6 +363,23 @@ pairs:
   # ... more pairs
 
 guards: []  # populated based on testing spec
+```
+
+**`publish_debates` field generation rule:** When writing `.ratchet/workflow.yaml`, apply this logic:
+- If `progress.adapter` is `github-issues` AND the user selected `per-round` or `summary` in Step 6f: write `publish_debates: per-round` or `publish_debates: summary` (respectively) as a field under `progress`.
+- Otherwise: omit `publish_debates` entirely (absence equals the default of `false`).
+
+Example when user chose `per-round`:
+```yaml
+progress:
+  adapter: github-issues
+  publish_debates: per-round
+```
+
+Example when user chose `none` or any adapter other than `github-issues`:
+```yaml
+progress:
+  adapter: none
 ```
 
 Create the `.ratchet/` directory structure:
@@ -403,6 +435,7 @@ IMPORTANT:
 - Adversarial agents must know the exact validation commands available in this project
 - Scope each pair to specific file globs — tight scope leads to deep analysis
 - **Guilty until proven innocent**: Both generative and adversarial agent prompts MUST encode the principle that test failures on a PR branch are caused by the PR unless definitively proven otherwise. Generative agents must fix failures, not dismiss them. Adversarial agents must reject dismissals that lack evidence of the failure existing on master.
+- **`publish_debates` runtime warning**: When `/ratchet:run` processes a workflow where `publish_debates` is `per-round` or `summary` but `progress.adapter` is NOT `github-issues`, it MUST emit a warning to stderr and treat `publish_debates` as `false`. This is a misconfiguration — `publish_debates` only applies to the `github-issues` adapter. The init skill prevents this by only asking the question when the adapter is `github-issues`, but the warning provides a safety net for manually edited configs.
 
 ### Step 9: Verify Output
 

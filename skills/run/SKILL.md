@@ -292,6 +292,18 @@ Determine which `.ratchet/` directory to use:
 
 Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the resolved `.ratchet/` directory.
 
+**`publish_debates` validation**: After reading `workflow.yaml`, check for misconfiguration:
+```bash
+adapter=$(yq eval '.progress.adapter // "none"' .ratchet/workflow.yaml)
+publish_debates=$(yq eval '.progress.publish_debates // false' .ratchet/workflow.yaml)
+
+if [ "$publish_debates" != "false" ] && [ "$adapter" != "github-issues" ]; then
+  echo "Warning: publish_debates is set to '${publish_debates}' but progress.adapter is '${adapter}'. publish_debates only applies to the github-issues adapter. Treating publish_debates as false for this run." >&2
+  publish_debates=false
+fi
+```
+This is a misconfiguration safety net — the init interview only asks about `publish_debates` when the adapter is `github-issues`, but manually edited configs may set it incorrectly. The warning is advisory only; the run continues with `publish_debates` treated as `false`.
+
 Build a picture of:
 - Which milestones are **completed** (status: done)
 - Which milestones are **current** (status: in_progress)
