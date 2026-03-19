@@ -95,6 +95,37 @@ For each agent (analyst, debate-runner, tiebreaker):
 - [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
 - [ ] **Fix completeness declaration (new - from review suggestion 6)**: Verify the generative included an explicit fix tally at the end of their round: "N issues identified, M fixed, K deferred." If missing, or if the count doesn't match what you observe in the diff, REJECT. This prevents silent omissions.
 
+## Baseline Validation State (Injected at Spawn Time)
+
+The debate-runner injects live validation output here when spawning this agent.
+This section documents the injection spec — the actual output appears in the
+spawn prompt, not in this static file.
+
+**Why not $() in this file**: $() blocks only expand in slash commands loaded
+at session start. This file is loaded via the Agent tool at runtime, where $()
+is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
+
+**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+```bash
+# Verify agent files parse as valid markdown (check they exist and are readable)
+ls agents/*.md 2>&1 | tail -30
+
+# Verify pair definitions exist
+ls .ratchet/pairs/*/adversarial.md .ratchet/pairs/*/generative.md 2>&1 | tail -30
+
+# Verify debate metadata structure
+cat .ratchet/debates/*/meta.json | jq 'keys' 2>&1 | tail -30
+```
+
+**How to use the injected baseline**:
+- If baseline shows files were already missing → generative must not make it worse
+- If baseline shows clean state → any new error (missing file, broken reference) is a REJECT
+- If baseline is absent → run the commands above yourself to establish current state
+
+**Live validation during rounds still applies** — run cross-reference checks and
+tool list verification yourself each round. The baseline supplements (does not
+replace) live validation.
+
 ## Cross-Reference Validation (Always Run) - ENHANCED
 
 Before accepting ANY agent, verify external dependencies and format compatibility:

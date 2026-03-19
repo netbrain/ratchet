@@ -161,6 +161,34 @@ grep -r "$field.*value\|$field.*option" agents/ skills/ pairs/
 
 **REJECT immediately if any enum is incomplete.** This is non-negotiable.
 
+## Baseline Validation State (Injected at Spawn Time)
+
+The debate-runner injects live validation output here when spawning this agent.
+This section documents the injection spec — the actual output appears in the
+spawn prompt, not in this static file.
+
+**Why not $() in this file**: $() blocks only expand in slash commands loaded
+at session start. This file is loaded via the Agent tool at runtime, where $()
+is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
+
+**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+```bash
+# Schema syntax validity — captures pre-change parse state
+jq empty schemas/workflow.schema.json 2>&1 | tail -30
+
+# Real config validation against schema — captures pre-change compliance state
+nix develop --command bash -c 'yq -o=json .ratchet/workflow.yaml | jq empty' 2>&1 | tail -30
+```
+
+**How to use the injected baseline**:
+- If baseline shows schema was already invalid → generative must prove their
+  changes didn't make it worse; fix pre-existing issues too
+- If baseline shows zero errors → any new error is a REJECT
+- If baseline is absent → run `jq empty schemas/workflow.schema.json` yourself
+
+**Live validation during rounds still applies** — run jq/yq commands yourself
+each round. The baseline supplements (does not replace) live validation.
+
 ## Validation Commands
 
 **Check syntax**:

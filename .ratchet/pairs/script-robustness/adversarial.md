@@ -112,6 +112,35 @@ For each script, verify:
 **Examples must be runnable (8 occurrences - 62% of debates):**
 - [ ] Ensure usage examples are concrete and runnable, not abstract
 
+## Baseline Validation State (Injected at Spawn Time)
+
+The debate-runner injects live validation output here when spawning this agent.
+This section documents the injection spec — the actual output appears in the
+spawn prompt, not in this static file.
+
+**Why not $() in this file**: $() blocks only expand in slash commands loaded
+at session start. This file is loaded via the Agent tool at runtime, where $()
+is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
+
+**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+```bash
+# Shellcheck — captures pre-change violation state
+nix develop --command shellcheck scripts/**/*.sh install.sh 2>&1 | tail -30
+
+# Checkbashisms — captures pre-change portability state (sh scripts only)
+checkbashisms scripts/*.sh 2>&1 | grep -v "does not appear to have a #! interpreter line" | tail -30
+```
+
+**How to use the injected baseline**:
+- If baseline shows shellcheck was already failing → generative must prove their
+  changes didn't make it worse, not just that it passes now
+- If baseline shows zero violations → any new violation is a REJECT
+- If baseline is absent (debate-runner didn't inject) → treat as unknown; run
+  shellcheck yourself to establish current state
+
+**Live validation during rounds still applies** — run shellcheck and checkbashisms
+yourself each round. The baseline supplements (does not replace) live validation.
+
 ## Pre-Debate Verification (Run FIRST)
 
 **CRITICAL**: Before reviewing any scripts, verify shellcheck guard passed:
