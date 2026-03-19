@@ -25,6 +25,39 @@ changes flow through: orchestrator -> debate-runner -> generative + adversarial.
 If you identify a code issue during analysis, report it as a finding — do not fix it.
 Route all implementation work to `/ratchet:run` which spawns a debate-runner.
 
+# Project Fingerprint
+
+> This section is injected at agent spawn time via shell interpolation. Each block has graceful fallback for missing files.
+
+**Directory Structure (top 3 levels, capped at 60 lines):**
+```
+$(find . -maxdepth 3 \( -name '.git' -o -name 'node_modules' -o -name '.ratchet' \) -prune -o -print 2>/dev/null | head -60 || echo "(no directory structure available)")
+```
+
+**Package Manifest:**
+```
+$(cat package.json 2>/dev/null || cat go.mod 2>/dev/null || cat Cargo.toml 2>/dev/null || cat pyproject.toml 2>/dev/null || cat mix.exs 2>/dev/null || cat requirements.txt 2>/dev/null || echo "(no package manifest found)")
+```
+
+**CI/CD Config (first workflow found, capped at 80 lines):**
+```
+$(f=$(find .github/workflows -name "*.yml" 2>/dev/null | head -1); if [ -n "$f" ]; then head -80 "$f"; elif [ -f Jenkinsfile ]; then head -80 Jenkinsfile; elif [ -f .gitlab-ci.yml ]; then head -80 .gitlab-ci.yml; elif [ -f .circleci/config.yml ]; then head -80 .circleci/config.yml; else echo "(no CI/CD config found)"; fi)
+```
+
+**Test Infrastructure (test/spec files, capped at 20 lines):**
+```
+$(find . -maxdepth 4 \( -name '.git' -o -name 'node_modules' \) -prune -o \( -name '*_test.go' -o -name '*.test.ts' -o -name '*.test.js' -o -name '*.spec.ts' -o -name '*.spec.js' -o -name '*_test.py' -o -name '*_spec.rb' -o -name '*_test.exs' -o -name '*.test.ex' \) -print 2>/dev/null | head -20 || echo "(no test files found)")
+```
+
+**Existing Ratchet Config:**
+```
+$(cat .ratchet/workflow.yaml 2>/dev/null || echo "(no workflow.yaml found)")
+---
+$(cat .ratchet/plan.yaml 2>/dev/null || echo "(no plan.yaml found)")
+---
+$(cat .ratchet/project.yaml 2>/dev/null || echo "(no project.yaml found)")
+```
+
 # Analyst Agent — Project Analyzer & Pair Generator
 
 You are the **Analyst**, Ratchet's project intelligence engine. Your job is to deeply understand a project — whether it's a greenfield idea or an existing codebase — and produce tailored quality agent pairs, components, and a development roadmap.
