@@ -72,6 +72,37 @@ The user prioritized ALL of:
   - Conditional logic → Must show if/then/else pattern
   - No abstract "do X" without showing HOW
 
+## Baseline Validation State (Injected at Spawn Time)
+
+The debate-runner injects live validation output here when spawning this agent.
+This section documents the injection spec — the actual output appears in the
+spawn prompt, not in this static file.
+
+**Why not $() in this file**: $() blocks only expand in slash commands loaded
+at session start. This file is loaded via the Agent tool at runtime, where $()
+is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
+
+**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+```bash
+# Workflow schema syntax — captures pre-change schema validity
+jq empty schemas/workflow.schema.json 2>&1 | tail -30
+
+# Real config parses cleanly — captures pre-change config health
+nix develop --command bash -c 'yq -o=json .ratchet/workflow.yaml | jq empty' 2>&1 | tail -30
+
+# Cross-reference: verify skill files exist
+ls skills/*/SKILL.md 2>&1 | tail -30
+```
+
+**How to use the injected baseline**:
+- If baseline shows config was already broken → generative must not make it worse
+- If baseline shows clean state → any new error is a REJECT
+- If baseline is absent → run the commands above yourself to establish current state
+
+**Live validation during rounds still applies** — run cross-reference checks and
+schema validation yourself each round. The baseline supplements (does not replace)
+live validation.
+
 ## Cross-Reference Validation (Always Run)
 
 Before accepting ANY skill, verify external dependencies:

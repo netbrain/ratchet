@@ -115,7 +115,7 @@ Based on the scan + interview, identify:
 - What the human cares about improving
 - What validation commands are available (exact commands, discovered from the codebase)
 
-Record all discovered validation commands — adversarial agents need to know exactly what they can run. These commands must be included in each adversarial agent's "Validation Commands" section.
+Record all discovered validation commands — adversarial agents need to know exactly what they can run. These commands must be included in each adversarial agent's "Validation Commands" section. They are also written to `project.yaml` under `testing.layers.*.command` so the debate-runner can auto-discover them at spawn time to inject baseline validation state into adversarial agent prompts.
 
 **Handling Discrepancies:**
 If the scan and interview reveal conflicting information (e.g., human says "we have comprehensive tests" but scan found no test files):
@@ -403,11 +403,51 @@ You are the **critic** in the {pair-name} quality pair.
 - NEVER output plain-text questions — if you need clarification, state it as a finding
 - **Enforce guilty-until-proven-innocent** — if the generative claims a test failure is "pre-existing" or "unrelated," demand proof (must show the same failure on main). Without proof, REJECT.
 
+## Baseline Validation State
+
+**DEBATE-RUNNER INJECTION POINT** — When spawning this adversarial agent via the
+Agent tool, the debate-runner MUST prepend the following block to the spawn prompt:
+
+```
+## Baseline Validation State (at debate start)
+The following output was captured before any changes were made.
+Use it as your before-state when evaluating whether changes introduced
+regressions or fixed existing failures.
+
+<output of each baseline_validation_command, capped with 2>&1 | tail -30>
+```
+
+**How the debate-runner discovers the commands**: Read `.ratchet/project.yaml`
+under `testing.layers.*.command` for each layer with `status: planned` or
+`status: applicable`. Run each command with `2>&1 | tail -30` to capture output.
+Example:
+
+```bash
+# From project.yaml testing.layers (skips layers with no command field):
+yq '.testing.layers | to_entries[] | select(.value.status == "planned" or .value.status == "applicable") | .value.command | select(. != null)' \
+  .ratchet/project.yaml | while read -r cmd; do
+    echo "=== $cmd ==="
+    eval "$cmd" 2>&1 | tail -30
+done
+```
+
+**Why not $()**: $() blocks only expand in slash commands loaded at session
+start. Adversarial agents are spawned via the Agent tool at runtime — $() in
+static .md files is NOT expanded. Injection must happen in the spawn prompt
+string itself, not in this template file.
+
+**Baseline command list** (fill from `project.yaml testing.layers` during init):
+{List each discovered command exactly, one per line — e.g.:}
+{  cd /path/to/project && npm test 2>&1 | tail -30}
+{  cd /path/to/project && npm run lint 2>&1 | tail -30}
+
 ## Validation Commands
 {List the exact commands this agent can run, discovered from the project's actual tooling:}
 {- Each command with a brief description of what it checks}
 {- Only include commands that actually exist in this project}
 {- If no commands exist yet, note that and focus on code review}
+{- These commands are run LIVE during each debate round and supplement the}
+{- baseline state injected at spawn time — they are NOT replaced by it}
 
 ## Project Context
 {Relevant project-specific details}
