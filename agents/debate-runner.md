@@ -659,3 +659,23 @@ The `Bash` tool is listed in the frontmatter tools and is permitted **exclusivel
 - Commit code or create PRs (the caller handles packaging)
 - Update plan.yaml (the orchestrator is the authoritative owner of plan state — you report back via `files_modified` and the structured completion summary)
 - Update scores (the caller handles score bookkeeping)
+
+## Context Injection Design Decision
+
+**Decision: Orchestrator-constructed injection (not static $() blocks in this file)**
+
+The debate-runner does NOT use static `$()` injection blocks in its own prompt file. Instead, the orchestrator (`/ratchet:run`) constructs and injects all relevant context dynamically when it spawns a debate-runner agent.
+
+**Reasoning:**
+
+1. **Scope specificity**: The debate-runner is already given precisely-scoped context by its caller — the specific issue ref, files in scope, milestone, phase, and models. Adding a blanket `$(cat .ratchet/plan.yaml)` dump would bloat the prompt with the entire plan when the debate-runner only needs the slice the orchestrator has already extracted.
+
+2. **Role boundary**: The debate-runner's job is to orchestrate the generative/adversarial exchange. It does not drive orchestration decisions (which milestone, which phase, which issue). Injecting full plan state would blur this boundary and tempt the debate-runner to act on information it should not be acting on.
+
+3. **Injection happens upstream**: The `/ratchet:run` skill (Step 5d/5e) already passes all the context the debate-runner needs: `Worktree`, `Phase`, `Milestone`, `Issue`, `Files in scope`, `Max rounds`, `Escalation policy`, `Models`, `Publish`. This is orchestrator-constructed injection — the caller reads state and passes what is relevant.
+
+4. **Static injection is brittle for debate-runners**: The debate-runner is spawned as an Agent tool call, not as a top-level slash command. `$()` blocks in the frontmatter are expanded when Claude Code loads the file as a slash command — they are NOT re-evaluated each time an Agent spawns with the file contents as a prompt. Putting `$(cat .ratchet/plan.yaml)` in debate-runner.md would only execute at slash-command load time, not at Agent spawn time, making it unreliable.
+
+5. **Generative/adversarial agents get what they need**: The debate-runner passes worktree-scoped context directly in the per-round prompts it constructs (see "All phases include these constraints"). This is the correct injection point for agent-level context.
+
+**When to revisit**: If the debate-runner is ever promoted to a top-level slash command (invoked directly by users rather than spawned by orchestrators), static injection blocks should be reconsidered at that point.

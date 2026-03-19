@@ -3,6 +3,34 @@ name: ratchet:run
 description: Run agent pairs through phase-gated debates — guided by epic roadmap and current focus
 ---
 
+## Boot Context (pre-loaded at skill invocation)
+
+The following state is injected at startup so the skill boots with full situational awareness. All blocks fail gracefully — missing files produce a human-readable fallback message.
+
+**Plan:**
+```
+$(cat .ratchet/plan.yaml 2>/dev/null || echo "No plan found")
+```
+
+**Workflow config:**
+```
+$(cat .ratchet/workflow.yaml 2>/dev/null || echo "No workflow config")
+```
+
+**Recent debates (20 most recent meta.json files):**
+```
+$(for f in $(ls -t .ratchet/debates/*/meta.json 2>/dev/null | head -20); do [ -f "$f" ] && cat "$f" && echo; done 2>/dev/null)
+```
+
+**Git state:**
+```
+Branch: $(git branch --show-current 2>/dev/null)
+Recent commits:
+$(git log --oneline -5 2>/dev/null)
+```
+
+---
+
 # /ratchet:run — Execute Debate
 
 ## CRITICAL — You Are an Orchestrator, Not a Solver

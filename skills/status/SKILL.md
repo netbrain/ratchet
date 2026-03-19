@@ -3,6 +3,22 @@ name: ratchet:status
 description: Show milestone and phase progress at a glance
 ---
 
+## Boot Context (pre-loaded at skill invocation)
+
+The following state is injected at startup so the status skill renders immediately without requiring file reads at runtime. All blocks fail gracefully.
+
+**Plan:**
+```
+$(cat .ratchet/plan.yaml 2>/dev/null || echo "No plan found")
+```
+
+**Debate count:**
+```
+Total debates: $(for f in .ratchet/debates/*/meta.json; do [ -f "$f" ] && echo "$f"; done 2>/dev/null | wc -l)
+```
+
+---
+
 # /ratchet:status — Project Status
 
 Display a snapshot of the project's progress through the epic, milestones, and phases.
