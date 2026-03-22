@@ -225,6 +225,16 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 **Ecosystem-inspired pairs:** After discussing the initial pairs, consider whether ecosystem projects suggest additional quality dimensions the user hasn't thought of. Draw from Impeccable's design expertise (information hierarchy, glanceability, accessibility) for frontend pairs and Agency Agents' specialist personas (security, performance, observability) for domain-specific pairs. Present these as suggestions with the inspiration source explained — e.g., "Drawing from Impeccable's design principles, a dashboard-ux pair could evaluate whether status information is glanceable and color-coded effectively." Let the user decide whether to add them.
 
 **6d. Guards — mirror CI and add what's missing.** Use `AskUserQuestion`:
+- **Always include the built-in `no-generated-files` guard**: This framework guard prevents agents from committing build artifacts (generated Go code, node_modules, compiled CSS, protobuf stubs, etc.) that are derived from source code. It reads `project.yaml` to infer stack-specific patterns and supports project-specific extensions via `generated_file_patterns` in `workflow.yaml`. Always register it:
+  ```yaml
+  - name: no-generated-files
+    command: "bash scripts/check-generated-files.sh"
+    phase: review
+    blocking: true
+    timing: pre-debate
+    components: []  # all components
+  ```
+  Present this as: "I'll include the built-in generated-files guard — it prevents committing build artifacts like [stack-specific examples based on project.yaml, e.g., '*_templ.go files' for Go, 'node_modules/' for Node]."
 - **Start from CI**: For each quality gate command discovered in CI/CD pipelines during the codebase scan (Step 2), propose a matching guard. The goal is that every check CI runs should have a corresponding Ratchet guard so debates never produce code that will fail the pipeline. Present these as: "I found these checks in your CI pipeline — I'll mirror them as guards:"
   - Map CI steps to guard properties: lint/format commands → `timing: pre-debate`, `phase: build`, `blocking: true`; test commands → `timing: post-debate`, `phase: build`, `blocking: true`; security scans → `timing: post-debate`, `phase: harden`, `blocking: true`; type checks → `timing: pre-debate`, `phase: build`, `blocking: true`
 - **Then suggest additions**: Based on the stack, suggest guards for checks that CI *doesn't* run but should (e.g., "Your CI doesn't run a security scanner — want to add one as an advisory guard?")
@@ -419,6 +429,7 @@ Create the `.ratchet/` directory structure:
 .ratchet/worktrees/
 .ratchet/locks/
 .ratchet/archive/
+.ratchet/issues/
 ```
 
 **Error handling for file generation (Step 8)**: If any file write fails during generation:

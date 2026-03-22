@@ -58,6 +58,13 @@ pairs:
     enabled: true
 
 guards:
+  - name: no-generated-files
+    command: "bash scripts/check-generated-files.sh"
+    phase: review
+    blocking: true
+    timing: pre-debate
+    components: [skills, agents, scripts, schemas]
+
   - name: shellcheck
     command: "nix develop --command shellcheck scripts/**/*.sh install.sh"
     phase: review

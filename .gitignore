@@ -19,3 +19,5 @@ result-*
 */.ratchet/guards/
 */.ratchet/reports/
 */.ratchet/progress/
+*/.ratchet/plan.yaml
+*/.ratchet/issues/

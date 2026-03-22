@@ -40,6 +40,9 @@ install_git_hook() {
     block=$(cat <<HOOKEOF
 # BEGIN RATCHET
 if [ -n "\${CLAUDE_CODE:-}" ]; then
+  if [ -z "\${RATCHET_ALLOW_GENERATED:-}" ] && [ -f "$scripts_dir/check-generated-files.sh" ]; then
+    bash "$scripts_dir/check-generated-files.sh" || exit 1
+  fi
   bash "$scripts_dir/check-consensus.sh"
 fi
 # END RATCHET
@@ -125,6 +128,7 @@ setup_gitignore() {
         ".ratchet/worktrees/"
         ".ratchet/locks/"
         ".ratchet/archive/"
+        ".ratchet/issues/"
     )
 
     # Check if marker is already present (idempotent)
@@ -161,6 +165,7 @@ setup_gitignore() {
         ".ratchet/worktrees/" \
         ".ratchet/locks/" \
         ".ratchet/archive/" \
+        ".ratchet/issues/" \
         2>/dev/null)
 
     if [ "${#tracked_runtime[@]}" -gt 0 ]; then
