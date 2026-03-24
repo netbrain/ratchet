@@ -303,6 +303,7 @@ epic:
           debates: []        # populated during debates — debate IDs for this issue
           branch: null       # git branch for this issue's worktree
           pr: null           # populated when PR is created — full PR URL
+          progress_ref: null # populated by adapter — e.g., GitHub issue number for this work item
           status: pending    # pending | in_progress | done | blocked
   current_focus: null
   discoveries: []    # sidequests — each entry follows this schema:

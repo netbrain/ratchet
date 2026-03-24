@@ -124,6 +124,7 @@ When the `github-issues` progress adapter is enabled, a single GitHub issue mirr
 <!-- issue_phase_status: {"plan":"done","test":"done","build":"done","review":"done","harden":"done"} -->
 <!-- issue_branch: ratchet/foundation/issue-1 -->
 <!-- issue_pr: https://github.com/owner/repo/pull/42 -->
+<!-- issue_progress_ref: 42 -->
 
 ## Milestone 2: Features
 <!-- milestone_id: 2 -->
@@ -139,11 +140,12 @@ When the `github-issues` progress adapter is enabled, a single GitHub issue mirr
 <!-- issue_phase_status: {"plan":"pending","test":"pending","build":"pending","review":"pending","harden":"pending"} -->
 <!-- issue_branch: null -->
 <!-- issue_pr: null -->
+<!-- issue_progress_ref: null -->
 ```
 
 **HTML comment metadata rules:**
 - Every milestone block MUST have `milestone_id`, `milestone_status`, `milestone_done_when`, `milestone_depends_on`
-- Every issue block MUST have `issue_ref`, `issue_status`, `issue_pairs`, `issue_depends_on`, `issue_phase_status`, `issue_branch`, `issue_pr`
+- Every issue block MUST have `issue_ref`, `issue_status`, `issue_pairs`, `issue_depends_on`, `issue_phase_status`, `issue_branch`, `issue_pr`, `issue_progress_ref`
 - The `<!-- ratchet-plan-tracking -->` sentinel on line 1 identifies the issue for deterministic parsing
 - Checkbox state (`[x]` vs `[ ]`) reflects `issue_status == "done"` but is NOT the parse source — `issue_status` in the HTML comment is authoritative
 - Fields NOT stored (not recoverable from tracking issue): `files`, `debates` arrays — these are runtime artifacts
