@@ -400,15 +400,29 @@ Save the generative agent's output to `.ratchet/debates/<id>/rounds/round-<N>-ge
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} (generative done, adversarial pending)"
 
-**Publish (per-round):** If `publish_debates` is `"per-round"` AND `progress_ref` is non-null, post a comment immediately after saving the round file:
+**Publish (per-round):** If `publish_debates` is `"per-round"` AND `progress_ref` is non-null, post a comment immediately after saving the round file. Include any artifacts (spec files, test files, source files) the generative agent created or modified inline as collapsed sections — local file paths are meaningless to GitHub readers:
 
 ```bash
+# Build artifact sections from files the generative agent created/modified this round
+ARTIFACT_SECTIONS=""
+for artifact in <files_modified_this_round>; do
+  [ -f "$artifact" ] || continue
+  ARTIFACT_SECTIONS="${ARTIFACT_SECTIONS}
+<details><summary>Artifact: ${artifact}</summary>
+
+\`\`\`$(echo "$artifact" | sed 's/.*\.//')
+$(cat "$artifact")
+\`\`\`
+</details>"
+done
+
 COMMENT="### Debate: <pair-name> — Round <N> (generative)
 **Phase:** <phase> | **Issue:** <issue-ref>
-<details><summary>Click to expand</summary>
+<details><summary>Round output</summary>
 
 $(cat .ratchet/debates/<id>/rounds/round-<N>-generative.md)
-</details>"
+</details>
+${ARTIFACT_SECTIONS}"
 
 bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "$COMMENT" || {
   ERR=$?
@@ -593,7 +607,7 @@ Update `meta.json` with final state:
 
 **Progress:** Mark TodoWrite item completed -- "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
 
-**Publish (summary):** If `publish_debates` is `"summary"` AND `progress_ref` is non-null, post one consolidated comment after debate finishes:
+**Publish (summary):** If `publish_debates` is `"summary"` AND `progress_ref` is non-null, post one consolidated comment after debate finishes. Include all debate artifacts (spec files, source files, test files) inline so the GitHub issue is self-contained:
 
 ```bash
 # Build summary from all round files
@@ -607,9 +621,26 @@ $(cat "$round_file")
 </details>"
 done
 
+# Build artifact sections from all files created/modified during the debate
+ARTIFACT_SECTIONS=""
+for artifact in <files_modified>; do
+  [ -f "$artifact" ] || continue
+  ARTIFACT_SECTIONS="${ARTIFACT_SECTIONS}
+<details><summary>Artifact: ${artifact}</summary>
+
+\`\`\`$(echo "$artifact" | sed 's/.*\.//')
+$(cat "$artifact")
+\`\`\`
+</details>"
+done
+
 COMMENT="### Debate Summary: <pair-name> (<N> rounds — <VERDICT>)
 **Phase:** <phase> | **Issue:** <issue-ref>
-${SUMMARY_BODY}"
+${SUMMARY_BODY}
+${ARTIFACT_SECTIONS:+
+---
+**Artifacts produced:**
+${ARTIFACT_SECTIONS}}"
 
 bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "$COMMENT" || {
   ERR=$?
