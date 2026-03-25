@@ -65,81 +65,38 @@ For each script, verify:
 
 ### Settled Law (Patterns from Prior Debates)
 
-**JSON Operations (Critical - 5 occurrences in M1-M2, severity: critical):**
-- [ ] **JSON generation must use jq or complete escaping**: Any bash script generating JSON must either:
-  1. Use `jq` for construction, OR
-  2. Implement complete JSON escaping (backslash, quotes, control chars: \t, \n, \r, \f, \b)
-- [ ] **JSON writes must be atomic**: Use temp file + mv pattern for all JSON file writes (`tmp=$(mktemp); ... > "$tmp" && mv "$tmp" "$target"`)
-- [ ] **JSON reads must handle parse errors**: Check for malformed JSON before attempting to parse (`jq empty "$file" 2>/dev/null || handle_error`)
+The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION constraints to every adversarial prompt. The items below are pair-specific settled law.
 
-**Error Message Quality (7 occurrences, severity: major):**
-- [ ] User-facing error messages must be clear and actionable
-- [ ] File existence checks must print the path that was checked
-  ```bash
-  # GOOD
-  if [ ! -f "$CONSENSUS_SCRIPT" ]; then
-      echo "Error: check-consensus.sh not found at $CONSENSUS_SCRIPT" >&2
-      exit 1
-  fi
+**JSON Operations (Critical):**
+- [ ] **JSON generation**: Must use `jq` for construction OR implement complete JSON escaping (backslash, quotes, control chars)
+- [ ] **JSON writes must be atomic**: Use temp file + mv pattern (`tmp=$(mktemp); ... > "$tmp" && mv "$tmp" "$target"`)
+- [ ] **JSON reads must handle parse errors**: `jq empty "$file" 2>/dev/null || handle_error`
 
-  # BAD (generic bash error)
-  exec bash "$CONSENSUS_SCRIPT"  # No existence check
-  ```
+**Error Messages:**
+- [ ] User-facing error messages must be clear, actionable, and include the path checked
+- [ ] Exit-1 paths must use `Error:`, not `Warning:` (which implies non-fatal)
 
-**Cross-reference verification (7 occurrences - 54% of debates):**
+**Cross-cutting sweep:**
+- [ ] Verify generative ran a grep sweep for the pattern class across ALL scripts
+
+**Cross-reference verification:**
 - [ ] All referenced scripts verified to exist
-- [ ] All external commands documented as requirements
 
-**Error/Warning message consistency (2 occurrences, severity: major):**
-- [ ] Exit-1 paths must use `Error:`, not `Warning:`. `Warning:` implies non-fatal.
-  ```bash
-  # BAD: misleading
-  echo "Warning: file not found" >&2; exit 1
-  # GOOD: matches behavior
-  echo "Error: file not found" >&2; exit 1
-  ```
+**yq/jq mutation safety:**
+- [ ] Any `yq`/`jq` mutation must validate input, use atomic writes, and guard selectors. Run: `grep -n '|=' scripts/*.sh`
 
-**Cross-cutting sweep verification (6 occurrences - #1 cause of multi-round debates):**
-- [ ] Verify generative ran a grep sweep for the pattern class being fixed across ALL scripts. If they fixed a quoting issue in one script but missed the same pattern in 5 others, REJECT.
-
-**yq/jq mutation safety (new - derived from skill-coherence patterns):**
-- [ ] Any script using `yq` or `jq` with `|=` or `=` must:
-  - Validate input file exists and parses before mutation
-  - Use atomic writes (mktemp + mv) — never write directly to source file
-  - Guard selectors against zero-match and multi-match cases
-  - Run: `grep -n '|=' scripts/*.sh` to find all mutation operators
-
-**Examples must be runnable (8 occurrences - 62% of debates):**
-- [ ] Ensure usage examples are concrete and runnable, not abstract
+**Examples must be runnable:**
+- [ ] Usage examples must be concrete and runnable, not abstract
 
 ## Baseline Validation State (Injected at Spawn Time)
 
-The debate-runner injects live validation output here when spawning this agent.
-This section documents the injection spec — the actual output appears in the
-spawn prompt, not in this static file.
+See debate-runner agent definition for baseline injection mechanism and usage rules.
 
-**Why not $() in this file**: $() blocks only expand in slash commands loaded
-at session start. This file is loaded via the Agent tool at runtime, where $()
-is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
-
-**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+**Pair-specific baseline commands** (output capped at 30 lines each):
 ```bash
-# Shellcheck — captures pre-change violation state
 nix develop --command shellcheck scripts/**/*.sh install.sh 2>&1 | tail -30
-
-# Checkbashisms — captures pre-change portability state (sh scripts only)
 checkbashisms scripts/*.sh 2>&1 | grep -v "does not appear to have a #! interpreter line" | tail -30
 ```
-
-**How to use the injected baseline**:
-- If baseline shows shellcheck was already failing → generative must prove their
-  changes didn't make it worse, not just that it passes now
-- If baseline shows zero violations → any new violation is a REJECT
-- If baseline is absent (debate-runner didn't inject) → treat as unknown; run
-  shellcheck yourself to establish current state
-
-**Live validation during rounds still applies** — run shellcheck and checkbashisms
-yourself each round. The baseline supplements (does not replace) live validation.
 
 ## Pre-Debate Verification (Run FIRST)
 
@@ -155,56 +112,15 @@ Only proceed with manual review if shellcheck is clean.
 
 ## Validation Commands
 
-**Verify shellcheck compliance:**
 ```bash
-nix develop --command shellcheck scripts/**/*.sh install.sh
-# Should output: no warnings
-```
-
-**Check for bashisms** (if script uses #!/bin/sh):
-```bash
-checkbashisms scripts/*.sh 2>&1 | grep -v "does not appear to have a #! interpreter line"
-# Should output: nothing (or only harmless warnings)
-```
-
-**Test error handling manually:**
-```bash
-# Test with invalid input
-./install.sh --invalid-flag 2>&1 | grep -q "error"
-
-# Test with missing directory
-bash -c 'cd /nonexistent 2>&1' | grep -q "cannot change"
-```
-
-**Verify portability** (if macOS available):
-```bash
-# Run on both Linux and macOS
-uname -s  # Linux or Darwin
-./install.sh --help
+nix develop --command shellcheck scripts/**/*.sh install.sh                # shellcheck
+checkbashisms scripts/*.sh 2>&1 | grep -v "does not appear to have"       # bashisms (sh scripts)
+./install.sh --invalid-flag 2>&1 | grep -q "error"                        # error handling
 ```
 
 ## Review Protocol
 
-For each script:
-
-1. **Run shellcheck** — must pass with zero warnings
-2. **Read script** — check error handling against checklist
-3. **Check shebang** — bash vs sh, verify no bashisms in sh scripts
-4. **Test error cases** — invalid args, missing files, permission errors
-5. **Challenge** — raise specific issues:
-   - "Line 42: `cd $dir` is unquoted, fails with spaces in path"
-   - "Missing error check after `mkdir`, could silently fail"
-   - "Uses `[[` but shebang is `#!/bin/sh` (bashism)"
-   - "Temp file `$tmp` not cleaned up on error"
-
-## Common Problems to Catch
-
-1. **Shellcheck failures** — generative didn't run shellcheck or ignored warnings
-2. **Silent failures** — commands fail but script continues
-3. **Unquoted variables** — `$var` instead of `"$var"`
-4. **Bashisms in sh scripts** — `[[`, arrays, `source` in `#!/bin/sh`
-5. **No cleanup** — temp files left behind
-6. **Poor error messages** — "error" instead of "Failed to create directory $dir"
+For each script: (1) Run shellcheck — zero warnings required, (2) Check error handling against checklist, (3) Verify shebang and no bashisms in sh scripts, (4) Test error cases, (5) Challenge with specific line-level issues.
 
 ## Tools Available
 

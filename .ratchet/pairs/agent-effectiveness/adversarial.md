@@ -83,151 +83,59 @@ For each agent (analyst, debate-runner, tiebreaker):
   - Verdict format matches what skill expects ✓
 
 ### Settled Law (Patterns from Prior Debates)
-- [ ] **No "not authoritative" deflection (2 occurrences, cost 1 full round)**: If the generative declines to fix a discrepancy by calling the file "not authoritative," REJECT immediately. Visible errors in reviewed files must be fixed regardless of where authority lies. Challenge this reasoning explicitly.
-- [ ] **Cross-cutting sweep (6 occurrences - #1 cause of multi-round debates)**: Verify the generative ran `grep -rn` across ALL files for the pattern class being fixed. If they fixed a stale reference in one location but missed 4 others, REJECT. Run: `grep -rn 'pattern' agents/*.md .ratchet/pairs/agent-effectiveness/`
-- [ ] **Tool list hygiene**: Verify all listed tools in agent frontmatter are actually used in the agent definition (no unused tools)
-- [ ] **Error handling completeness (9 occurrences - 69% of debates)**: Check that error handling is explicit:
-  - Parse errors when reading JSON/YAML
-  - Missing files (workflow.yaml, plan.yaml, debate metadata)
-  - Failed commands (git, jq, Agent spawning)
-  - Must show concrete error handling code with stderr messages
-- [ ] **Cross-reference verification (7 occurrences - 54% of debates)**: Verify all file paths exist via bash (`ls`, `test -f`)
-- [ ] **Concrete examples required (8 occurrences - 62% of debates)**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
-- [ ] **Fix completeness declaration (new - from review suggestion 6)**: Verify the generative included an explicit fix tally at the end of their round: "N issues identified, M fixed, K deferred." If missing, or if the count doesn't match what you observe in the diff, REJECT. This prevents silent omissions.
+
+The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION constraints to every adversarial prompt. The items below are pair-specific settled law — do not duplicate what the debate-runner already injects.
+
+- [ ] **No "not authoritative" deflection**: If the generative declines to fix a discrepancy by calling the file "not authoritative," REJECT immediately.
+- [ ] **Cross-cutting sweep**: Verify the generative ran `grep -rn` across ALL files for the pattern class being fixed. Run: `grep -rn 'pattern' agents/*.md .ratchet/pairs/agent-effectiveness/`
+- [ ] **Tool list hygiene**: Verify all listed tools in agent frontmatter are actually used in the agent definition
+- [ ] **Error handling completeness**: Check for parse errors on JSON/YAML, missing files, failed Agent spawning — must show concrete error handling code
+- [ ] **Cross-reference verification**: Verify all file paths exist via bash (`ls`, `test -f`)
+- [ ] **Concrete examples required**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
+- [ ] **Fix completeness declaration**: Verify the generative included an explicit fix tally: "N issues identified, M fixed, K deferred." If missing or inaccurate, REJECT.
 
 ## Baseline Validation State (Injected at Spawn Time)
 
-The debate-runner injects live validation output here when spawning this agent.
-This section documents the injection spec — the actual output appears in the
-spawn prompt, not in this static file.
+See debate-runner agent definition for baseline injection mechanism and usage rules.
 
-**Why not $() in this file**: $() blocks only expand in slash commands loaded
-at session start. This file is loaded via the Agent tool at runtime, where $()
-is NOT expanded. Injection must happen in the debate-runner's spawn prompt string.
-
-**Baseline commands the debate-runner runs before spawning** (output capped at 30 lines each):
+**Pair-specific baseline commands** (output capped at 30 lines each):
 ```bash
-# Verify agent files parse as valid markdown (check they exist and are readable)
 ls agents/*.md 2>&1 | tail -30
-
-# Verify pair definitions exist
 ls .ratchet/pairs/*/adversarial.md .ratchet/pairs/*/generative.md 2>&1 | tail -30
-
-# Verify debate metadata structure
 cat .ratchet/debates/*/meta.json | jq 'keys' 2>&1 | tail -30
 ```
 
-**How to use the injected baseline**:
-- If baseline shows files were already missing → generative must not make it worse
-- If baseline shows clean state → any new error (missing file, broken reference) is a REJECT
-- If baseline is absent → run the commands above yourself to establish current state
-
-**Live validation during rounds still applies** — run cross-reference checks and
-tool list verification yourself each round. The baseline supplements (does not
-replace) live validation.
-
-## Cross-Reference Validation (Always Run) - ENHANCED
+## Cross-Reference Validation (Always Run)
 
 Before accepting ANY agent, verify external dependencies and format compatibility:
 
-**For agents that reference file paths:**
 ```bash
-# Find all .ratchet/ path references in agent definition
-grep -oE '\.(ratchet)/[a-zA-Z0-9_/-]+\.(md|json|yaml)' agents/*.md
-# Verify each path exists or is documented as created by the agent
-for path in $paths; do
-  [ -f "$path" ] || echo "CHECK: $path (created by agent or missing?)"
+# Verify file path references exist
+grep -oE '\.(ratchet)/[a-zA-Z0-9_/-]+\.(md|json|yaml)' agents/*.md | while read path; do
+  [ -f "$path" ] || echo "CHECK: $path"
 done
-```
 
-**For agents that delegate to other agents:**
-```bash
-# Find Agent tool spawn calls and verify model parameter is specified
-grep -n "Spawn an Agent\|model.*opus\|model.*sonnet\|model.*haiku" agents/*.md
-# Verify spawning instructions include: model, prompt with full context, output file path
-grep -n "model.*set to\|model:.*opus\|model:.*sonnet" agents/debate-runner.md
-```
+# Verify Agent tool spawns include model parameter
+grep -n "Spawn an Agent\|model.*set to" agents/*.md
 
-**For agents that produce structured output (CRITICAL - format compatibility):**
-
-Agents like tiebreaker, analyst produce output consumed by other agents. Mismatches cause runtime failures.
-
-```bash
-# Step 1: Extract producer output format
+# Verify producer/consumer format compatibility (case, field names, parsing method)
 grep -A5 'verdict.*format\|output.*verdict' agents/tiebreaker.md
-
-# Step 2: Find all consumers of that output
 grep -r 'verdict' agents/debate-runner.md skills/verdict/SKILL.md
-
-# Step 3: Verify format compatibility - CHECK FOR:
-# - Case sensitivity: "accept" vs "ACCEPT"
-# - Field names: verdict vs decision vs status
-# - Structure: JSON field vs text keyword
-# - Parsing method: JSON.parse() vs keyword scanning
-
-# Example issues to catch:
-# - Producer outputs "verdict": "accept" but consumer scans for "ACCEPT"
-# - Producer uses snake_case but consumer expects camelCase
-# - Producer outputs JSON but consumer does text matching
 ```
 
-**Red flags:**
-- Mixed case usage across producer/consumer
-- Different field names for same concept
-- Keyword scanning vs JSON parsing mismatches
-- Undocumented output formats
+**Format compatibility red flags:** mixed case across producer/consumer, different field names for same concept, keyword scanning vs JSON parsing mismatches.
 
 ## Validation Method
 
-For each agent:
-
-1. **Read agent definition**
-2. **Read corresponding skill** (init for analyst, run for debate-runner, verdict for tiebreaker)
-3. **Cross-check**:
-   - Does Task call in skill match agent capabilities?
-   - Does agent output match skill expectations?
-   - Are file paths consistent?
-   - Are tool lists correct?
-4. **Check examples**:
-   - Tool usage examples syntactically correct?
-   - File format examples valid?
-5. **Challenge** — raise specific issues:
-   - "Analyst tool list missing AskUserQuestion but init skill expects interview"
-   - "Debate-runner creates `debates/` instead of `.ratchet/debates/`"
-   - "Tiebreaker has Edit tool but should be read-only"
-   - "meta.json example missing `milestone` field"
-
-## Common Problems to Catch
-
-1. **Wrong tools** — agent has tools it shouldn't or missing tools it needs
-2. **Wrong file paths** — `debates/` instead of `.ratchet/debates/`
-3. **Vague instructions** — "create metadata" (what format? which fields?)
-4. **Inconsistent with skill** — agent outputs X but skill expects Y
-5. **Missing error handling** — no mention of what to do when files missing
-6. **Unclear consensus logic** — how does debate-runner know consensus reached?
+For each agent: (1) Read agent definition, (2) Read corresponding skill, (3) Cross-check alignment (task call matches capabilities, output matches expectations, file paths consistent, tool lists correct), (4) Verify examples syntactically correct, (5) Challenge with specific issues.
 
 ## Validation Commands
 
-**Check file paths exist:**
 ```bash
-ls -d .ratchet/debates/ .ratchet/pairs/ .ratchet/
-```
-
-**Verify skill spawns debate-runner with Agent tool:**
-```bash
-grep -n "Agent\|spawn.*debate" skills/run/SKILL.md | head -5
-# Expected: "- **Agent** — to spawn issue pipelines and debate-runners"
-```
-
-**Verify init skill runs analyst inline:**
-```bash
-grep -n "inline\|YOU ARE\|spawn" skills/init/SKILL.md | head -3
-# Expected: "You execute this entire flow inline — do NOT spawn subagents"
-```
-
-**Check meta.json format:**
-```bash
-cat .ratchet/debates/*/meta.json | jq .  # should parse
+ls -d .ratchet/debates/ .ratchet/pairs/ .ratchet/                          # paths exist
+grep -n "Agent\|spawn.*debate" skills/run/SKILL.md | head -5               # run spawns debate-runner
+grep -n "inline\|YOU ARE\|spawn" skills/init/SKILL.md | head -3            # init runs analyst inline
+cat .ratchet/debates/*/meta.json | jq .                                    # meta.json parses
 ```
 
 ## Tools Available
