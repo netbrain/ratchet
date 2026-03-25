@@ -240,6 +240,35 @@ Read the generative agent definition from `.ratchet/pairs/<name>/generative.md`.
 
 Include the WORKTREE ISOLATION and SOURCE vs SYMLINK constraints (see "All phases include these constraints" below) in every generative and adversarial prompt.
 
+**Round history construction (for prior round context in prompts):**
+
+When constructing the `[If round > 1: ...]` sections in both generative and adversarial prompts:
+
+- **Round 2**: Include full text of round-1-adversarial.md (and round-1-generative.md for adversarial prompts). This is the standard behavior.
+- **Round 3+**: Instead of including full text of ALL prior rounds, use summarized history to save ~5-10k tokens:
+  - **Full text**: Include only the most recent round pair: `round-(N-1)-generative.md` and `round-(N-1)-adversarial.md`
+  - **Summarized**: For rounds 1 through N-2, include a condensed summary in this format:
+
+```
+Prior round history (summarized):
+
+Round 1:
+- Generative: [2-3 sentence summary of what was proposed/changed]
+- Adversarial: [verdict] — [1-2 sentence summary of key concerns raised]
+
+Round 2:
+- Generative: [2-3 sentence summary of what was addressed/changed]
+- Adversarial: [verdict] — [1-2 sentence summary of remaining concerns]
+
+[...repeat for each prior round through N-2...]
+
+Most recent round (full text):
+[full content of round-(N-1)-generative.md]
+[full content of round-(N-1)-adversarial.md]
+```
+
+The debate-runner generates these summaries by reading each prior round file and extracting: (1) the key changes or proposals from the generative output, (2) the verdict and primary concerns from the adversarial output. Keep summaries factual and specific — include file names, issue counts, and verdict keywords. Do not editorialize.
+
 Spawn an Agent with `model` set to the generative model from the task context (e.g., `model: "opus"`). Use the phase-specific prompt:
 
 **Phase: plan**
@@ -258,7 +287,7 @@ Your job: Produce a SPECIFICATION for this milestone's scope.
 DO NOT write implementation code. DO NOT write tests.
 Output a spec document that the test and build phases will use.
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
+[If round > 1: Include prior round context per "Round history construction" rules above]
 [If round > 1: Address the critique — refine the spec or explain why the concern is invalid.]
 ```
 
@@ -278,7 +307,7 @@ Your job: Write FAILING TESTS that encode the acceptance criteria.
 
 DO NOT write implementation code. Only tests.
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
+[If round > 1: Include prior round context per "Round history construction" rules above]
 [If round > 1: Address the critique — fix tests or explain why they're correct.]
 ```
 
@@ -299,7 +328,7 @@ Your job: Write IMPLEMENTATION code that makes the tests pass.
 [If greenfield: No source code exists yet. Create the implementation from scratch.]
 [If existing code: Files under review: [file list]]
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
+[If round > 1: Include prior round context per "Round history construction" rules above]
 [If round > 1: Address the critique — fix issues or explain why they're not valid.]
 ```
 
@@ -317,7 +346,7 @@ Your job: Review the code for quality along your dimension.
 - Propose concrete improvements where issues are found
 - Implement fixes for issues you identify
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
+[If round > 1: Include prior round context per "Round history construction" rules above]
 [If round > 1: Address the critique — fix issues or explain why they're not valid.]
 ```
 
@@ -335,7 +364,7 @@ Your job: Harden the code against edge cases, security issues, and performance p
 - Add performance-sensitive paths if applicable
 - Write additional tests for edge cases discovered during review
 
-[If round > 1: Previous adversarial critique: [content of round-N-1-adversarial.md]]
+[If round > 1: Include prior round context per "Round history construction" rules above]
 [If round > 1: Address the critique — fix issues or explain why they're not valid.]
 ```
 
@@ -455,8 +484,7 @@ Focus: [what we're working on]
 
 Files under review: [file list]
 Generative agent's assessment: [content of round-N-generative.md]
-[If round > 1: Your previous critique: [content of round-N-1-adversarial.md]]
-[If round > 1: Generative's response: [content of round-N-generative.md]]
+[If round > 1: Include prior round context per "Round history construction" rules in Section 2a]
 
 Review the output and the generative agent's assessment.
 Run validation commands as evidence where applicable.
