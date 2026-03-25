@@ -1,0 +1,153 @@
+epic:
+  name: "Split run skill for token efficiency"
+  description: "Decompose the 80KB run skill into a core orchestrator plus on-demand modules, reducing per-invocation token cost by ~50%"
+  progress_ref: null
+  milestones:
+    - id: 1
+      name: "Extract issue pipeline"
+      description: "Move Step 5 (issue pipeline — the largest section at ~500 lines) into a separate includable file that the debate-runner references directly, eliminating it from the orchestrator's context"
+      status: done
+      done_when: "Step 5 lives in a separate file, run skill references it by path, debate-runner loads it on demand. Token cost of /ratchet:run drops by ~6k tokens."
+      depends_on: []
+      regressions: 0
+      issues:
+        - ref: "issue-1"
+          title: "Extract Step 5 into skills/run/issue-pipeline.md"
+          pairs: [skill-coherence, script-robustness]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: done
+            harden: pending
+          files:
+            - skills/run/SKILL.md
+            - skills/run/issue-pipeline.md
+          debates:
+            - skill-coherence-review
+            - script-robustness-review-20260325T171314Z
+          branch: ratchet/extract-issue-pipeline/issue-1
+          pr: null
+          progress_ref: null
+          status: done
+    - id: 2
+      name: "Extract unsupervised mode"
+      description: "Move the unsupervised mode spec (~120 lines), self-continuation, and halt conditions into a separate file loaded only when --unsupervised is passed"
+      status: done
+      done_when: "Unsupervised mode logic lives in a separate file. Supervised runs no longer pay for unsupervised context (~3k tokens saved)."
+      depends_on: [1]
+      regressions: 0
+      issues:
+        - ref: "issue-2"
+          title: "Extract unsupervised mode into skills/run/unsupervised.md"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            plan: skipped
+            test: skipped
+            build: skipped
+            review: done
+            harden: skipped
+          files:
+            - skills/run/SKILL.md
+            - skills/run/unsupervised.md
+          debates:
+            - skill-coherence-review-20260325T175032Z
+          branch: ratchet/extract-unsupervised/issue-2
+          pr: null
+          progress_ref: null
+          status: done
+    - id: 3
+      name: "Extract PR and publish logic"
+      description: "Move the PR body construction, debate summary table builder, and GitHub plan tracking issue format into separate files"
+      status: done
+      done_when: "PR construction and plan tracking issue format are separate files. Runs that don't create PRs skip ~4k tokens of template logic."
+      depends_on: [1]
+      regressions: 0
+      issues:
+        - ref: "issue-3"
+          title: "Extract PR body and debate summary builder"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: done
+            harden: pending
+          files:
+            - skills/run/issue-pipeline.md
+            - skills/run/pr-body.md
+          debates:
+            - skill-coherence-review-issue3-20260325T000000Z
+          branch: ratchet/extract-pr-publish/issue-3
+          pr: null
+          progress_ref: null
+          status: done
+        - ref: "issue-4"
+          title: "Extract plan tracking issue format spec"
+          pairs: [skill-coherence]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: done
+            harden: pending
+          files:
+            - skills/run/SKILL.md
+            - skills/run/plan-tracking-format.md
+          debates:
+            - skill-coherence-review-issue4-20260325T000000Z
+          branch: ratchet/extract-pr-publish/issue-4
+          pr: null
+          progress_ref: null
+          status: done
+    - id: 4
+      name: "Slim pair definitions and round history"
+      description: "Remove duplicated framework rules from adversarial pair defs (already in debate-runner.md) and add round summarization to reduce accumulating context in multi-round debates"
+      status: in_progress
+      done_when: "Adversarial pair defs are ~30% smaller. 3-round debates use summarized prior rounds instead of full content, saving ~5-10k tokens per debate."
+      depends_on: [1]
+      regressions: 0
+      issues:
+        - ref: "issue-5"
+          title: "Deduplicate settled law from adversarial pair definitions"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: done
+            harden: pending
+          files:
+            - .ratchet/pairs/agent-effectiveness/adversarial.md
+            - .ratchet/pairs/schema-correctness/adversarial.md
+            - .ratchet/pairs/script-robustness/adversarial.md
+            - .ratchet/pairs/skill-coherence/adversarial.md
+          debates:
+            - agent-effectiveness-20260325T174820Z
+          branch: ratchet/slim-pairs/issue-5
+          pr: null
+          progress_ref: null
+          status: done
+        - ref: "issue-6"
+          title: "Add round summarization for multi-round debates"
+          pairs: [agent-effectiveness]
+          depends_on: []
+          phase_status:
+            plan: pending
+            test: pending
+            build: pending
+            review: pending
+            harden: pending
+          files: []
+          debates: []
+          branch: null
+          pr: null
+          progress_ref: null
+          status: pending
+  current_focus: null
+  discoveries: []
