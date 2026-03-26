@@ -184,9 +184,91 @@ For each improvement, include:
 
 Then use `AskUserQuestion` with options: `"Try again"`, `"View raw data (/ratchet:score)"`, `"Done for now"`.
 
+### Step 3b: Adversarial Verification
+
+The analyst's findings are **claims until verified**. Before presenting to the user, run each finding through adversarial fact-checking. This prevents false recommendations from wasting time or degrading the system.
+
+Spawn a **verification agent** with the adversarial model (`models.adversarial`, default `sonnet`). Agent configuration:
+- `model`: value of `workflow.yaml` → `models.adversarial` (or `sonnet` if unset)
+- `tools`: Read, Grep, Glob, Bash
+- `disallowedTools`: Write, Edit
+
+The verification agent is **read-only** — it checks claims, it does not fix them.
+
+Task prompt:
+
+```
+You are an adversarial fact-checker for Ratchet tighten findings. Your job is
+to verify whether the analyst's claims are actually true by checking the
+codebase, running commands, and examining evidence.
+
+For each finding below, verify:
+1. Is the claimed gap REAL? (e.g., is the validation command actually missing
+   from the adversarial prompt, or is the analyst wrong?)
+2. Is the evidence ACCURATE? (e.g., does the CI failure actually exist? Is the
+   file path correct? Does the escalation pattern actually recur?)
+3. Is the proposed fix CORRECT? (e.g., will the suggested edit actually address
+   the gap, or will it break something?)
+4. Is the severity JUSTIFIED? (e.g., is this truly critical, or is it minor?)
+
+For each finding, issue one of:
+- CONFIRMED — the claim is verified, evidence checks out
+- DOWNGRADED — the claim has merit but severity is overstated (explain why)
+- REJECTED — the claim is false or unsupported (provide counter-evidence)
+- NEEDS_INFO — cannot verify without additional data (explain what's missing)
+
+PRINCIPLE — verify, don't assume:
+  Do NOT accept claims at face value. Read the actual files. Run the actual
+  commands. Check whether the "missing" thing is truly missing. The analyst
+  may hallucinate file contents, misread pair definitions, or misattribute
+  CI failures.
+
+Findings to verify:
+[analyst's prioritized improvements list]
+
+Current pair definitions:
+[list paths to .ratchet/pairs/*/generative.md and adversarial.md]
+
+Current guards:
+[guards array from workflow.yaml]
+```
+
+**Processing verification results:**
+
+For each finding:
+- **CONFIRMED** → keep as-is, present to user
+- **DOWNGRADED** → adjust severity, append verifier's note to the finding
+- **REJECTED** → remove from the findings list, log to `.ratchet/reports/verification-rejected.log` for transparency (create directory first: `mkdir -p .ratchet/reports`):
+  ```
+  [<ISO timestamp>] REJECTED: "[original claim]"
+  Reason: "[verifier's counter-evidence]"
+  ```
+- **NEEDS_INFO** → keep but mark as unverified, present with caveat
+
+Present a brief verification summary before proceeding:
+```
+Verification: [N] findings checked
+  [N] confirmed, [N] downgraded, [N] rejected, [N] unverified
+  [If any rejected: "Rejected: [brief reason for each]"]
+```
+
+Only verified/downgraded/unverified findings proceed to Step 4.
+
+**Error handling**: If the verification agent fails or returns no results:
+- Treat all findings as unverified (NEEDS_INFO)
+- Present to user with caveat: "Verification could not be completed. Findings are unverified."
+- Proceed to Step 4 with all findings marked as unverified.
+
+**Edge case — all findings rejected**: If every finding is rejected by the verifier:
+> "All [N] analyst findings were rejected by verification. No actionable improvements."
+
+Then use `AskUserQuestion` with options: `"Re-run analysis with different signals"`, `"View rejected findings (.ratchet/reports/verification-rejected.log)"`, `"Done for now"`.
+
+Do NOT proceed to Step 4 with an empty findings list.
+
 ### Step 4: Present Assessment and Apply
 
-Present the analyst's findings via `AskUserQuestion`:
+Present the verified findings via `AskUserQuestion`:
 
 ```
 Tighten Assessment
