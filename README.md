@@ -293,53 +293,45 @@ debates → guards → commit/PR → CI runs → /ratchet:tighten
 ## Architecture
 
 ```
-                    ┌───────────────────────────┐
-                    │       Epic Roadmap        │
-                    │      Milestone DAG        │
-                    └─────────────┬─────────────┘
-                                  │
-       ┌──────────────────────────┼──────────────────────────┐
-       │ (parallel)               │ (parallel)                │ (waits for deps)
-┌──────▼────────────┐   ┌────────▼──────────┐   ┌────────────▼──────────┐
-│  Milestone 1      │   │  Milestone 2      │   │  Milestone 3          │
-│  (own agent)      │   │  (own agent)      │   │  depends_on: [1, 2]   │
-│                   │   │                   │   │  (starts when both    │
-│  ┌─────────────┐  │   │  ┌─────────────┐  │   │   complete)           │
-│  │ Issue DAG   │  │   │  │ Issue DAG   │  │   └───────────────────────┘
-│  │             │  │   │  │             │  │
-│  │  A ──┐     │  │   │  │  D ──┐     │  │
-│  │  B ──┤→ C  │  │   │  │  E ──┘     │  │
-│  │      │     │  │   │  │             │  │
-│  └─────────────┘  │   │  └─────────────┘  │
-└───────────────────┘   └───────────────────┘
+Epic Roadmap
+    |
+    +-- Milestone 1 (parallel)    +-- Milestone 2 (parallel)    +-- Milestone 3
+    |   own agent                 |   own agent                 |   depends_on: [1, 2]
+    |                             |                             |   starts when both complete
+    |   Issue DAG:                |   Issue DAG:                |
+    |     A --+                   |     D --+                   |
+    |     B --+--> C              |     E --+                   |
+    |                             |                             |
+```
 
 Each issue pipeline runs per-phase:
 
-  ┌─────────────────────────────────┐
-  │  Pre-debate Guards (fail fast)  │
-  └───────────────┬─────────────────┘
-                  │
-  ┌───────────────▼─────────────────┐
-  │      Debate Runner Agent        │
-  │  (orchestrates — no code write) │
-  │                                 │
-  │  Generative ◄─debate─► Adversarial
-  │                                 │
-  │  ACCEPT / TRIVIAL_ACCEPT → next │
-  │  REJECT → next round           │
-  │  REGRESS → earlier phase       │
-  └───────────────┬─────────────────┘
-                  │
-  ┌───────────────▼─────────────────┐
-  │  Post-debate Guards + advance   │
-  └─────────────────────────────────┘
+```
+Pre-debate Guards (fail fast)
+    |
+    v
+Debate Runner Agent (orchestrates -- never writes code)
+    |
+    +-- Generative Agent <--debate--> Adversarial Agent
+    |
+    |   ACCEPT / TRIVIAL_ACCEPT --> advance to next phase
+    |   REJECT                  --> next round
+    |   CONDITIONAL_ACCEPT      --> address conditions, then re-review
+    |   REGRESS                 --> return to earlier phase
+    |
+    v
+Post-debate Guards + phase advance
+```
 
-  Shared resources (singleton):
-  ┌─────────────────────────────────┐
-  │  postgres 🔒  playwright 🔒    │
-  │  redis (shared)                 │
-  │  File locks serialize access    │
-  └─────────────────────────────────┘
+Shared resources with singleton locking:
+
+```
+Guards can declare: requires: [postgres, redis]
+
+  postgres (singleton)  -- flock'd, one pipeline at a time
+  redis (shared)        -- started once, shared freely
+  playwright (singleton) -- flock'd, serialized access
+```
 ```
 
 The `/ratchet:run` skill uses a modular architecture — on-demand modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean.
