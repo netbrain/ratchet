@@ -59,6 +59,7 @@ Ratchet will:
 3. Debate the approach internally (angel vs devil)
 4. Present 2-3 options with pros/cons — you pick or mix-and-match
 5. Generate workflow config, components, agent pairs, guards, and a milestone roadmap
+6. Offer to configure GitHub repo settings (auto-delete branches, squash merge, disable merge/rebase commits) via `gh repo edit` — when a GitHub remote is detected
 
 Then start building:
 
@@ -180,6 +181,8 @@ guards:
     blocking: false    # advisory — logs but doesn't block
 ```
 
+**Generated files guard** — Ratchet includes a built-in pre-commit hook (`scripts/check-generated-files.sh`) that blocks committing build artifacts and runtime state. It detects generated files via path patterns (e.g., `*_templ.go`, `node_modules/`, `dist/`) and content markers (e.g., `// Code generated ... DO NOT EDIT`). The guard is stack-aware — it reads `project.yaml` to infer ecosystem-specific patterns (Go, Node, Python, Rust, JVM). Projects can extend detection via `generated_file_patterns` in `workflow.yaml`. Auto-registered during `/ratchet:init`. Override with `RATCHET_ALLOW_GENERATED=1 git commit ...`.
+
 ### Adaptive Intelligence
 
 Ratchet adapts how much structure to apply based on context:
@@ -267,6 +270,8 @@ milestones:
     depends_on: [1, 2]      # Layer 1 — waits for both
 ```
 
+**Round summarization** — For debates that reach 3+ rounds, prior round history is condensed to summaries. Only the most recent round is included in full context. This saves ~5-10k tokens per 3-round debate while preserving the full argument thread.
+
 **Retro severity & recurrence** — Retrospective findings are classified by severity (critical/major/minor/noise). When the same gap recurs, severity auto-escalates and findings are linked, giving `/ratchet:tighten` a priority queue.
 
 **Cross-cutting scope** — Changed files are matched against all component scopes, not just the first match. Multi-component changes automatically trigger pairs from all relevant components. Pairs can use `scope: "auto"` to inherit their parent component's scope.
@@ -337,6 +342,8 @@ Each issue pipeline runs per-phase:
   └──────────────────────────────────┘
 ```
 
+The `/ratchet:run` skill uses a modular architecture — on-demand modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean.
+
 ### Key Agents
 
 - **Analyst** — scans codebase, interviews human, debates approach internally, generates tailored pairs and workflow config
@@ -365,6 +372,7 @@ models:                  # optional — omit to inherit parent model
 
 progress:
   adapter: none          # none | markdown | github-issues
+  # publish_debates: per-round  # false | per-round | summary (github-issues only)
 
 components:
   - name: backend
@@ -419,11 +427,10 @@ resources:
 │       ├── generative.md
 │       └── adversarial.md
 ├── debates/             # Debate transcripts
-├── guards/              # Guard execution results
+├── guards/              # Guard execution results                              (.gitignore)
 ├── reviews/             # Agent performance reviews
 ├── retros/              # Retrospective findings with severity and recurrence  (.gitignore)
 ├── escalations/         # Tiebreaker rulings for precedent lookup              (.gitignore)
-├── guards/              # Guard execution results                              (.gitignore)
 ├── reports/             # Tighten reports and health assessments               (.gitignore)
 ├── progress/            # Local progress tracking (markdown adapter)           (.gitignore)
 └── scores/              # Historical quality metrics (includes fast-path data) (.gitignore)
@@ -438,6 +445,13 @@ Ratchet can track milestones in external systems:
 | `none` | No external tracking (default) |
 | `markdown` | Local markdown files in `.ratchet/progress/` |
 | `github-issues` | GitHub Issues via `gh` CLI |
+
+**Debate publishing** — When using the `github-issues` adapter, debate rounds can be posted as comments on the individual work issue (not the epic tracking issue). Configure via `publish_debates` in `workflow.yaml`:
+- `false` (default) — debates stay local in `.ratchet/debates/`
+- `per-round` — each round is posted as a comment immediately after completion
+- `summary` — a single consolidated comment is posted when the debate finishes
+
+Published comments include artifact inlining — files created or modified by the generative agent are embedded in collapsed `<details>` blocks, so GitHub readers see actual content rather than local file paths.
 
 Adapter failures never block debates. Auth is handled via environment (e.g., `gh auth`), never stored in config.
 
