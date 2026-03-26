@@ -481,6 +481,66 @@ After generation, verify:
 - Each registered pair has both `generative.md` and `adversarial.md` in `.ratchet/pairs/`
 - All directories created: `debates/`, `reviews/`, `scores/`
 
+### Step 9b: GitHub Repository Settings (git repos with `gh` CLI available)
+
+After verifying output, check whether the repository has recommended settings for a Ratchet workflow. Only run this step if: (1) the project is a git repo, (2) `gh` CLI is available, and (3) the repo has a GitHub remote.
+
+**Detection**: Query current settings:
+```bash
+gh repo view --json deleteBranchOnMerge,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed \
+  2>/dev/null || echo "SKIP"
+```
+
+If the query fails (no `gh`, no remote, auth issues), skip this step silently.
+
+**Issues enabled check**: If the user selected the `github-issues` progress adapter in Step 6e, also query `hasIssuesEnabled` and warn if issues are disabled on the repo — the adapter requires GitHub Issues to be enabled. Add `hasIssuesEnabled` to the `--json` fields list in that case only.
+
+**Evaluate settings** and branch based on whether changes are needed:
+
+If all settings already match recommendations, print an informational message ("GitHub repo settings already match Ratchet recommendations") and skip to the next step — no `AskUserQuestion` needed since there is no decision.
+
+If any settings need changing, **present findings** via `AskUserQuestion`. Build the question text by listing each setting and its current vs recommended state:
+
+```
+GitHub repo settings review:
+
+Ratchet creates worktree branches and PRs per issue. These settings
+keep the repo clean and complement the debate workflow:
+
+  Auto-delete head branches:  [ON/OFF — Ratchet branches pile up without this]
+  Squash merge:               [ON/OFF — keeps main history clean, one commit per issue]
+  Merge commits:              [ON/OFF — recommend OFF when squash is on]
+  Rebase merge:               [ON/OFF — recommend OFF when squash is on]
+
+Want me to apply the recommended settings?
+```
+
+Options:
+- `"Apply recommended settings (Recommended)"`
+- `"Skip — I'll configure manually"`
+
+**Apply** (if user approves): Use `gh repo edit` flags:
+```bash
+gh repo edit \
+  --delete-branch-on-merge \
+  --enable-squash-merge \
+  --enable-merge-commit=false \
+  --enable-rebase-merge=false \
+  || echo "Warning: could not update repo settings. Configure manually in Settings > General." >&2
+```
+
+Only include flags for settings that need changing — don't re-apply settings already correct. Note: changing repository settings requires write access. If the command fails with a permission error, suggest the user ask a repo admin or configure manually in Settings > General.
+
+**Branch protection** is not applied automatically (requires admin permissions and more complex configuration). If the default branch has no protection rules, append an advisory note:
+
+```
+Note: Consider adding branch protection to your default branch:
+  Settings > Branches > Add rule > [branch name]
+  Recommended: Require PR, require status checks, no force push
+```
+
+This is informational only — do not attempt to create branch protection rules via the API (it requires admin scope and varies by plan).
+
 ### Step 10: Report
 
 Present a summary:
