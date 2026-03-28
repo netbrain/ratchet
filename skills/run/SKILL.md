@@ -326,11 +326,9 @@ There are five modes, checked in order:
 #### Mode M: Single-milestone pipeline (--milestone <id>)
 If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3** to build the issue dependency graph for this single milestone. This mode is used when the orchestrator launches parallel milestones — each agent re-enters the run skill scoped to one milestone. Execute Steps 3 → 4 → 8 for this milestone, then return the result.
 
-#### Mode S: Single-issue pipeline (--issue <ref>) [DEPRECATED]
+#### Mode S: Single-issue pipeline (--issue <ref>)
 
-**Note**: This mode is deprecated in favor of inline execution (Step 4b). The `--issue` flag may still be used for manual/supervised runs but is no longer used by the orchestrator in automated flows.
-
-If `--issue` is set manually, execute the issue pipeline (Step 5) directly for the specified issue without milestone context.
+If `--issue` is set, execute the issue pipeline (Step 5) directly for the specified issue. Used both for manual/supervised runs and as the entry point for parallel issue agents spawned by Step 4b.
 
 #### Mode A: Explicit pair or --all-files
 If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip epic negotiation.
@@ -391,7 +389,7 @@ If there are unresolved conditions from previous CONDITIONAL_ACCEPTs, append:
 `"(Unresolved from last run: [condition1], [condition2])"`
 
 Options:
-- "Run all ready issues sequentially (Recommended)" — executes all issues with no unmet dependencies
+- "Run all ready issues (Recommended)" — executes all issues with no unmet dependencies (parallel by layer)
 - "Run specific issue: [ref]" — one option per ready issue
 - "Address unresolved conditions from last run" — only if conditions exist
 - "Process sidequests ([N] pending: [titles...])" — only if `epic.discoveries` has items with `status == "pending"`
@@ -578,7 +576,7 @@ Proceed to **Step 8** for each completed milestone, then **Step 10** for epic-le
 
 **CHECKPOINT**: You are about to execute issue pipelines. Your job is to orchestrate the phase-gated execution for each issue in isolated worktrees. Do NOT write code, fix bugs, or implement features — that work belongs inside the debate-runner agents spawned from Step 5e.
 
-This is the core execution step. The orchestrator executes pipeline logic for each issue inline (no agent spawning), using git worktrees for isolation. Debate-runner agents are spawned at Step 5e, keeping nesting depth minimal.
+This is the core execution step. The orchestrator launches issue agents in parallel per dependency layer, using the Agent tool's `isolation: "worktree"` for git worktree isolation. This mirrors the milestone parallel pattern in Step 3c — the parent orchestrator spawns, collects, and writes state.
 
 #### 4a. Identify Ready Issues
 
@@ -586,17 +584,46 @@ From the dependency graph built in Step 3b, identify **ready issues** — issues
 
 **For explicit pair / --all-files modes:** Skip issue-based execution. Run the specified pairs directly using the single-issue flow (Step 5) without worktree isolation.
 
-#### 4b. Execute Issue Pipelines Inline
+#### 4b. Execute Issue Pipelines by Dependency Layer
 
-For each ready issue, execute the issue pipeline (Step 5) **inline** (not as a spawned agent). Use git worktrees for filesystem isolation.
+For each dependency layer (from Step 3b), launch all ready issues **in parallel** as separate Agent invocations. This mirrors the milestone parallel pattern in Step 3c.
 
 **Execution strategy:**
-- **Sequential execution**: Process issues one at a time to maintain simplicity and avoid resource contention
-- **Worktree isolation**: Each issue runs in its own git worktree with an isolated branch
-- **Inline logic**: Execute Steps 5a-5h directly in the current context (no agent spawning)
-- **Debate-runner spawning**: Only spawn agents at Step 5e for debate-runners (depth: orchestrator → debate-runner)
+- **Layer-parallel execution**: All issues in the same dependency layer run concurrently as separate Agent invocations
+- **Worktree isolation**: Each issue agent uses `isolation: "worktree"` on the Agent tool, giving it an isolated copy of the repository
+- **Agent-per-issue**: Each issue is spawned with `/ratchet:run --issue <ref> --milestone <id>`
+- **Layer synchronization**: Wait for all issues in Layer N to complete before launching Layer N+1
+- **Sequential fallback**: If no issues declare `depends_on`, issues still run in parallel as a single Layer 0. For milestones with only 1 issue, this naturally degrades to sequential.
 
-**[TodoWrite — Issue Starts]**: When starting an issue pipeline, update the todo list: set this issue to `"in_progress"` and add phase-level items for the issue. Include all phases from the issue's workflow:
+**Parallelism detection** (mirrors milestone DAG detection in Step 3a):
+- All ready issues (from Step 4a) in the same layer are launched simultaneously
+- Issues with unmet `depends_on` wait in later layers
+
+**Spawning parallel issue agents:**
+
+For each issue in the current ready layer, spawn an Agent with:
+- `isolation`: `"worktree"` — each agent gets its own git worktree automatically
+- Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
+
+The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
+
+**Branch base resolution for dependent issues:**
+- Layer 0 issues: branch from main (or current branch)
+- Layer 1+ issues: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
+- Multiple dependencies: branch from the dependency that finished last
+
+**Layer dispatch presentation:**
+```
+Executing issue dependency layer 0 ([N] issues in parallel):
+  [ref]: [title] — [N] pairs, starting at [phase]
+  [ref]: [title] — [N] pairs, starting at [phase]
+
+[If Layer 1+ exists: "[N] more issues in [N] layers waiting for dependencies"]
+```
+
+After Layer 0 completes, the orchestrator processes results (Step 4c), checks which Layer 1 issues are now unblocked, and launches the next batch.
+
+**[TodoWrite — Issue Starts]**: When launching a layer of issue pipelines, update the todo list: set all issues in the layer to `"in_progress"` and add phase-level items. Include all phases from each issue's workflow:
 
 ```
 TodoWrite([
@@ -611,63 +638,34 @@ TodoWrite([
 ])
 ```
 
-Always include all milestones, all issues, and the phase breakdown for the active issue.
+Always include all milestones, all issues, and the phase breakdown for all active issues in the layer.
 
-**Worktree setup per issue:**
+**Note on worktree management**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
 
-1. **Determine base branch:**
-   - If the issue has no `depends_on` → branch from main (or current branch)
-   - If the issue has `depends_on` → branch from the dependency's `branch` field in plan.yaml
+**Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction (same pattern as milestone agents in Step 3c).
 
-2. **Create worktree:**
-   ```bash
-   git worktree add .ratchet/worktrees/<issue-ref> <base-branch>
-   cd .ratchet/worktrees/<issue-ref>
-   git checkout -b ratchet/<milestone-slug>/<issue-ref>
-   ```
-
-3. **Execute issue pipeline** (Steps 5a-5h) in the worktree context
-
-4. **Record results** in main repo's plan.yaml (worktree plan.yaml is ephemeral)
-
-5. **Clean up worktree** after issue completes or halts:
-   ```bash
-   cd <main-repo>
-   git worktree remove .ratchet/worktrees/<issue-ref>
-   ```
-
-**Note on parallelism**: Issues execute sequentially to:
-- Avoid agent nesting limits (debate-runners spawn directly from orchestrator, not from nested issue agents)
-- Prevent resource contention on shared guards/resources
-- Simplify state management and error handling
-
-For true parallelism, use milestone-level DAG (Step 3a) where each milestone runs in a separate agent, and each milestone processes its issues sequentially.
-
-Present a summary before execution:
-
-```
-Executing [N] issue pipelines sequentially:
-  [ref]: [title] — [N] pairs, starting at [phase]
-  [ref]: [title] — [N] pairs, starting at [phase]
+**Note on guard singleton resources**: Guards with `singleton: true` resources use `flock` for serialization. When multiple issue agents run in parallel, each agent's guards independently acquire locks via `flock .ratchet/locks/<resource>.lock`. This means singleton-guarded operations serialize across parallel issues automatically — correct behavior, with no orchestrator coordination needed.
 
 [If Layer 1+ exists: "[N] more issues waiting for dependencies"]
 ```
 
 #### 4c. Process Issue Results (after issue completes)
 
-After each issue pipeline completes (Step 5h), update state and check for newly unblocked issues. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
+After all issue agents in a layer complete, the orchestrator processes results in batch. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
 
-For each completed issue:
+**Processing a layer's results** (same pattern as milestone results in Step 3c):
 
-1. **Update the MAIN repo's `plan.yaml`** immediately after the issue pipeline completes. Since execution is inline, you have direct access to the results:
+1. **Collect all agent results**: Each issue agent returns a structured completion summary (Step 5h). Read all results from the layer.
+
+2. **Update plan.yaml in batch**: For each completed issue in the layer, update the MAIN repo's plan.yaml:
    - Set `status` (done, blocked, escalated, failed)
    - Set `phase_status` for all phases
-   - Set `branch` (the branch name created by the pipeline)
+   - Set `branch` (from the agent's worktree result — the branch name created by the pipeline)
    - Set `files` (list of modified files)
    - Set `debates` (debate IDs created)
-   - Update directly based on Step 5h execution results
+   - Write all updates atomically — the orchestrator is the sole writer
 
-2. **Sync plan tracking issue** (if github-issues adapter configured):
+3. **Sync plan tracking issue** (if github-issues adapter configured):
    ```bash
    if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
      bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
@@ -675,13 +673,13 @@ For each completed issue:
    fi
    ```
 
-3. **Clean up the worktree**: Remove `.ratchet/worktrees/<issue-ref>` after recording results
+4. **Worktree cleanup**: The Agent tool's `isolation: "worktree"` handles cleanup automatically for agents that made no changes. For agents that made changes, the worktree persists with the branch — this is expected (the branch is the deliverable).
 
-4. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
+5. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
 
-5. If newly unblocked issues exist → execute them as the next batch (back to 4b)
+6. If newly unblocked issues exist → launch them as the next layer (back to 4b)
 
-6. Report progress after each issue: `"[N]/[total] issues complete in milestone [id]"`
+7. Report progress after each layer: `"Layer [N] complete: [N]/[total] issues done in milestone [id]"`
 
 **[TodoWrite — Issue Complete]**: After recording the issue result, update the todo list: set the issue item to `"completed"` and update its content to include the progress count (e.g., `"[ref]: [title] (2/4 issues done)"`). Remove the phase sub-items for the completed issue to keep the list concise. If the issue halted, keep its status as `"in_progress"` and append the halt reason in the content (e.g., `"[ref]: [title] -- BLOCKED: guard failure"`). Note: TodoWrite has no `"blocked"` status; `"in_progress"` is the closest approximation for halted issues — the content string communicates the actual state.
 
@@ -709,14 +707,14 @@ This is not a special case — it's the normal pipeline flow. Merge conflicts me
 
 ---
 
-### Step 5: Issue Pipeline (executed inline per-issue in isolated worktrees)
+### Step 5: Issue Pipeline (executed per-issue in isolated worktrees)
 
 > **For the full issue pipeline specification, read `skills/run/issue-pipeline.md`.**
 
-This step is the phase-gated execution loop for a single issue. The orchestrator
-executes it inline for each issue from Step 4b, using git worktrees for filesystem
-isolation. It spawns debate-runner agents (the only agent spawning in the pipeline)
-and returns a structured completion summary that the orchestrator parses in Step 4c.
+This step is the phase-gated execution loop for a single issue. Each issue agent
+(spawned by Step 4b) executes this in its own worktree. The issue agent spawns
+debate-runner agents and returns a structured completion summary that the
+orchestrator parses in Step 4c.
 
 **Pipeline stages** (detailed in `skills/run/issue-pipeline.md`):
 - **5a.** Determine current phase and match pairs

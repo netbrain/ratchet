@@ -6,15 +6,15 @@
 
 ---
 
-### Step 5: Issue Pipeline (executed inline per-issue in isolated worktrees)
+### Step 5: Issue Pipeline (executed per-issue in isolated worktrees)
 
-This is the phase-gated loop for a single issue. The orchestrator executes this step **inline** for each issue, using git worktrees for filesystem isolation.
+This is the phase-gated loop for a single issue. Each issue runs as a separate agent spawned by Step 4b, with its own git worktree via `isolation: "worktree"`.
 
 **Execution context:**
-- Called from Step 4b for each ready issue
-- Runs in the issue's dedicated git worktree (`.ratchet/worktrees/<issue-ref>`)
-- Spawns debate-runner agents at Step 5e (only agent spawning in the pipeline)
-- Updates the main repo's plan.yaml upon completion (Step 5h)
+- Spawned by Step 4b as a parallel Agent invocation (one per issue in the current layer)
+- Runs in an isolated git worktree (provided by `isolation: "worktree"`)
+- Spawns debate-runner agents at Step 5e
+- Returns a structured completion summary (Step 5h) — does NOT write plan.yaml (the parent orchestrator handles that in Step 4c)
 
 The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on workflow), then returns control to Step 4c for state persistence.
 
