@@ -178,7 +178,7 @@ The core Ratchet workflow. Operates at four levels:
 Parallelism exists at two levels:
 
 - **Milestones** run in parallel when they have `depends_on` declarations forming a DAG. Milestones without dependencies are Layer 0 and run concurrently. If no milestones declare `depends_on`, they run sequentially (backward compatible).
-- **Issues** within a milestone execute **sequentially** in isolated git worktrees. Parallelism is achieved at the milestone level: milestones in the same DAG layer run concurrently as separate agents, each processing their issues sequentially. This keeps nesting depth bounded and plan.yaml management simple.
+- **Issues** within a milestone run in parallel (unless they have explicit dependencies). Each issue progresses through its own phase pipeline independently, in an isolated git worktree.
 
 Phases within an issue are ordered and gated: phase N must complete before phase N+1 begins.
 
@@ -510,7 +510,7 @@ If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step
 2. **Layer 1**: issues whose dependencies are all in Layer 0
 3. **Layer N**: issues whose dependencies are all in earlier layers
 
-This produces the execution order. Issues within the same layer have no dependency ordering constraint and are processed in sequence.
+This produces the execution order. Issues within the same layer run in parallel.
 
 **[TodoWrite — Initial Plan]**: After building the issue DAG (and milestone DAG in DAG mode), write the initial todo list showing the full plan. Include all milestones and their issues with current statuses:
 
