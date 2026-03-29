@@ -39,11 +39,8 @@ install_git_hook() {
     local block
     block=$(cat <<HOOKEOF
 # BEGIN RATCHET
-if [ -n "\${CLAUDE_CODE:-}" ]; then
-  if [ -z "\${RATCHET_ALLOW_GENERATED:-}" ] && [ -f "$scripts_dir/check-generated-files.sh" ]; then
-    bash "$scripts_dir/check-generated-files.sh" || exit 1
-  fi
-  bash "$scripts_dir/check-consensus.sh"
+if [ -n "\${CLAUDE_CODE:-}" ] && [ -f "$scripts_dir/git-pre-commit.sh" ]; then
+  bash "$scripts_dir/git-pre-commit.sh" || exit \$?
 fi
 # END RATCHET
 HOOKEOF
@@ -175,6 +172,64 @@ setup_gitignore() {
     fi
 }
 
+install_publish_hook() {
+    local target="$1"
+    local scripts_dir="$2"
+    local settings_file="$target/settings.json"
+    local hook_script="$scripts_dir/publish-debate-hook.sh"
+
+    # Only install if publish-debate-hook.sh was copied to scripts dir
+    if [ ! -f "$hook_script" ]; then
+        return 0
+    fi
+
+    # Build the hook entry we want
+    local hook_json
+    hook_json=$(cat <<HOOKJSON
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $hook_script"
+          }
+        ]
+      }
+    ]
+  }
+}
+HOOKJSON
+)
+
+    if [ ! -f "$settings_file" ]; then
+        # No settings file — create one with the hook
+        echo "$hook_json" > "$settings_file" || { echo "Error: Failed to write $settings_file" >&2; return 1; }
+    else
+        # Settings file exists — merge hooks if not already present
+        if grep -q "publish-debate-hook" "$settings_file" 2>/dev/null; then
+            return 0  # Already installed
+        fi
+
+        if command -v jq >/dev/null 2>&1; then
+            # Use jq to merge
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq --argjson new "$hook_json" '
+                .hooks.PostToolUse = (.hooks.PostToolUse // []) + $new.hooks.PostToolUse
+            ' "$settings_file" > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$settings_file"
+            rm -f "$tmp_file" 2>/dev/null || true
+        else
+            echo "  Warning: jq not found, skipping settings.json hook merge. Add PostToolUse hook manually." >&2
+            return 0
+        fi
+    fi
+
+    echo "  Installed PostToolUse hook for debate publishing"
+}
+
 do_install() {
     local target="$1"
     local skip_hooks="$2"
@@ -279,6 +334,9 @@ do_install() {
         echo "  Installed statusline scripts to $target/"
     fi
 
+    # Install PostToolUse hook for debate publish automation
+    install_publish_hook "$target" "$scripts_dir"
+
     # Gitignore entries + safe untracking (local installs only — global installs
     # target ~/.claude, not the project repo, so there is no project .gitignore)
     if [ "$target" != "$HOME/.claude" ]; then
@@ -373,6 +431,23 @@ with open(path, 'w') as f:
                 echo "  Cleaned settings.json"
             # else: warning already printed by Python, continue silently
             fi
+        fi
+    fi
+
+    # Remove PostToolUse hook from settings.json
+    if [ -f "$target/settings.json" ] && grep -q "publish-debate-hook" "$target/settings.json" 2>/dev/null; then
+        if command -v jq >/dev/null 2>&1; then
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq '
+                if .hooks.PostToolUse then
+                    .hooks.PostToolUse |= [.[] | select(.hooks | all(.command | test("publish-debate-hook") | not))]
+                    | if (.hooks.PostToolUse | length) == 0 then del(.hooks.PostToolUse) else . end
+                    | if (.hooks | length) == 0 then del(.hooks) else . end
+                else . end
+            ' "$target/settings.json" > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$target/settings.json"
+            rm -f "$tmp_file" 2>/dev/null || true
+            echo "  Cleaned PostToolUse hook from settings.json"
         fi
     fi
 

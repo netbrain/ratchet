@@ -143,32 +143,8 @@ For each matched pair, prepare the context for the **debate-runner** agent:
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: Pair-level overrides take precedence over global. Pass resolved `generative`, `adversarial`, and `tiebreaker` models to the debate-runner.
-5. **Resolve publish config**: Read from the values already computed in Step 1b:
-   - `publish_debates`: the validated value (already corrected for adapter mismatch)
-   - `progress_ref`: use the **issue-level** progress ref, NOT the epic-level one. Debate comments belong on the specific issue being worked on, not the epic tracking issue:
-     ```bash
-     # Issue-level ref (e.g., the GitHub issue number for this specific work item).
-     # NOTE: progress_ref is not yet auto-populated on issues by the adapter framework.
-     # The yq path is forward-compatible for when adapters populate it; the #N regex
-     # fallback is the current working path for github-issues adapter.
-     issue_progress_ref=$(yq eval "
-       .epic.milestones[].issues[] | select(.ref == \"$ISSUE_REF\") | .progress_ref // null
-     " .ratchet/plan.yaml)
-
-     # Fallback: if the issue has no progress_ref (not yet created by adapter),
-     # check if the issue ref itself is a GitHub issue number (e.g., "#42")
-     if [ "$issue_progress_ref" = "null" ] && [[ "$ISSUE_REF" =~ ^#[0-9]+$ ]]; then
-       issue_progress_ref="$ISSUE_REF"
-     fi
-
-     # Diagnostic: warn when no progress_ref could be resolved
-     if [ "$issue_progress_ref" = "null" ]; then
-       echo "Note: No progress_ref resolved for issue $ISSUE_REF — debate comments will not be published." >&2
-     fi
-     ```
-     The epic-level `progress_ref` (`epic.progress_ref`) is for plan sync operations only — it should NOT be passed to debate-runners. Debate round comments posted to the epic tracking issue create noise and make individual issues harder to follow.
-   - `adapter`: the resolved adapter from Step 1b
-   - If `adapter` is `"none"` or empty: pass all three as `null` (adapter not configured)
+5. **Resolve publish config**: Publishing is handled automatically by the `publish-debate-hook.sh` PostToolUse hook. The debate-runner does NOT need publish config passed in its context. The hook reads `publish_debates` and `adapter` directly from `workflow.yaml`, and resolves `progress_ref` from `meta.json`. No orchestrator action needed.
+   - Ensure the debate-runner writes `progress_ref` (issue-level) and `issue` fields to `meta.json` at debate creation so the hook can resolve the publish target.
 
 #### 5e. Run Debates
 
@@ -227,11 +203,9 @@ Context:
     generative: [resolved model]
     adversarial: [resolved model]
     tiebreaker: [resolved model]
-  Publish:
-    publish_debates: [false | per-round | summary, or null if adapter is none]
-    progress_ref: [issue-level progress_ref — the GitHub issue for THIS issue, or null]
-    adapter: [adapter name from workflow.yaml, or null if adapter is none]
 ```
+
+> **Note:** Publishing is handled by the `publish-debate-hook.sh` PostToolUse hook, not the debate-runner. Ensure `meta.json` includes `progress_ref` and `issue` fields so the hook can resolve publish targets.
 
 **If Debate-Runner Cannot Be Spawned**
 

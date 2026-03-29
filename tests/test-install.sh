@@ -302,7 +302,7 @@ test_git_hook_install() {
     assert_executable "$hook_file" "Git hook: pre-commit is executable"
     assert_file_contains "$hook_file" "BEGIN RATCHET" "Git hook: contains BEGIN RATCHET marker"
     assert_file_contains "$hook_file" "END RATCHET" "Git hook: contains END RATCHET marker"
-    assert_file_contains "$hook_file" "check-consensus.sh" "Git hook: references check-consensus.sh"
+    assert_file_contains "$hook_file" "git-pre-commit.sh" "Git hook: references git-pre-commit.sh"
 }
 
 test_git_hook_uninstall() {

@@ -1,7 +1,7 @@
 ---
 name: debate-runner
 description: Debate orchestrator — creates debate directories, spawns generative/adversarial pairs, manages rounds until verdict
-tools: Read, Write, Edit, Agent, AskUserQuestion, TodoWrite, Bash
+tools: Read, Write, Edit, Agent, AskUserQuestion, TodoWrite
 disallowedTools: []
 ---
 
@@ -38,11 +38,6 @@ out of the framework. That is the generative agent's job, not yours.**
 - Target path starts with `.ratchet/reviews/` → ALLOWED (review records)
 - Target path is ANY other location → STOP. You are violating role boundaries.
   Route the work to the generative agent via a debate round.
-
-**BASH GATE — check EVERY Bash call before executing it:**
-- Calling `.claude/ratchet-scripts/progress/<adapter>/add-comment.sh` → ALLOWED (progress telemetry, analogous to TodoWrite)
-- Any other Bash command → STOP. Bash is not for running tests, guards, builds, or modifying files.
-  All such work belongs to the generative or adversarial agents.
 
 **Violation of these boundaries means you are no longer functioning as a
 debate-runner. You will be terminated and re-spawned.**
@@ -87,15 +82,9 @@ Context:
     tiebreaker: [opus|sonnet|haiku]
   Progress:
     todo_id: [parent todo item ID, or null if orchestrator did not provide one]
-  Publish:
-    publish_debates: [false | "per-round" | "summary"]
-    progress_ref: [issue/item reference for add-comment, or null]
-    adapter: [progress adapter name, e.g. "github-issues"]
 ```
 
-**Publish field defaults:** If the `Publish:` block is absent from the task context (e.g., orchestrators that predate this feature), treat all fields as their defaults: `publish_debates = false`, `progress_ref = null`, `adapter = "none"`. No comments are posted and no warnings are emitted.
-
-> **Forward reference:** The `/ratchet:run` skill learns to populate these Publish fields in [issue 45].
+**Publishing:** Debate round publishing is handled automatically by a PostToolUse hook (`publish-debate-hook.sh`). You do NOT need to call `add-comment.sh` or manage any publish protocol. Just write round files to disk — the hook detects new debate artifacts and publishes them if `publish_debates` is configured in `workflow.yaml`. Zero protocol to follow.
 
 ## Progress Reporting
 
@@ -429,38 +418,6 @@ Save the generative agent's output to `.ratchet/debates/<id>/rounds/round-<N>-ge
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} (generative done, adversarial pending)"
 
-**Publish (per-round):** If `publish_debates` is `"per-round"` AND `progress_ref` is non-null, post a comment immediately after saving the round file. Include any artifacts (spec files, test files, source files) the generative agent created or modified inline as collapsed sections — local file paths are meaningless to GitHub readers:
-
-```bash
-# Build artifact sections from files the generative agent created/modified this round
-ARTIFACT_SECTIONS=""
-for artifact in <files_modified_this_round>; do
-  [ -f "$artifact" ] || continue
-  ARTIFACT_SECTIONS="${ARTIFACT_SECTIONS}
-<details><summary>Artifact: ${artifact}</summary>
-
-\`\`\`$(echo "$artifact" | sed 's/.*\.//')
-$(cat "$artifact")
-\`\`\`
-</details>"
-done
-
-COMMENT="### Debate: <pair-name> — Round <N> (generative)
-**Phase:** <phase> | **Issue:** <issue-ref>
-<details><summary>Round output</summary>
-
-$(cat .ratchet/debates/<id>/rounds/round-<N>-generative.md)
-</details>
-${ARTIFACT_SECTIONS}"
-
-bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "$COMMENT" || {
-  ERR=$?
-  echo "<!-- publish warning: add-comment.sh exited $ERR -->" >> .ratchet/debates/<id>/rounds/round-<N>-generative.md
-}
-```
-
-If the command fails, capture the error and append a warning comment to the round file. The debate continues regardless.
-
 Track any files the generative agent created or modified — these go into `files_modified` in the result.
 
 #### 2b. Spawn Adversarial Agent
@@ -517,24 +474,6 @@ otherwise. If the generative agent claims a test failure is "pre-existing" or
 Save output to `.ratchet/debates/<id>/rounds/round-<N>-adversarial.md`.
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} -- Round {N} {VERDICT}[, Round {N+1} starting]"
-
-**Publish (per-round):** If `publish_debates` is `"per-round"` AND `progress_ref` is non-null, post a comment immediately after saving the round file:
-
-```bash
-COMMENT="### Debate: <pair-name> — Round <N> (adversarial)
-**Phase:** <phase> | **Issue:** <issue-ref>
-<details><summary>Click to expand</summary>
-
-$(cat .ratchet/debates/<id>/rounds/round-<N>-adversarial.md)
-</details>"
-
-bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "$COMMENT" || {
-  ERR=$?
-  echo "<!-- publish warning: add-comment.sh exited $ERR -->" >> .ratchet/debates/<id>/rounds/round-<N>-adversarial.md
-}
-```
-
-If the command fails, capture the error and append a warning comment to the round file. The debate continues regardless.
 
 #### 2c. Parse Verdict
 
@@ -635,49 +574,6 @@ Update `meta.json` with final state:
 
 **Progress:** Mark TodoWrite item completed -- "Debate: {pair-name} -- {VERDICT} ({N} rounds)"
 
-**Publish (summary):** If `publish_debates` is `"summary"` AND `progress_ref` is non-null, post one consolidated comment after debate finishes. Include all debate artifacts (spec files, source files, test files) inline so the GitHub issue is self-contained:
-
-```bash
-# Build summary from all round files
-SUMMARY_BODY=""
-for round_file in .ratchet/debates/<id>/rounds/round-*.md; do
-  ROUND_NAME=$(basename "$round_file" .md)
-  SUMMARY_BODY="${SUMMARY_BODY}
-<details><summary>${ROUND_NAME}</summary>
-
-$(cat "$round_file")
-</details>"
-done
-
-# Build artifact sections from all files created/modified during the debate
-ARTIFACT_SECTIONS=""
-for artifact in <files_modified>; do
-  [ -f "$artifact" ] || continue
-  ARTIFACT_SECTIONS="${ARTIFACT_SECTIONS}
-<details><summary>Artifact: ${artifact}</summary>
-
-\`\`\`$(echo "$artifact" | sed 's/.*\.//')
-$(cat "$artifact")
-\`\`\`
-</details>"
-done
-
-COMMENT="### Debate Summary: <pair-name> (<N> rounds — <VERDICT>)
-**Phase:** <phase> | **Issue:** <issue-ref>
-${SUMMARY_BODY}
-${ARTIFACT_SECTIONS:+
----
-**Artifacts produced:**
-${ARTIFACT_SECTIONS}}"
-
-bash .claude/ratchet-scripts/progress/<adapter>/add-comment.sh "<progress_ref>" "$COMMENT" || {
-  ERR=$?
-  echo "publish warning: add-comment.sh exited $ERR at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .ratchet/debates/<id>/publish-warnings.log
-}
-```
-
-If the command fails, log a warning. The debate result is not affected.
-
 Return the result object to the caller.
 
 ## Critical Rules
@@ -695,20 +591,6 @@ Return the result object to the caller.
 6. **ONE DEBATE, ONE INVOCATION.** You handle exactly one pair's debate per invocation. If multiple pairs need to run, the caller spawns multiple debate-runner agents in parallel.
 
 7. **TEST FAILURES ARE BLOCKING, NOT ADVISORY.** Any test failure observed during a debate is treated as a hard block on consensus. You MUST NOT allow an ACCEPT or CONDITIONAL_ACCEPT verdict to stand if the adversarial agent has reported unresolved test failures. If the generative agent claims a failure is "pre-existing" or "unrelated," that claim requires proof (e.g., demonstrating the same failure on the main branch). Without such proof, the failure is attributed to the PR and blocks acceptance.
-
-## Role Boundary Rationale — Bash for Progress Telemetry
-
-The `Bash` tool is listed in the frontmatter tools and is permitted **exclusively** for progress telemetry calls: invoking `add-comment.sh` after each round file is saved. This is analogous to `TodoWrite` — it is durable external-state reporting, not implementation work.
-
-**Bash is NOT permitted for:**
-- Writing, editing, or deleting source code, tests, or application config
-- Running guards, tests, or build commands
-- Committing code or creating PRs
-- Any file modification outside `.ratchet/debates/`, `.ratchet/escalations/`, `.ratchet/reviews/`
-
-**Bash IS permitted for:**
-- Calling `.claude/ratchet-scripts/progress/<adapter>/add-comment.sh` to post round comments when `publish_debates` is configured
-- All adapter calls are wrapped in `|| { ... }` — failures are captured and logged in the round file, never allowed to block or abort the debate
 
 ## What You Do NOT Do
 

@@ -105,22 +105,21 @@ resolve it directly.
 
 **AGENT GATE — check EVERY Agent tool invocation before spawning it:**
 
-The orchestrator may ONLY spawn agents in these four categories:
+The orchestrator may ONLY spawn agents in these three categories:
 
-1. **Debate-runners** (Step 5e) — agents whose prompt references the debate-runner role
-   (`agents/debate-runner.md`) and whose task is to orchestrate a debate between
-   generative and adversarial agents. The debate-runner is the ONLY valid path for
-   code changes.
-2. **Milestone pipeline agents** (Step 3c) — orchestrator agents that inherit the
-   same source-code boundary (no writing source/test/config files) and themselves
-   only spawn debate-runners. They CAN modify `.ratchet/plan.yaml` via yq (plan
-   management is orchestrator work).
-3. **Analyst agents** (Step 8c) — read-only assessment agents
+1. **Issue pipeline agents** (Step 4b) — agents that run a single issue's phase
+   pipeline in an isolated worktree. They spawn debate-runners at Step 5e.
+   The debate-runner is the ONLY valid path for code changes.
+2. **Analyst agents** (Step 8c) — read-only assessment agents
    (`disallowedTools: Write, Edit`) that analyze data and produce recommendations.
    They NEVER modify files.
-4. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
+3. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
    inherit the same source-code boundary and plan management authority, and
    continue the `/ratchet:run` loop.
+
+**No milestone sub-agents.** The orchestrator runs milestones directly (Step 3c)
+to keep the agent chain at 3 levels: orchestrator → debate-runner → gen/adv.
+Spawning milestone-level agents adds a 4th level where chain collapse occurs.
 
 **NEVER spawn an agent with implementation instructions.** If your Agent prompt
 contains phrases like "implement X", "fix Y", "add Z", "write code for", "create
@@ -136,7 +135,7 @@ generative agent. There are no shortcuts.
 
 **Correct pattern:**
 - `Agent("Run debate for pair [name] in phase [phase]. ...")` — spawns a debate-runner
-- `Agent("/ratchet:run --milestone M3 --unsupervised")` — spawns a milestone pipeline
+- `Agent("/ratchet:run --issue issue-3 --milestone 2")` with `isolation: "worktree"` — spawns an issue pipeline
 - `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
 
 Your job is to:
@@ -261,17 +260,7 @@ Determine which `.ratchet/` directory to use:
 
 Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the resolved `.ratchet/` directory.
 
-**`publish_debates` validation**: After reading `workflow.yaml`, check for misconfiguration:
-```bash
-adapter=$(yq eval '.progress.adapter // "none"' .ratchet/workflow.yaml)
-publish_debates=$(yq eval '.progress.publish_debates // false' .ratchet/workflow.yaml)
-
-if [ "$publish_debates" != "false" ] && [ "$adapter" != "github-issues" ]; then
-  echo "Warning: publish_debates is set to '${publish_debates}' but progress.adapter is '${adapter}'. publish_debates only applies to the github-issues adapter. Treating publish_debates as false for this run." >&2
-  publish_debates=false
-fi
-```
-This is a misconfiguration safety net — the init interview only asks about `publish_debates` when the adapter is `github-issues`, but manually edited configs may set it incorrectly. The warning is advisory only; the run continues with `publish_debates` treated as `false`.
+**`publish_debates` note**: Debate round publishing is handled by the `publish-debate-hook.sh` PostToolUse hook, not by the orchestrator or debate-runner. The hook reads `publish_debates` and `adapter` directly from `workflow.yaml`. No orchestrator-side validation or passing of publish config is needed.
 
 Build a picture of:
 - Which milestones are **completed** (status: done)
@@ -324,7 +313,7 @@ This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries
 There are five modes, checked in order:
 
 #### Mode M: Single-milestone pipeline (--milestone <id>)
-If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3** to build the issue dependency graph for this single milestone. This mode is used when the orchestrator launches parallel milestones — each agent re-enters the run skill scoped to one milestone. Execute Steps 3 → 4 → 8 for this milestone, then return the result.
+If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3b** to build the issue dependency graph for this single milestone. Execute Steps 3b → 4 → 8 for this milestone, then proceed to Step 10. This mode is used for focused runs on a single milestone (user-invoked or continuation agents).
 
 #### Mode S: Single-issue pipeline (--issue <ref>)
 
@@ -534,43 +523,40 @@ Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. 
 - Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
 - Only set `status: in_progress` if the user explicitly confirms re-opening.
 
-#### 3c. Launch Parallel Milestones (DAG mode only)
+#### 3c. Execute Milestones (DAG mode — sequential with parallel issues)
 
-When multiple milestones are ready, launch them in parallel. Each milestone runs as a separate agent with its own issue DAG:
-
-```
-Launching [N] milestones in parallel:
-  M[id]: [name] — [N] issues
-  M[id]: [name] — [N] issues
-
-[If later layers exist: "[N] more milestones waiting for dependencies"]
-```
-
-For each ready milestone, spawn an Agent with:
-- `tools`: Read, Grep, Glob, Bash, Agent, AskUserQuestion, TodoWrite
-- `disallowedTools`: Write, Edit
-
-The milestone agent is an orchestrator — it inherits the same "NEVER use Write or Edit" constraint as the parent. It spawns debate-runners at Step 5e, which in turn spawn generative agents (with Write/Edit) and adversarial agents (without Write/Edit).
+**Design decision — no milestone sub-agents.** The orchestrator executes milestones directly instead of spawning milestone-level agents. This keeps the agent chain at 3 levels:
 
 ```
-/ratchet:run --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]
+orchestrator → debate-runner → generative + adversarial
 ```
 
-The spawned agent enters Mode M (Step 2), builds the issue DAG for its milestone, and runs Steps 3b → 4 → 8 independently. Each milestone agent handles its own issue parallelism internally.
+Spawning milestone sub-agents adds a 4th level that causes agent chain collapse — agents at depth 3+ routinely skip the debate framework and write code directly. By running milestones inline, the debate-runner stays at depth 2 where compliance is reliable.
 
-**Processing milestone results** (same pattern as issue results in Step 4c):
-1. Read each milestone agent's output
-2. **Update plan.yaml** with milestone status (done, blocked, halted) and all issue statuses within it
-3. Check if any dependent milestones are now unblocked → launch next batch
-4. Report overall epic progress
+**Milestone execution order (DAG mode):**
+
+Process milestone layers sequentially. Within each layer, all milestones are processed one at a time (the orchestrator handles one milestone's issue DAG before moving to the next). Issue parallelism within a milestone is preserved (Step 4b).
+
+```
+Milestone execution plan:
+  Layer 0: M[id] ([N] issues), M[id] ([N] issues)
+  Layer 1: M[id] ([N] issues) — depends on Layer 0
+  [...]
+```
+
+For each milestone in the current layer:
+1. Set milestone to `status: in_progress` in plan.yaml
+2. Build issue dependency graph (Step 3b)
+3. Execute issue pipelines (Step 4) — issues within the milestone run in parallel via Agent tool
+4. Process issue results (Step 4c)
+5. Run milestone completion (Step 8) if all issues done
+6. Check if any Layer N+1 milestones are now unblocked → continue to next layer
 
 **When all milestones across all layers are done** → epic complete, proceed to Step 10.
 
-**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with other milestones if possible — a halted milestone only blocks milestones that depend on it.
+**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with remaining milestones in the same layer — a halted milestone only blocks milestones that depend on it.
 
-**Context clearing**: each milestone agent starts with fresh context (separate Agent invocation), achieving the same context isolation as sequential milestone execution.
-
-Proceed to **Step 8** for each completed milestone, then **Step 10** for epic-level next steps.
+**Context clearing**: At each milestone boundary, the orchestrator re-reads plan.yaml and workflow.yaml from disk. This prevents accumulated context drift. In unsupervised mode with many milestones, the orchestrator spawns a continuation agent (Step 10) after completing each milestone to get a fresh context window.
 
 ### Step 4: Execute Issue Pipelines
 
@@ -642,7 +628,7 @@ Always include all milestones, all issues, and the phase breakdown for all activ
 
 **Note on worktree management**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
 
-**Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction (same pattern as milestone agents in Step 3c).
+**Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction.
 
 **Note on guard singleton resources**: Guards with `singleton: true` resources use `flock` for serialization. When multiple issue agents run in parallel, each agent's guards independently acquire locks via `flock .ratchet/locks/<resource>.lock`. This means singleton-guarded operations serialize across parallel issues automatically — correct behavior, with no orchestrator coordination needed.
 
@@ -826,7 +812,7 @@ Score data is computed on-demand by `/ratchet:score` directly from debate artifa
 
 **Resource teardown**: tear down shared resources when no more pipelines need them:
 - **Sequential mode**: after all issue pipelines for the milestone complete
-- **DAG mode**: after ALL milestones across all layers complete (the top-level orchestrator handles teardown, not individual milestone agents)
+- **DAG mode**: after ALL milestones across all layers complete (the orchestrator handles teardown after the last milestone)
 
 For teardown:
 1. For each resource in `workflow.yaml` that has a `stop` command, run it
@@ -838,29 +824,7 @@ Resources are torn down regardless of whether milestones succeeded, halted, or h
 
 ### Step 10: Propose Next Focus
 
-**If `--milestone` (Mode M)**: This is a milestone sub-agent. Output a structured milestone completion summary (analogous to issue summaries in Step 5h) and return. The top-level orchestrator handles next steps.
-
-```
-Milestone [id] complete:
-  status: done
-  issues: [N] complete, [N] blocked/escalated
-  prs: [N] created
-  debates: [N] total
-```
-
-Or if halted:
-```
-Milestone [id] [blocked|halted]:
-  status: [blocked|halted]
-  issues: [N] complete, [N] blocked/escalated, [N] pending
-  halted_because: [reason]
-```
-
----
-
-**If `--unsupervised`** (sequential mode): Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. The continuation agent inherits the same source-code boundary and plan management authority. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
-
-**If `--unsupervised`** (DAG mode): The top-level orchestrator processes milestone results from Step 3c. If newly unblocked milestones exist, launch them. If all milestones are done, present the epic completion summary and halt.
+**If `--unsupervised`**: Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. The continuation agent inherits the same source-code boundary and plan management authority. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
 
 **Otherwise**, use `AskUserQuestion` to let the user choose what to do next.
 
@@ -874,7 +838,7 @@ Milestone [id] [blocked|halted]:
 
 **If milestone complete, more milestones remain:**
 
-**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. In sequential mode, persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. A fresh context forces re-reading actual files, preventing drift from auto-compaction summaries. In DAG mode, context clearing happens naturally — each milestone agent is a separate Agent invocation with fresh context.
+**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. At each milestone boundary, re-read state files from disk. In unsupervised mode, the continuation agent (Step 10) starts with fresh context, preventing drift from auto-compaction summaries.
 
 - Summary: `"Milestone [name] complete! [N] issues, [N] PRs created. Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone — all state is persisted to disk."`
 - Options:
