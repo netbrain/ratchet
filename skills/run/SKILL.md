@@ -78,7 +78,7 @@ work, not "breaking out of the framework."
 - Setting/clearing `current_focus`
 - Promoting/dismissing discoveries
 - Recording `progress_ref`, `branch`, `pr`, `debates`, `files` on issues
-- Recording `github_issue` on milestones (the GitHub issue number this milestone tracks, e.g., `github_issue: 165`). When the user provides a GitHub issue reference in the milestone description or context, extract the number and store it as an explicit field — do not bury it in the description string. This field is passed to issue pipelines so PRs are linked automatically.
+- Recording `github_issue` on milestones (the GitHub issue number this milestone tracks as a parent, e.g., `github_issue: 165`). When the user provides a GitHub issue reference for the milestone, store it as an explicit field — do not bury it in the description string. Child issues are created under this parent at pipeline launch time (Step 4b).
 - Incrementing `regressions` counters
 - Any structural change to the epic roadmap that the user requests
 
@@ -188,8 +188,7 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run [pair-name]        # Run a specific pair against its scoped files
 /ratchet:run [workspace]        # Target a specific workspace
 /ratchet:run --milestone <id>   # Run a single milestone's pipeline (used by parallel milestone spawning)
-/ratchet:run --issue <ref>      # Run a single issue's pipeline (used by parallel issue spawning)
-/ratchet:run --github-issue <N> # Link PRs to GitHub issue #N (passed by orchestrator from milestone's github_issue field)
+/ratchet:run --issue <ref>      # Run a single issue's pipeline (ref is GitHub issue # if promoted)
 /ratchet:run --all-files        # Run all pairs against all files in scope
 /ratchet:run --no-cache         # Force re-debate even if files haven't changed
 /ratchet:run --dry-run          # Preview what would run without executing anything
@@ -587,12 +586,43 @@ For each dependency layer (from Step 3b), launch all ready issues **in parallel*
 - All ready issues (from Step 4a) in the same layer are launched simultaneously
 - Issues with unmet `depends_on` wait in later layers
 
+**Issue ref promotion (lazy GitHub issue creation):**
+
+Before spawning issue agents, promote any non-numeric refs to GitHub issue numbers. This is just-in-time — planning stays offline-capable.
+
+For each issue in the current ready layer whose `ref` is NOT already a number:
+1. If the `github-issues` adapter is configured and `gh` is available:
+   ```bash
+   PARENT_ISSUE=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .github_issue // null" .ratchet/plan.yaml)
+   ISSUE_NUM=$(bash .claude/ratchet-scripts/progress/github-issues/create-issue.sh \
+     "$ISSUE_TITLE" "$ISSUE_DESCRIPTION" \
+     ${PARENT_ISSUE:+--parent "$PARENT_ISSUE"} 2>/dev/null) || true
+   ```
+2. If creation succeeds: rewrite `ref` to the returned number, update any `depends_on` arrays in the same milestone that referenced the old ref, write plan.yaml
+   ```bash
+   OLD_REF="$ISSUE_REF"
+   NEW_REF="$ISSUE_NUM"
+   # Rewrite ref
+   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$OLD_REF\")).ref = \"$NEW_REF\"" .ratchet/plan.yaml
+   # Rewrite depends_on references across all issues in this milestone
+   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[].depends_on) |= map(select(. == \"$OLD_REF\") = \"$NEW_REF\" // .)" .ratchet/plan.yaml
+   ```
+3. If creation fails: keep the local ref. Pipeline runs normally — publishing degrades gracefully (no comments posted, but no crash). The ref gets promoted on the next successful run.
+
+Sync the plan tracking issue after all promotions in the layer:
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+fi
+```
+
 **Spawning parallel issue agents:**
 
 For each issue in the current ready layer, spawn an Agent with:
 - `isolation`: `"worktree"` — each agent gets its own git worktree automatically
 - Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
-- If the milestone has a `github_issue` field (e.g., `github_issue: 165`), pass it in the agent context: `--github-issue <N>`. The issue pipeline uses this to link PRs to the GitHub issue.
+- The issue's `ref` is now the GitHub issue number (if promoted) or the local ref (if promotion failed/skipped). The issue pipeline uses numeric refs directly as `progress_ref` for debate publishing and `Fixes #<ref>` in PR bodies.
 
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 

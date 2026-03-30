@@ -243,17 +243,22 @@ render_body() {
                 iss_checkbox=" "
             fi
 
-            # Build detail suffix: PR link and phase progress
+            # Build detail suffix: PR link
             iss_detail=""
             if [ "$iss_pr" != "null" ] && [ -n "$iss_pr" ]; then
-                # PR can be a number or a URL
                 case "$iss_pr" in
                     http*) iss_detail=" — [PR]($iss_pr)" ;;
                     *)     iss_detail=" — PR #$iss_pr" ;;
                 esac
             fi
 
-            printf -- '- [%s] %s: %s%s\n' "$iss_checkbox" "$iss_ref" "$iss_title" "$iss_detail"
+            # Render ref: numeric refs are GitHub issue links (#N), local refs shown as-is
+            local iss_ref_display="$iss_ref"
+            case "$iss_ref" in
+                [0-9]*) iss_ref_display="#$iss_ref" ;;
+            esac
+
+            printf -- '- [%s] %s: %s%s\n' "$iss_checkbox" "$iss_ref_display" "$iss_title" "$iss_detail"
 
             # Hidden metadata (all on single lines for GitHub to hide)
             printf '<!-- issue_ref: %s -->\n' "$iss_ref"

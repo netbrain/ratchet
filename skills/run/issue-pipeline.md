@@ -143,11 +143,11 @@ For each matched pair, prepare the context for the **debate-runner** agent:
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: Pair-level overrides take precedence over global. Pass resolved `generative`, `adversarial`, and `tiebreaker` models to the debate-runner.
-5. **Resolve progress_ref for publish hook**: The `publish-debate-hook.sh` PostToolUse hook reads `progress_ref` from `meta.json` to know which GitHub issue to post to. The orchestrator MUST resolve this and pass it to the debate-runner so it can be written into meta.json at debate creation (Step 1 of the debate protocol) — before any round files are written.
-   - If `--github-issue <N>` was passed: use `N` as `progress_ref`
-   - Else if the issue has a `progress_ref` in plan.yaml: use that
-   - Else if the issue ref looks like a GitHub issue number (`#42`): use the number
-   - Else: pass `null` (hook will attempt fallback via milestone's `github_issue` field)
+5. **Resolve progress_ref for publish hook**: The issue's `ref` is the canonical identity. If `ref` is numeric (i.e., a promoted GitHub issue number), use it directly as `progress_ref`. If `ref` is a local string (not yet promoted), pass `null` — publishing degrades gracefully.
+   ```
+   progress_ref = ref if ref is numeric, else null
+   ```
+   Pass `progress_ref` to the debate-runner so it writes it into `meta.json` at debate creation (Step 1) — before any round files trigger the publish hook.
 
 #### 5e. Run Debates
 
@@ -334,10 +334,9 @@ When creating a PR for an issue:
 - Title: issue title
 - Body includes:
   - Summary of phases completed, debate outcomes, guard results
-  - **GitHub issue linking** (when `--github-issue <N>` was passed by the orchestrator):
-    - If this is the **last issue** in the milestone (all other issues are `done`): `Closes #<N>`
-    - Otherwise: `Relates to #<N>`
-    - If no `github_issue` was provided: omit the line (no guessing from description text)
+  - **GitHub issue linking** (when `ref` is a numeric GitHub issue number):
+    - `Fixes #<ref>` — closes the specific work item when the PR merges
+    - If `ref` is a local string (not promoted): omit the line
   - **If this issue has `depends_on`**: "Depends on [dep-ref PR URL] being merged first." This tells reviewers the merge order.
   - **Debate Summary section** (see `skills/run/pr-body.md`)
 - Push and create via `gh pr create`
