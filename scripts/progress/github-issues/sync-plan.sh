@@ -181,7 +181,7 @@ render_body() {
     milestone_count=$(yq eval '.epic.milestones | length' "$plan")
     done_count=$(yq eval '[.epic.milestones[] | select(.status == "done")] | length' "$plan")
     printf '**Progress:** %s/%s milestones complete\n\n' "$done_count" "$milestone_count"
-    printf '---\n'
+    printf '%s\n' '---'
 
     local i=0
     while [ "$i" -lt "$milestone_count" ]; do
