@@ -70,6 +70,37 @@ From review files, calculate:
 - **Gen vs Adv split**: separate averages for generative and adversarial effectiveness
 - **Top missed issues**: most commonly flagged patterns from missed_issues arrays
 
+### Step 2b: Persist Metrics as Moving Average
+
+After computing metrics from debate artifacts, update `.ratchet/scores.yaml` with an exponential moving average (EMA). This ensures pair metrics survive debate archival across epics.
+
+**EMA formula**: `new_ema = α × current_value + (1 - α) × old_ema` where `α = 0.3` (recent debates weighted ~30%, history ~70%).
+
+**Schema** (`.ratchet/scores.yaml`):
+```yaml
+pairs:
+  <pair-name>:
+    total_debates: <int>          # cumulative lifetime count
+    consensus_rate: <float>       # EMA, 0-1
+    avg_rounds: <float>           # EMA
+    fast_path_rate: <float>       # EMA, 0-1
+    effectiveness_gen: <float>    # EMA
+    effectiveness_adv: <float>    # EMA
+    last_updated: <ISO timestamp>
+    last_epic: <epic name>
+```
+
+**Update logic**:
+1. Read `.ratchet/scores.yaml` (create if missing)
+2. For each pair with new debate data since `last_updated`:
+   - Compute current-epoch metrics from debate artifacts (Step 2)
+   - Apply EMA against stored values (use current values directly if no stored values exist — first epoch)
+   - Increment `total_debates` by the count of new debates
+   - Set `last_updated` to now, `last_epic` to current epic name
+3. Write back to `.ratchet/scores.yaml`
+
+**Fallback**: When no debate artifacts exist (archived), Step 2 metrics are unavailable. Use `.ratchet/scores.yaml` directly for display, noting `"(from historical average — debate artifacts archived)"` in the output.
+
 ### Step 3: Present
 
 ```

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /workspace/main/.claude/ratchet-scripts/publish-debate-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

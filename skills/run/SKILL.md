@@ -343,7 +343,19 @@ Options:
 - "View quality metrics (/ratchet:score)"
 - "Done for now"
 
-When creating a new epic: replace the existing `epic` block in plan.yaml (archive the old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync the tracking issue:
+When creating a new epic: replace the existing `epic` block in plan.yaml (archive the old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). **Archive debates**: move all debate artifacts from the completed epic into the archive alongside the plan:
+```bash
+EPIC_SLUG=$(echo "$EPIC_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+ARCHIVE_DIR=".ratchet/archive/epic-${EPIC_SLUG}-$(date +%Y%m%dT%H%M%SZ)"
+mkdir -p "$ARCHIVE_DIR"
+cp .ratchet/plan.yaml "$ARCHIVE_DIR/plan.yaml"
+if [ -d .ratchet/debates ] && [ "$(ls -A .ratchet/debates 2>/dev/null)" ]; then
+  mv .ratchet/debates/* "$ARCHIVE_DIR/debates/" 2>/dev/null || true
+fi
+```
+This is safe because `/ratchet:score` persists metrics as a moving average in `.ratchet/scores.yaml` (Step 2b of the score skill) — archiving debates does not lose score history.
+
+Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync the tracking issue:
 ```bash
 if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
   bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
@@ -901,7 +913,7 @@ Present via `AskUserQuestion`:
 
 ### Step 9: Update Scores & Teardown Resources
 
-Score data is computed on-demand by `/ratchet:score` directly from debate artifacts (`debates/*/meta.json` and `reviews/**/*.json`). No score update step is needed.
+Score data is computed on-demand by `/ratchet:score` from debate artifacts (`debates/*/meta.json` and `reviews/**/*.json`) and persisted as an exponential moving average in `.ratchet/scores.yaml`. The EMA survives debate archival across epics — no score update step is needed here.
 
 **Resource teardown**: tear down shared resources when no more pipelines need them:
 - **Sequential mode**: after all issue pipelines for the milestone complete

@@ -21,3 +21,18 @@ result-*
 */.ratchet/progress/
 */.ratchet/plan.yaml
 */.ratchet/issues/
+
+# Ratchet runtime state (auto-added by install.sh)
+.ratchet/plan.yaml
+.ratchet/debates/
+.ratchet/reviews/
+.ratchet/scores/
+.ratchet/retros/
+.ratchet/escalations/
+.ratchet/guards/
+.ratchet/reports/
+.ratchet/progress/
+.ratchet/worktrees/
+.ratchet/locks/
+.ratchet/archive/
+.ratchet/issues/

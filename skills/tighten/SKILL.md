@@ -389,6 +389,52 @@ Tighten complete:
   [If retro stored: "Findings saved to .ratchet/retros/<timestamp>.json"]
 ```
 
+### Step 7: Persist Changes
+
+If any improvements were applied (changes to pair definitions, workflow.yaml, guards, etc.), ask how the user wants to persist them.
+
+First, show what changed:
+```bash
+git diff --stat
+```
+
+Check the progress adapter to determine the default:
+```bash
+adapter=$(yq eval '.progress.adapter' .ratchet/workflow.yaml 2>/dev/null)
+```
+
+Then use `AskUserQuestion`:
+- Question: "How would you like to persist these tighten changes?"
+- Options (default depends on adapter):
+  - `"Commit and create PR (Recommended)"` — **recommended when `adapter == "github-issues"`**. Commit on a new branch `ratchet/tighten-<timestamp>`, push, and open a PR
+  - `"Commit (Recommended)"` — **recommended when no github adapter**. Stage and commit all tighten changes with message `"Tighten: [brief summary of changes]"`
+  - `"Commit and push"` — commit, then push to the current branch
+  - `"Don't persist yet"` — leave changes unstaged for manual review
+
+**Commit**: Stage only `.ratchet/` files that were modified (pair defs, workflow.yaml, reports, retros). Do NOT stage source code or unrelated files.
+```bash
+git add .ratchet/pairs/ .ratchet/workflow.yaml .ratchet/reports/ .ratchet/retros/ .ratchet/scores.yaml 2>/dev/null
+git add .ratchet/plan.yaml 2>/dev/null  # discoveries may have been updated
+git commit -m "Tighten: [summary]"
+```
+
+**Commit and push**: Same as above, then `git push`.
+
+**Commit and create PR**: Branch, commit, push, and open PR:
+```bash
+BRANCH="ratchet/tighten-$(date +%Y%m%dT%H%M%SZ)"
+git checkout -b "$BRANCH"
+git add .ratchet/pairs/ .ratchet/workflow.yaml .ratchet/reports/ .ratchet/retros/ .ratchet/scores.yaml 2>/dev/null
+git add .ratchet/plan.yaml 2>/dev/null
+git commit -m "Tighten: [summary]"
+git push -u origin "$BRANCH"
+gh pr create --title "Tighten: [summary]" --body "Applied [N] improvements from tighten analysis."
+```
+
+If no files were changed (all improvements skipped), skip this step entirely.
+
+### Step 8: Next Steps
+
 Then use `AskUserQuestion`:
 - Options:
   - `"Run next debate (/ratchet:run) (Recommended)"`
