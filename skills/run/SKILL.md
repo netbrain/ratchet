@@ -672,19 +672,56 @@ Always include all milestones, all issues, and the phase breakdown for all activ
 
 After all issue agents in a layer complete, the orchestrator processes results in batch. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
 
-**Processing a layer's results** (same pattern as milestone results in Step 3c):
+**Processing a layer's results:**
 
 1. **Collect all agent results**: Each issue agent returns a structured completion summary (Step 5h). Read all results from the layer.
 
-2. **Update plan.yaml in batch**: For each completed issue in the layer, update the MAIN repo's plan.yaml:
+2. **Package each completed issue (commit + PR)**: For each issue with status `done`, the orchestrator creates the commit and PR from the issue agent's worktree. This is the orchestrator's job — not the issue agent's — because agents at depth 3+ routinely truncate the protocol and skip packaging.
+
+   For each completed issue with a `worktree` path:
+   ```bash
+   cd "<worktree>"
+
+   # Branch name
+   BRANCH="ratchet/<milestone-slug>/<issue-ref>"
+   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
+
+   # Commit all changes
+   git add -A
+   git commit -m "<issue title>
+
+   Debated by: <pair-names>
+   Verdicts: <verdict summaries>"
+
+   # Push and create PR
+   git push -u origin "$BRANCH"
+   ```
+
+   PR creation uses `gh pr create` with the body from `skills/run/pr-body.md`:
+   - `Fixes #<ref>` when ref is a numeric (promoted) GitHub issue number
+   - Debate summary table from all debates in this issue
+   - Dependency note if `depends_on` references exist
+
+   > **For the PR body construction, read `skills/run/pr-body.md`.**
+
+   Store the branch name and PR URL on the issue in plan.yaml.
+
+   **If the worktree has no uncommitted changes** (agent already committed, or no code was modified): skip the commit step, just check if a branch exists.
+
+   **If `--auto-pr` is not set** (supervised mode): use `AskUserQuestion` before creating the PR:
+   - Question: "Issue [ref] complete. Create PR?"
+   - Options: `"Create PR (Recommended)"`, `"Skip PR — just keep the branch"`, `"View changes first"`
+
+3. **Update plan.yaml in batch**: For each issue in the layer, update the MAIN repo's plan.yaml:
    - Set `status` (done, blocked, escalated, failed)
    - Set `phase_status` for all phases
-   - Set `branch` (from the agent's worktree result — the branch name created by the pipeline)
+   - Set `branch` (from the commit step above)
+   - Set `pr` (from the PR creation step above, or null)
    - Set `files` (list of modified files)
    - Set `debates` (debate IDs created)
    - Write all updates atomically — the orchestrator is the sole writer
 
-3. **Sync plan tracking issue** (if github-issues adapter configured):
+4. **Sync plan tracking issue** (if github-issues adapter configured):
    ```bash
    if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
      bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
@@ -692,7 +729,10 @@ After all issue agents in a layer complete, the orchestrator processes results i
    fi
    ```
 
-4. **Worktree cleanup**: The Agent tool's `isolation: "worktree"` handles cleanup automatically for agents that made no changes. For agents that made changes, the worktree persists with the branch — this is expected (the branch is the deliverable).
+5. **Worktree cleanup**: After committing and pushing, the worktree can be removed. The branch on the remote is the durable deliverable.
+   ```bash
+   git worktree remove "<worktree>" 2>/dev/null || true
+   ```
 
 5. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
 

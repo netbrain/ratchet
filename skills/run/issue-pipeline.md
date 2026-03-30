@@ -322,36 +322,14 @@ Guard result storage: `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard
 
 **[TodoWrite — Phase Complete]**: After marking the phase done, update the todo list: set the phase item to `"completed"`. The content should retain the verdict info from Step 5e (e.g., `"Build phase — ACCEPT R1"`). If advancing to the next phase, Step 5a's TodoWrite will set the next phase to `"in_progress"`.
 
-**Commit/PR at configured boundaries:**
-Work is packaged based on `pr_scope`:
-- `pr_scope: debate` — after each debate consensus
-- `pr_scope: phase` — after each phase completes
-- `pr_scope: issue` — after all phases complete (issue done). This is the natural default for parallel execution.
-- `pr_scope: milestone` — defer to orchestrator (Step 8)
+**Commit and PR creation is the orchestrator's responsibility, not the issue agent's.**
 
-When creating a PR for an issue:
-- Branch name: `ratchet/<milestone-slug>/<issue-ref>`
-- Title: issue title
-- Body includes:
-  - Summary of phases completed, debate outcomes, guard results
-  - **GitHub issue linking** (when `ref` is a numeric GitHub issue number):
-    - `Fixes #<ref>` — closes the specific work item when the PR merges
-    - If `ref` is a local string (not promoted): omit the line
-  - **If this issue has `depends_on`**: "Depends on [dep-ref PR URL] being merged first." This tells reviewers the merge order.
-  - **Debate Summary section** (see `skills/run/pr-body.md`)
-- Push and create via `gh pr create`
+The issue agent runs debates and produces code in the worktree. It does NOT commit, push, or create PRs. The worktree branch with uncommitted changes is the deliverable — the orchestrator handles packaging in Step 4c.
 
-> **For the PR body construction and debate summary table builder, read `skills/run/pr-body.md`.**
->
-> This section covers: reading debate IDs from plan.yaml, building the summary table
-> (one row per debate with pair/phase/rounds/verdict/decided-by columns), assembling
-> the conditions block for CONDITIONAL_ACCEPT verdicts, and the final `gh pr create` call.
-
-Store the branch name and PR URL in the issue's `branch` and return them to the orchestrator.
+**Why:** Agents at depth 3+ routinely truncate the protocol, completing debates but dropping the commit/PR step. Moving packaging to the orchestrator (depth 1) ensures it always happens. The issue agent's only post-debate job is to report results via the completion summary (Step 5h).
 
 **Progress tracking**: If a progress adapter is configured:
 - On phase advancement: add a comment noting the phase completed
-- On issue completion: update status
 
 #### 5g. Phase Regression
 
@@ -390,9 +368,10 @@ Issue [ref] complete:
     ...
   debates: [debate-id-1, debate-id-2, ...]
   files: [file1, file2, ...]
-  branch: [branch name]
-  pr: [URL or "none"]
+  worktree: [absolute path to worktree with uncommitted changes]
 ```
+
+The `worktree` path is critical — it tells the orchestrator where the uncommitted code lives so it can commit and create a PR in Step 4c. The issue agent does NOT commit or push.
 
 **If the pipeline exits early** (escalation, guard failure, regression budget exhausted), output:
 
@@ -408,8 +387,7 @@ Issue [ref] [blocked|escalated|failed]:
   halt_reason: [reason]
   debates: [debate-id-1, ...]
   files: [file1, ...]
-  branch: [branch name or "none"]
-  pr: [URL or "none"]
+  worktree: [absolute path or "none"]
 ```
 
 This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
