@@ -1,179 +1,124 @@
 ---
 name: ratchet:update
-description: Update Ratchet framework to the latest version with new features
+description: Update Ratchet framework to the latest version
 ---
 
 # /ratchet:update — Framework Update
 
-Update the Ratchet framework installation to get the latest features and improvements.
+Update the Ratchet framework installation to the latest version.
 
-## What It Does
-
-Updates your Ratchet installation by:
-1. Detecting current installation location (global or local)
-2. Running uninstall + reinstall to get the latest framework version
-3. Preserving your project data (`.ratchet/` directory remains untouched)
-4. Installing new framework features (statusline, monitoring, etc.)
-5. Optionally configuring Claude Code settings for new features
-
-## Prerequisites
-
-- Existing Ratchet installation (`~/.claude/commands/ratchet/` or `.claude/commands/ratchet/`)
-- Access to the Ratchet source repository (for latest version)
-
-## Execution Steps
-
-### Step 1: Detect Current Installation
+## Step 1: Detect Current Installation
 
 Check which installation exists:
 - **Global**: `~/.claude/commands/ratchet/` exists
 - **Local**: `.claude/commands/ratchet/` exists
 
-If both exist, ask the user which one to update using `AskUserQuestion`:
+If both exist, use `AskUserQuestion`:
 - Question: "Both global and local Ratchet installations detected. Which should I update?"
 - Options: `"Global (~/.claude/)"`, `"Local (.claude/)"`, `"Both"`
 
-If neither exists, inform the user that Ratchet is not installed and suggest running `bash install.sh` from the Ratchet repository.
+If neither exists: "Ratchet is not installed. Run `/ratchet:init` or `bash install.sh` from the Ratchet repo."
 
-### Step 2: Locate Install Script
+Record the scope: `global`, `local`, or `both`.
 
-The update requires access to the Ratchet source repository's `install.sh` script. Check common locations:
-1. If CWD contains `install.sh` and `skills/` directory → use CWD
-2. If `.ratchet/` exists in CWD, search parent directories for the Ratchet repo
-3. If `RATCHET_SOURCE` environment variable is set → use that path
-4. Otherwise, ask the user for the path using `AskUserQuestion`:
-   - Question: "Where is the Ratchet source repository? (Need path to install.sh)"
-   - Options: `"Current directory"`, `"Let me specify the path"`
+## Step 2: Choose Update Method
 
-If the user chooses "Let me specify the path", ask a follow-up question to get the path.
+Use `AskUserQuestion`:
+- Question: "How should I fetch the latest Ratchet?"
+- Options:
+  - `"Nix flake (Recommended)"` — uses `nix run github:netbrain/ratchet`
+  - `"Git clone + install.sh"` — clones repo to a temp directory
+  - `"Local source"` — use an existing checkout (auto-detected or user-provided path)
 
-### Step 3: Run Update
+### Method detection hints (use to pre-select or reorder options):
 
-Execute the update based on the installation type:
+1. If `nix` is on PATH → recommend Nix flake (fastest, no clone needed)
+2. If CWD contains `install.sh` and `skills/` → offer "Local source" first
+3. If `RATCHET_SOURCE` env var is set → offer "Local source" with that path
 
-**For global installation:**
+## Step 3: Run Update
+
+Execute uninstall + reinstall for each scope.
+
+### Method A: Nix flake
+
+```bash
+# For local:
+nix run github:netbrain/ratchet --refresh -- --local --uninstall 2>&1
+nix run github:netbrain/ratchet --refresh -- --local 2>&1
+
+# For global:
+nix run github:netbrain/ratchet --refresh -- --global --uninstall 2>&1
+nix run github:netbrain/ratchet --refresh -- --global 2>&1
+```
+
+`--refresh` forces Nix to fetch the latest commit from GitHub (otherwise it uses the cached flake).
+
+### Method B: Git clone + install.sh
+
+```bash
+TMPDIR=$(mktemp -d)
+git clone --depth 1 https://github.com/netbrain/ratchet "$TMPDIR/ratchet" 2>&1
+
+# For local:
+bash "$TMPDIR/ratchet/install.sh" --local --uninstall 2>&1
+bash "$TMPDIR/ratchet/install.sh" --local 2>&1
+
+# For global:
+bash "$TMPDIR/ratchet/install.sh" --global --uninstall 2>&1
+bash "$TMPDIR/ratchet/install.sh" --global 2>&1
+
+rm -rf "$TMPDIR"
+```
+
+### Method C: Local source
+
+Locate install.sh:
+1. CWD contains `install.sh` + `skills/` → use CWD
+2. `RATCHET_SOURCE` env var → use that path
+3. Otherwise, use `AskUserQuestion` (freeform): "Path to Ratchet source directory?"
+
 ```bash
 cd /path/to/ratchet/source
-bash install.sh --global --uninstall
-bash install.sh --global
+
+# For local:
+bash install.sh --local --uninstall 2>&1
+bash install.sh --local 2>&1
+
+# For global:
+bash install.sh --global --uninstall 2>&1
+bash install.sh --global 2>&1
 ```
 
-**For local installation:**
+### For scope "both"
+
+Run the appropriate method twice — once with `--global`, once with `--local`.
+
+## Step 4: Verify and Report
+
+After install completes, verify the installation:
+
 ```bash
-cd /path/to/ratchet/source
-bash install.sh --local --uninstall
-bash install.sh --local
+# Count installed commands
+ls .claude/commands/ratchet/*.md 2>/dev/null | wc -l   # local
+ls ~/.claude/commands/ratchet/*.md 2>/dev/null | wc -l  # global
 ```
 
-**For both:**
-Run both sequences above.
-
-The install script will:
-- Remove old framework files (commands, scripts, schemas, statusline)
-- Copy latest versions from the source repository
-- Preserve git hooks unless `--no-git-hooks` was originally used
-- Install new features (statusline, monitoring capabilities, etc.)
-
-### Step 4: Verify New Features
-
-After installation completes, check what new features are available:
-
-1. **Statusline support**: Check if `statusline-ratchet.sh` was installed
-   - Global: `~/.claude/statusline-ratchet.sh`
-   - Local: `.claude/statusline-ratchet.sh`
-
-2. **Loop monitoring**: Check if `/ratchet:watch` command is available by verifying `skills/watch/SKILL.md` exists in the installed commands
-
-3. **New slash commands**: List any new commands that weren't in the previous version
-
-### Step 5: Configure Optional Features
-
-Use `AskUserQuestion` to offer configuration of new features:
-
-**Question**: "Ratchet updated successfully! New features available. Would you like to configure them?"
-
-**For statusline (if installed)**:
-- Check if Claude Code settings already has a statusline configured
-- If not, offer to configure it:
-  - Options: `"Configure Ratchet statusline (Recommended)"`, `"Skip — I'll configure manually"`, `"Not now"`
-
-If "Configure Ratchet statusline" selected, inform the user:
-```
-To enable the Ratchet statusline, add this to your Claude Code settings:
-
-  statusline: ~/.claude/statusline-ratchet.sh  (for global)
-  statusline: .claude/statusline-ratchet.sh    (for local)
-
-The statusline will display epic progress when you're in a Ratchet workspace.
-```
-
-**For monitoring (if /ratchet:watch available)**:
-- Inform the user about the new `/ratchet:watch` command for background monitoring
-- Explain that it uses Claude Code's `/loop` feature to monitor PRs, CI status, and epic progress
-
-### Step 6: Report Results
-
-Present a summary of what was updated:
+Present summary:
 
 ```
-Ratchet framework updated successfully!
+Ratchet updated successfully!
 
-Updated installation: [Global/Local/Both]
-Source: [path to ratchet source]
+  Scope: [Global/Local/Both]
+  Method: [Nix flake / Git clone / Local source]
+  Commands: [N] slash commands installed
+  Scripts: [list key scripts: git-pre-commit, publish-debate-hook, etc.]
 
-New features installed:
-  ✓ Custom statusline support (statusline-ratchet.sh)
-  ✓ Background monitoring (/ratchet:watch)
-  ✓ [Any other new features detected]
-
-Commands available: [count] slash commands
-  /ratchet:init, /ratchet:run, /ratchet:watch, ...
-
-Your project data in .ratchet/ was preserved.
+  Your project data (.ratchet/) was preserved.
 ```
-
-## When to Use
-
-Run `/ratchet:update` when:
-- A new Ratchet version is released with features you want
-- You want to get the latest improvements and bug fixes
-- The framework suggests running an update (e.g., after git pull in the Ratchet repo)
-- You want to ensure you have all the latest skills and monitoring capabilities
 
 ## What Gets Updated
 
-**Updated:**
-- Slash commands (skills) — new commands added, existing ones improved
-- Runtime scripts (guards, progress adapters, cache management)
-- Agent definitions (analyst, debate-runner, tiebreaker)
-- JSON schemas (workflow validation)
-- Statusline scripts
-- Installation logic
+**Updated:** Slash commands, runtime scripts, agent definitions, schemas, statusline, hooks config.
 
-**Preserved:**
-- Your project data (`.ratchet/` directory)
-- Workflow configuration (`.ratchet/workflow.yaml`)
-- Project profile (`.ratchet/project.yaml`)
-- Development roadmap (`.ratchet/plan.yaml`)
-- Custom agent pair definitions (`.ratchet/pairs/`)
-- Debate history, scores, retros, escalations
-- Git hooks (re-installed with current configuration)
-
-## Alternative: Manual Update
-
-If you prefer manual control, you can update by running:
-
-```bash
-cd /path/to/ratchet/source
-git pull origin main  # Get latest changes
-bash install.sh --global --uninstall  # Remove old
-bash install.sh --global              # Install new
-```
-
-The `/ratchet:update` skill automates this process and offers configuration assistance.
-
-## See Also
-
-- `install.sh` — The underlying installation script
-- `/ratchet:init` — Initialize new Ratchet projects
-- `/ratchet:watch` — Background monitoring (new feature)
+**Preserved:** `.ratchet/` directory (workflow.yaml, project.yaml, plan.yaml, pairs, debates, scores, escalations).
