@@ -156,35 +156,70 @@ fi
 EPIC_NAME=$(yq eval '.epic.name // ""' "$PLAN_YAML")
 EPIC_DESCRIPTION=$(yq eval '.epic.description // ""' "$PLAN_YAML")
 
+# Compact JSON helper — yq's tojson can output pretty-printed multi-line JSON
+# which breaks HTML comments on GitHub (only single-line comments are hidden).
+# This collapses any multi-line JSON to a single line.
+compact_json() {
+    tr -d '\n' | sed 's/  */ /g'
+}
+
 render_body() {
     local plan="$1"
-    local body
 
-    body="$(printf '<!-- ratchet-plan-tracking -->\n')"
-    body="${body}$(printf '<!-- epic_name: %s -->\n' "$EPIC_NAME")"
-    body="${body}$(printf '<!-- epic_description: %s -->\n' "$EPIC_DESCRIPTION")"
-    body="${body}$(printf '\n')"
-    body="${body}$(printf '# %s — Ratchet Roadmap\n' "$EPIC_NAME")"
+    # --- Hidden metadata (machine-readable, invisible on GitHub) ---
+    printf '<!-- ratchet-plan-tracking -->\n'
+    printf '<!-- epic_name: %s -->\n' "$EPIC_NAME"
+    printf '<!-- epic_description: %s -->\n' "$EPIC_DESCRIPTION"
+    printf '\n'
 
-    local milestone_count
+    # --- Human-readable roadmap ---
+    printf '# %s\n\n' "$EPIC_NAME"
+    printf '%s\n\n' "$EPIC_DESCRIPTION"
+
+    # Epic progress summary
+    local milestone_count done_count
     milestone_count=$(yq eval '.epic.milestones | length' "$plan")
+    done_count=$(yq eval '[.epic.milestones[] | select(.status == "done")] | length' "$plan")
+    printf '**Progress:** %s/%s milestones complete\n\n' "$done_count" "$milestone_count"
+    printf '---\n'
 
     local i=0
     while [ "$i" -lt "$milestone_count" ]; do
-        local ms_id ms_name ms_status ms_done_when ms_depends_on
+        local ms_id ms_name ms_status ms_done_when ms_depends_on ms_desc ms_github_issue
         ms_id=$(yq eval ".epic.milestones[$i].id" "$plan")
         ms_name=$(yq eval ".epic.milestones[$i].name" "$plan")
         ms_status=$(yq eval ".epic.milestones[$i].status // \"pending\"" "$plan")
         ms_done_when=$(yq eval ".epic.milestones[$i].done_when // \"\"" "$plan")
-        ms_depends_on=$(yq eval ".epic.milestones[$i].depends_on // [] | tojson" "$plan")
+        ms_depends_on=$(yq eval ".epic.milestones[$i].depends_on // [] | tojson" "$plan" | compact_json)
+        ms_desc=$(yq eval ".epic.milestones[$i].description // \"\"" "$plan")
+        ms_github_issue=$(yq eval ".epic.milestones[$i].github_issue // null" "$plan")
 
-        body="${body}$(printf '\n')"
-        body="${body}$(printf '## Milestone %s: %s\n' "$ms_id" "$ms_name")"
-        body="${body}$(printf '<!-- milestone_id: %s -->\n' "$ms_id")"
-        body="${body}$(printf '<!-- milestone_status: %s -->\n' "$ms_status")"
-        body="${body}$(printf '<!-- milestone_done_when: %s -->\n' "$ms_done_when")"
-        body="${body}$(printf '<!-- milestone_depends_on: %s -->\n' "$ms_depends_on")"
-        body="${body}$(printf '\n')"
+        # Milestone status badge
+        local ms_badge
+        case "$ms_status" in
+            done)        ms_badge="complete" ;;
+            in_progress) ms_badge="in progress" ;;
+            *)           ms_badge="pending" ;;
+        esac
+
+        printf '\n## Milestone %s: %s\n' "$ms_id" "$ms_name"
+
+        # Hidden metadata
+        printf '<!-- milestone_id: %s -->\n' "$ms_id"
+        printf '<!-- milestone_status: %s -->\n' "$ms_status"
+        printf '<!-- milestone_done_when: %s -->\n' "$ms_done_when"
+        printf '<!-- milestone_depends_on: %s -->\n' "$ms_depends_on"
+        printf '\n'
+
+        # Human-readable description and status
+        if [ -n "$ms_desc" ] && [ "$ms_desc" != "null" ]; then
+            printf '%s\n\n' "$ms_desc"
+        fi
+        printf '**Status:** %s' "$ms_badge"
+        if [ "$ms_github_issue" != "null" ] && [ -n "$ms_github_issue" ]; then
+            printf ' · **Tracking:** #%s' "$ms_github_issue"
+        fi
+        printf '\n\n'
 
         local issue_count
         issue_count=$(yq eval ".epic.milestones[$i].issues | length" "$plan")
@@ -192,13 +227,13 @@ render_body() {
         local j=0
         while [ "$j" -lt "$issue_count" ]; do
             local iss_ref iss_title iss_status iss_pairs iss_depends_on
-            local iss_phase_status iss_branch iss_pr iss_checkbox
+            local iss_phase_status iss_branch iss_pr iss_checkbox iss_detail
             iss_ref=$(yq eval ".epic.milestones[$i].issues[$j].ref // \"\"" "$plan")
             iss_title=$(yq eval ".epic.milestones[$i].issues[$j].title // \"\"" "$plan")
             iss_status=$(yq eval ".epic.milestones[$i].issues[$j].status // \"pending\"" "$plan")
-            iss_pairs=$(yq eval ".epic.milestones[$i].issues[$j].pairs // [] | tojson" "$plan")
-            iss_depends_on=$(yq eval ".epic.milestones[$i].issues[$j].depends_on // [] | tojson" "$plan")
-            iss_phase_status=$(yq eval ".epic.milestones[$i].issues[$j].phase_status // {} | tojson" "$plan")
+            iss_pairs=$(yq eval ".epic.milestones[$i].issues[$j].pairs // [] | tojson" "$plan" | compact_json)
+            iss_depends_on=$(yq eval ".epic.milestones[$i].issues[$j].depends_on // [] | tojson" "$plan" | compact_json)
+            iss_phase_status=$(yq eval ".epic.milestones[$i].issues[$j].phase_status // {} | tojson" "$plan" | compact_json)
             iss_branch=$(yq eval ".epic.milestones[$i].issues[$j].branch // null" "$plan")
             iss_pr=$(yq eval ".epic.milestones[$i].issues[$j].pr // null" "$plan")
 
@@ -208,31 +243,39 @@ render_body() {
                 iss_checkbox=" "
             fi
 
-            body="${body}$(printf -- '- [%s] %s: %s\n' "$iss_checkbox" "$iss_ref" "$iss_title")"
-            body="${body}$(printf '<!-- issue_ref: %s -->\n' "$iss_ref")"
-            body="${body}$(printf '<!-- issue_status: %s -->\n' "$iss_status")"
-            body="${body}$(printf '<!-- issue_pairs: %s -->\n' "$iss_pairs")"
-            body="${body}$(printf '<!-- issue_depends_on: %s -->\n' "$iss_depends_on")"
-            body="${body}$(printf '<!-- issue_phase_status: %s -->\n' "$iss_phase_status")"
-            body="${body}$(printf '<!-- issue_branch: %s -->\n' "$iss_branch")"
-            body="${body}$(printf '<!-- issue_pr: %s -->\n' "$iss_pr")"
-            body="${body}$(printf '\n')"
+            # Build detail suffix: PR link and phase progress
+            iss_detail=""
+            if [ "$iss_pr" != "null" ] && [ -n "$iss_pr" ]; then
+                # PR can be a number or a URL
+                case "$iss_pr" in
+                    http*) iss_detail=" — [PR]($iss_pr)" ;;
+                    *)     iss_detail=" — PR #$iss_pr" ;;
+                esac
+            fi
+
+            printf -- '- [%s] %s: %s%s\n' "$iss_checkbox" "$iss_ref" "$iss_title" "$iss_detail"
+
+            # Hidden metadata (all on single lines for GitHub to hide)
+            printf '<!-- issue_ref: %s -->\n' "$iss_ref"
+            printf '<!-- issue_status: %s -->\n' "$iss_status"
+            printf '<!-- issue_pairs: %s -->\n' "$iss_pairs"
+            printf '<!-- issue_depends_on: %s -->\n' "$iss_depends_on"
+            printf '<!-- issue_phase_status: %s -->\n' "$iss_phase_status"
+            printf '<!-- issue_branch: %s -->\n' "$iss_branch"
+            printf '<!-- issue_pr: %s -->\n' "$iss_pr"
+            printf '\n'
 
             j=$((j + 1))
         done
 
         i=$((i + 1))
     done
-
-    printf '%s' "$body"
 }
-
-BODY=$(render_body "$PLAN_YAML")
 
 # Write body to temp file for atomic gh issue edit (avoids shell quoting issues with large bodies)
 TMP_BODY=$(mktemp)
 trap 'rm -f "$TMP_BODY"' EXIT
-printf '%s' "$BODY" > "$TMP_BODY"
+render_body "$PLAN_YAML" > "$TMP_BODY"
 
 gh issue edit "$PROGRESS_REF" --body-file "$TMP_BODY" >/dev/null 2>&1 || {
     echo "Warning: Failed to update tracking issue $PROGRESS_REF — continuing" >&2
