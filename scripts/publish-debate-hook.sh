@@ -83,13 +83,35 @@ if [ "$ADAPTER" = "none" ] || [ -z "$ADAPTER" ]; then
     exit 0
 fi
 
-# --- Resolve progress_ref (issue-level) ---
-# Try meta.json first (debate-runner may have stored it)
+# --- Resolve progress_ref (GitHub issue number to post to) ---
+# Priority: meta.json progress_ref > meta.json issue (if numeric) > plan.yaml github_issue on milestone
 PROGRESS_REF=$(jq -r '.progress_ref // empty' "$META_FILE" 2>/dev/null) || true
 
-# Fallback: check issue field in meta.json (e.g., "#42")
+# Fallback: check issue field in meta.json — only if it looks like a GitHub issue number
 if [ -z "$PROGRESS_REF" ]; then
-    PROGRESS_REF=$(jq -r '.issue // empty' "$META_FILE" 2>/dev/null) || true
+    META_ISSUE=$(jq -r '.issue // empty' "$META_FILE" 2>/dev/null) || true
+    # Accept bare numbers ("164"), hash-prefixed ("#164"), but not plan refs ("issue-4-3")
+    case "$META_ISSUE" in
+        [0-9]*) PROGRESS_REF="$META_ISSUE" ;;
+        '#'[0-9]*) PROGRESS_REF="${META_ISSUE#\#}" ;;
+    esac
+fi
+
+# Fallback: look up github_issue from milestone in plan.yaml
+if [ -z "$PROGRESS_REF" ]; then
+    PLAN_YAML="$RATCHET_DIR/plan.yaml"
+    if [ -f "$PLAN_YAML" ] && command -v yq >/dev/null 2>&1; then
+        # Get the milestone field from meta.json, then look up github_issue on that milestone
+        META_MILESTONE=$(jq -r '.milestone // empty' "$META_FILE" 2>/dev/null) || true
+        if [ -n "$META_MILESTONE" ]; then
+            GH_ISSUE=$(yq eval "
+                .epic.milestones[] | select(.id == \"$META_MILESTONE\" or .id == $META_MILESTONE) | .github_issue // null
+            " "$PLAN_YAML" 2>/dev/null) || true
+            if [ -n "$GH_ISSUE" ] && [ "$GH_ISSUE" != "null" ]; then
+                PROGRESS_REF="$GH_ISSUE"
+            fi
+        fi
+    fi
 fi
 
 if [ -z "$PROGRESS_REF" ]; then
