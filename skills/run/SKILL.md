@@ -573,6 +573,26 @@ From the dependency graph built in Step 3b, identify **ready issues** — issues
 
 #### 4b. Execute Issue Pipelines by Dependency Layer
 
+**File overlap check (before launching):**
+
+Before spawning parallel issue agents, check whether issues in the same layer have overlapping file scopes. Overlapping issues produce conflicting changes in parallel worktrees — wasted work.
+
+For each pair of ready issues in the current layer:
+1. Resolve each issue's file scope (from its pairs' `scope` globs in workflow.yaml)
+2. Expand the globs to actual file lists
+3. If any files appear in more than one issue's scope → overlap detected
+
+If overlap is detected, use `AskUserQuestion`:
+- Question: "Issues [ref-A] and [ref-B] overlap on [N] files: [file list]. Running them in parallel will likely produce conflicting changes."
+- Options:
+  - `"Merge into one issue (Recommended)"` — combine the issues in plan.yaml (merge titles, pairs, and depends_on), then run as one
+  - `"Run sequentially instead"` — run ref-A first, then ref-B in the next layer (add ref-A to ref-B's depends_on)
+  - `"Run in parallel anyway"` — proceed, accept possible conflicts
+
+In unsupervised mode: auto-select "Merge into one issue" when overlap exceeds 50% of either issue's files, otherwise "Run sequentially instead".
+
+---
+
 For each dependency layer (from Step 3b), launch all ready issues **in parallel** as separate Agent invocations. This mirrors the milestone parallel pattern in Step 3c.
 
 **Execution strategy:**
