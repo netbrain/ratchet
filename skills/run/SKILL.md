@@ -649,6 +649,12 @@ if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
 fi
 ```
 
+**Fresh base fetch**: Before spawning any issue agents in a layer, fetch the latest remote state so worktrees branch from the current `origin/main` — not a stale local HEAD:
+```bash
+git fetch origin main --quiet
+```
+This runs once per layer, not per issue. All worktrees in the layer share the fetched ref.
+
 **Spawning parallel issue agents:**
 
 For each issue in the current ready layer, spawn an Agent with:
@@ -659,7 +665,7 @@ For each issue in the current ready layer, spawn an Agent with:
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 
 **Branch base resolution for dependent issues:**
-- Layer 0 issues: branch from main (or current branch)
+- Layer 0 issues: branch from `origin/main` (freshly fetched above)
 - Layer 1+ issues: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
 - Multiple dependencies: branch from the dependency that finished last
 
