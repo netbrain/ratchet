@@ -78,6 +78,7 @@ work, not "breaking out of the framework."
 - Setting/clearing `current_focus`
 - Promoting/dismissing discoveries
 - Recording `progress_ref`, `branch`, `pr`, `debates`, `files` on issues
+- Recording `github_issue` on milestones (the GitHub issue number this milestone tracks, e.g., `github_issue: 165`). When the user provides a GitHub issue reference in the milestone description or context, extract the number and store it as an explicit field — do not bury it in the description string. This field is passed to issue pipelines so PRs are linked automatically.
 - Incrementing `regressions` counters
 - Any structural change to the epic roadmap that the user requests
 
@@ -188,6 +189,7 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run [workspace]        # Target a specific workspace
 /ratchet:run --milestone <id>   # Run a single milestone's pipeline (used by parallel milestone spawning)
 /ratchet:run --issue <ref>      # Run a single issue's pipeline (used by parallel issue spawning)
+/ratchet:run --github-issue <N> # Link PRs to GitHub issue #N (passed by orchestrator from milestone's github_issue field)
 /ratchet:run --all-files        # Run all pairs against all files in scope
 /ratchet:run --no-cache         # Force re-debate even if files haven't changed
 /ratchet:run --dry-run          # Preview what would run without executing anything
@@ -590,6 +592,7 @@ For each dependency layer (from Step 3b), launch all ready issues **in parallel*
 For each issue in the current ready layer, spawn an Agent with:
 - `isolation`: `"worktree"` — each agent gets its own git worktree automatically
 - Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
+- If the milestone has a `github_issue` field (e.g., `github_issue: 165`), pass it in the agent context: `--github-issue <N>`. The issue pipeline uses this to link PRs to the GitHub issue.
 
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 

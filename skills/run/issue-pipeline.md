@@ -329,7 +329,10 @@ When creating a PR for an issue:
 - Title: issue title
 - Body includes:
   - Summary of phases completed, debate outcomes, guard results
-  - `Closes [issue ref]` if using a progress adapter with issue tracking
+  - **GitHub issue linking** (when `--github-issue <N>` was passed by the orchestrator):
+    - If this is the **last issue** in the milestone (all other issues are `done`): `Closes #<N>`
+    - Otherwise: `Relates to #<N>`
+    - If no `github_issue` was provided: omit the line (no guessing from description text)
   - **If this issue has `depends_on`**: "Depends on [dep-ref PR URL] being merged first." This tells reviewers the merge order.
   - **Debate Summary section** (see `skills/run/pr-body.md`)
 - Push and create via `gh pr create`

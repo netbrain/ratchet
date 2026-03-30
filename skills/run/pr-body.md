@@ -78,13 +78,32 @@ fi
 The resulting `$debate_summary_section` is appended to the PR body at `gh pr create` time:
 
 ```bash
-# Step 4: Create the PR with the assembled body
+# Step 4: Build GitHub issue linking line
+# GITHUB_ISSUE is passed by the orchestrator via --github-issue <N> (from milestone's github_issue field).
+# If not set, no linking line is emitted — never guess issue numbers from description text.
+github_issue_line=""
+if [ -n "${GITHUB_ISSUE:-}" ]; then
+  # Check if this is the last issue in the milestone (all others done)
+  export MILESTONE_ID="${milestone_id}"
+  pending_count=$(yq -r '
+    .epic.milestones[] | select(.id == env(MILESTONE_ID)) |
+    [.issues[] | select(.ref != env(ISSUE_REF) and .status != "done")] | length
+  ' .ratchet/plan.yaml 2>/dev/null || echo "0")
+
+  if [ "$pending_count" = "0" ]; then
+    github_issue_line="Closes #${GITHUB_ISSUE}"
+  else
+    github_issue_line="Relates to #${GITHUB_ISSUE}"
+  fi
+fi
+
+# Step 5: Create the PR with the assembled body
 pr_body="$(cat <<EOF
 ## Summary
 
 $(echo "$phase_summaries")
 
-Closes ${ISSUE_REF}
+${github_issue_line}
 ${depends_on_line}
 
 ${debate_summary_section}
