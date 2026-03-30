@@ -185,6 +185,7 @@ Create the directory structure and write initial `meta.json`:
   "phase": "<phase>",
   "milestone": "<milestone id or null>",
   "issue": "<issue ref or null>",
+  "progress_ref": "<GitHub issue number for publish hook, or null>",
   "files": ["list", "of", "scoped", "files"],
   "status": "initiated",
   "rounds": 0,
@@ -200,6 +201,8 @@ Create the directory structure and write initial `meta.json`:
   "conditional_accept_round": null
 }
 ```
+
+**CRITICAL — `progress_ref` and `milestone` must be set at creation time.** The publish hook (`publish-debate-hook.sh`) fires on every Write to `.ratchet/debates/` and reads these fields from `meta.json` to resolve which GitHub issue to post to. If they are missing when the first round file is written, publishing silently fails. Extract `progress_ref` from the task context (`Progress.progress_ref` or the issue's GitHub issue number) and write it into meta.json here in Step 1 — not after rounds complete.
 
 **Progress:** Update TodoWrite -- "Debate: {pair-name} ({phase} phase)"
 

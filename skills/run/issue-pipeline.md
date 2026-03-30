@@ -143,8 +143,11 @@ For each matched pair, prepare the context for the **debate-runner** agent:
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: Pair-level overrides take precedence over global. Pass resolved `generative`, `adversarial`, and `tiebreaker` models to the debate-runner.
-5. **Resolve publish config**: Publishing is handled automatically by the `publish-debate-hook.sh` PostToolUse hook. The debate-runner does NOT need publish config passed in its context. The hook reads `publish_debates` and `adapter` directly from `workflow.yaml`, and resolves `progress_ref` from `meta.json`. No orchestrator action needed.
-   - Ensure the debate-runner writes `progress_ref` (issue-level) and `issue` fields to `meta.json` at debate creation so the hook can resolve the publish target.
+5. **Resolve progress_ref for publish hook**: The `publish-debate-hook.sh` PostToolUse hook reads `progress_ref` from `meta.json` to know which GitHub issue to post to. The orchestrator MUST resolve this and pass it to the debate-runner so it can be written into meta.json at debate creation (Step 1 of the debate protocol) — before any round files are written.
+   - If `--github-issue <N>` was passed: use `N` as `progress_ref`
+   - Else if the issue has a `progress_ref` in plan.yaml: use that
+   - Else if the issue ref looks like a GitHub issue number (`#42`): use the number
+   - Else: pass `null` (hook will attempt fallback via milestone's `github_issue` field)
 
 #### 5e. Run Debates
 
@@ -199,13 +202,15 @@ Context:
   Plan phase output: [path, if phase > plan]
   Test phase output: [paths, if phase > test]
   Previous debate context: [unresolved conditions, if any]
+  Progress:
+    progress_ref: [resolved GitHub issue number, or null — write this into meta.json at debate creation]
   Models:
     generative: [resolved model]
     adversarial: [resolved model]
     tiebreaker: [resolved model]
 ```
 
-> **Note:** Publishing is handled by the `publish-debate-hook.sh` PostToolUse hook, not the debate-runner. Ensure `meta.json` includes `progress_ref` and `issue` fields so the hook can resolve publish targets.
+> **Note:** The `progress_ref` MUST be written into `meta.json` at debate creation (Step 1), before any round files are written. The `publish-debate-hook.sh` PostToolUse hook fires on each round file Write and reads `progress_ref` from meta.json to resolve the GitHub issue to post to. If `progress_ref` is missing at that point, publishing silently fails.
 
 **If Debate-Runner Cannot Be Spawned**
 
