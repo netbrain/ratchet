@@ -115,7 +115,12 @@ Ratchet updated successfully!
   Scripts: [list key scripts: git-pre-commit, publish-debate-hook, etc.]
 
   Your project data (.ratchet/) was preserved.
+
+  IMPORTANT: Restart Claude Code to pick up the new commands and hooks.
+  Type /exit or press Ctrl+C, then start a new session.
 ```
+
+After presenting the summary, always remind the user to restart. Slash commands and hooks are loaded at session start — the current session will continue using the old versions until restarted.
 
 ## What Gets Updated
 
