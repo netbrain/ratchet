@@ -183,6 +183,13 @@ install_publish_hook() {
         return 0
     fi
 
+    # Resolve to absolute path so the hook works in worktree-isolated agents.
+    # Worktrees are clean git checkouts — relative paths resolve against the
+    # worktree root, which may not have .claude/ratchet-scripts/.
+    # Using an absolute path ensures the hook script is always found.
+    local abs_hook_script
+    abs_hook_script="$(cd "$(dirname "$hook_script")" && pwd)/$(basename "$hook_script")"
+
     # Build the hook entry we want
     local hook_json
     hook_json=$(cat <<HOOKJSON
@@ -194,7 +201,7 @@ install_publish_hook() {
         "hooks": [
           {
             "type": "command",
-            "command": "bash $hook_script"
+            "command": "bash $abs_hook_script"
           }
         ]
       }
@@ -225,6 +232,12 @@ HOOKJSON
             echo "  Warning: jq not found, skipping settings.json hook merge. Add PostToolUse hook manually." >&2
             return 0
         fi
+    fi
+
+    # Track settings.json in git so worktree-isolated agents inherit hooks.
+    # Worktrees are clean git checkouts — untracked files don't appear in them.
+    if [ "$target" != "$HOME/.claude" ]; then
+        git add "$settings_file" 2>/dev/null || true
     fi
 
     echo "  Installed PostToolUse hook for debate publishing"
