@@ -248,9 +248,9 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 **6f. Debate publishing (only when adapter is `github-issues`):** After the user selects `"GitHub Issues"` in Step 6e, immediately ask a follow-up using `AskUserQuestion`:
 - Question: "Publish debate rounds as GitHub issue comments?"
 - Options:
-  - `"No (default — debates stay local)"` — sets `publish_debates: false`
+  - `"Yes — post a summary when debates conclude (Recommended)"` — sets `publish_debates: summary`
   - `"Yes — post each round as a comment (per-round)"` — sets `publish_debates: per-round`
-  - `"Yes — post a summary when debates conclude (summary)"` — sets `publish_debates: summary`
+  - `"No — debates stay local only"` — sets `publish_debates: false`
 
 Skip this step entirely if the adapter selected in Step 6e is anything other than `github-issues` (i.e., `none`, `markdown`, `linear`, or `jira`).
 

@@ -28,19 +28,47 @@ if [ -z "${RATCHET_SKIP_VERDICT_CHECK:-}" ]; then
     SOURCE_PATTERN="$SOURCE_EXTS|$SKILL_AGENTS|$SCRIPTS|$SCHEMAS"
 
     if git diff --cached --name-only | grep -qE "$SOURCE_PATTERN"; then
-        # Source files are staged — require a debate verdict
-        LATEST_VERDICT=$(ls -t .ratchet/debates/*/meta.json 2>/dev/null | head -1)
-        VERDICT_OK=false
+        # Source files are staged — require a debate verdict newer than the branch point.
+        # Without the timestamp check, old verdicts from prior milestones satisfy the
+        # gate, letting chain-collapsed agents commit without running debates.
 
-        if [ -n "$LATEST_VERDICT" ]; then
-            # Extract verdict using sed (no jq dependency, same as check-consensus.sh)
-            verdict_val=$(sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$LATEST_VERDICT" | head -1)
-            case "$verdict_val" in
-                ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT)
-                    VERDICT_OK=true
-                    ;;
-            esac
+        # Determine when the current branch diverged from main (epoch seconds).
+        # Falls back to 0 if on main or no merge-base found (any verdict passes).
+        BRANCH_CREATED=0
+        CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
+        if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
+            MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || true)
+            if [ -n "$MERGE_BASE" ]; then
+                BRANCH_CREATED=$(git log -1 --format='%ct' "$MERGE_BASE" 2>/dev/null || echo "0")
+            fi
         fi
+
+        VERDICT_OK=false
+        for meta_file in $(ls -t .ratchet/debates/*/meta.json 2>/dev/null); do
+            [ -f "$meta_file" ] || continue
+
+            # Extract verdict
+            verdict_val=$(sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta_file" | head -1)
+            case "$verdict_val" in
+                ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT) ;;
+                *) continue ;;
+            esac
+
+            # Extract debate started timestamp and convert to epoch.
+            # meta.json stores ISO 8601: "started": "2026-03-28T14:30:00Z"
+            started_iso=$(sed -n 's/.*"started"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta_file" | head -1)
+            if [ -n "$started_iso" ]; then
+                started_epoch=$(date -d "$started_iso" +%s 2>/dev/null || echo "0")
+            else
+                started_epoch=0
+            fi
+
+            # Verdict must be from after the branch was created
+            if [ "$started_epoch" -ge "$BRANCH_CREATED" ] 2>/dev/null; then
+                VERDICT_OK=true
+                break
+            fi
+        done
 
         if [ "$VERDICT_OK" != "true" ]; then
             echo "╔══════════════════════════════════════════════════════╗"
