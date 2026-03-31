@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratchet.dev/schemas/plan.schema.json",
+  "title": "Ratchet Plan",
+  "description": "Ratchet epic plan — milestones, issues, discoveries, and current focus tracking for .ratchet/plan.yaml",
+  "type": "object",
+  "required": ["epic"],
+  "additionalProperties": false,
+  "properties": {
+    "epic": {
+      "$ref": "#/$defs/epic"
+    }
+  },
+  "$defs": {
+    "phase": {
+      "type": "string",
+      "enum": ["plan", "test", "build", "review", "harden"],
+      "description": "Ordered development phase — plan -> test -> build -> review -> harden"
+    },
+    "phase_status_value": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "done", "skipped", "failed", "blocked"],
+      "description": "Status of a single phase within a pipeline"
+    },
+    "milestone_status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "done"],
+      "description": "Overall milestone status"
+    },
+    "issue_status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "done", "blocked", "escalated", "failed"],
+      "description": "Overall issue status — blocked/escalated/failed indicate early pipeline exit"
+    },
+    "discovery_status": {
+      "type": "string",
+      "enum": ["pending", "done", "promoted", "dismissed"],
+      "description": "Discovery lifecycle status — pending (new), done (resolved), promoted (converted to issue), dismissed (non-actionable)"
+    },
+    "discovery_category": {
+      "type": "string",
+      "enum": ["bug", "tech-debt", "feature", "security", "performance", "other"],
+      "description": "Category of the discovery"
+    },
+    "discovery_severity": {
+      "type": "string",
+      "enum": ["critical", "major", "minor", "info"],
+      "description": "Severity of the discovery — critical blocks progress, info is just a note"
+    },
+    "discovery_source": {
+      "type": "string",
+      "enum": ["manual", "watch", "tighten", "retro"],
+      "description": "How the discovery was created — manual (sidequest skill), watch (CI/PR monitor), tighten (retrospective), retro (retrospective analysis)"
+    },
+    "epic": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Epic name — the project or body of work being tracked"
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of the epic's goals"
+        },
+        "progress_ref": {
+          "type": ["integer", "null"],
+          "description": "GitHub issue number for the plan tracking issue, or null if no progress adapter"
+        },
+        "milestones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/milestone"
+          },
+          "description": "Ordered list of milestones in this epic"
+        },
+        "current_focus": {
+          "oneOf": [
+            { "$ref": "#/$defs/current_focus" },
+            { "type": "null" }
+          ],
+          "description": "Currently active milestone and phase, or null if no work is in progress"
+        },
+        "discoveries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/discovery"
+          },
+          "description": "Sidequests and findings discovered during work — logged by /ratchet:sidequest, /ratchet:watch, and /ratchet:tighten"
+        }
+      }
+    },
+    "current_focus": {
+      "type": "object",
+      "required": ["milestone_id"],
+      "additionalProperties": false,
+      "properties": {
+        "milestone_id": {
+          "type": "integer",
+          "description": "ID of the milestone currently being worked on"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase",
+          "description": "Current phase within the focused milestone"
+        },
+        "started": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when focus was set"
+        }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "required": ["id", "name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Unique milestone identifier (sequential integer)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable milestone name"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this milestone delivers"
+        },
+        "status": {
+          "$ref": "#/$defs/milestone_status",
+          "description": "Overall milestone status"
+        },
+        "done_when": {
+          "type": "string",
+          "description": "Concrete acceptance criteria — when is this milestone complete?"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Milestone IDs that must complete before this one can start (DAG mode)"
+        },
+        "regressions": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Count of phase regressions consumed by this milestone"
+        },
+        "github_issue": {
+          "type": ["integer", "null"],
+          "description": "GitHub issue number this milestone tracks as a parent issue, or null"
+        },
+        "progress_ref": {
+          "type": ["integer", "null"],
+          "description": "Progress adapter reference for this milestone (e.g., GitHub issue number)"
+        },
+        "phase_status": {
+          "$ref": "#/$defs/phase_status_map",
+          "description": "Per-phase status for the milestone"
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Pair names assigned to this milestone"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "description": "Issues within this milestone — each progresses through its own phase pipeline"
+        }
+      }
+    },
+    "phase_status_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan": { "$ref": "#/$defs/phase_status_value" },
+        "test": { "$ref": "#/$defs/phase_status_value" },
+        "build": { "$ref": "#/$defs/phase_status_value" },
+        "review": { "$ref": "#/$defs/phase_status_value" },
+        "harden": { "$ref": "#/$defs/phase_status_value" }
+      },
+      "description": "Status of each phase in the pipeline"
+    },
+    "issue": {
+      "type": "object",
+      "required": ["ref", "title", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "Issue reference — local string (e.g., 'issue-2-1') or numeric GitHub issue number"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short issue title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed issue description"
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Pair names assigned to this issue"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Issue refs that must complete before this one can start"
+        },
+        "phase_status": {
+          "$ref": "#/$defs/phase_status_map",
+          "description": "Per-phase pipeline status for this issue"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files created or modified by this issue's pipeline (populated at completion)"
+        },
+        "debates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Debate IDs from this issue's pipeline (populated at completion)"
+        },
+        "branch": {
+          "type": ["string", "null"],
+          "description": "Git branch name for this issue's worktree, or null if not yet started"
+        },
+        "pr": {
+          "type": ["integer", "null"],
+          "description": "Pull request number, or null if not yet created"
+        },
+        "progress_ref": {
+          "type": ["integer", "null"],
+          "description": "GitHub issue number for this issue (if promoted), or null"
+        },
+        "status": {
+          "$ref": "#/$defs/issue_status",
+          "description": "Overall issue status"
+        }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "required": ["ref", "title", "category", "severity", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "Unique discovery reference (e.g., 'discovery-manual-1711900000')"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short summary of the discovery"
+        },
+        "description": {
+          "type": "string",
+          "description": "Full description of what was discovered"
+        },
+        "category": {
+          "$ref": "#/$defs/discovery_category"
+        },
+        "severity": {
+          "$ref": "#/$defs/discovery_severity"
+        },
+        "source": {
+          "$ref": "#/$defs/discovery_source",
+          "description": "How this discovery was created"
+        },
+        "status": {
+          "$ref": "#/$defs/discovery_status"
+        },
+        "issue_ref": {
+          "type": ["string", "null"],
+          "description": "Issue ref if this discovery was promoted to an issue, or null"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "milestone": {
+              "type": ["integer", "null"],
+              "description": "Milestone ID this discovery relates to, or null"
+            },
+            "issue": {
+              "type": ["string", "null"],
+              "description": "Issue ref this discovery relates to, or null"
+            },
+            "debate": {
+              "type": ["string", "null"],
+              "description": "Active debate ID when discovery was logged, or null"
+            }
+          },
+          "description": "Context in which the discovery was made"
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Pair names relevant to this discovery"
+        },
+        "retro_type": {
+          "type": ["string", "null"],
+          "description": "Retrospective category if created by tighten, or null"
+        },
+        "affected_scope": {
+          "type": ["string", "null"],
+          "description": "File glob pattern of affected scope, or null"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when the discovery was created"
+        }
+      }
+    }
+  }
+}

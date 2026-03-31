@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratchet.dev/schemas/project.schema.json",
+  "title": "Ratchet Project Configuration",
+  "description": "Ratchet project configuration — stack, architecture, and testing layers for .ratchet/project.yaml",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief project description"
+    },
+    "version": {
+      "type": "string",
+      "description": "Project version (e.g., '0.1.0')"
+    },
+    "stack": {
+      "$ref": "#/$defs/stack",
+      "description": "Technology stack — languages, runtime, frameworks, and distribution"
+    },
+    "architecture": {
+      "$ref": "#/$defs/architecture",
+      "description": "Architecture pattern and key directory layout"
+    },
+    "testing": {
+      "$ref": "#/$defs/testing",
+      "description": "Testing strategy — layers with status, tools, and commands"
+    }
+  },
+  "$defs": {
+    "testing_status": {
+      "type": "string",
+      "enum": ["planned", "active", "not_applicable", "applicable"],
+      "description": "Status of a testing layer — planned (will implement), active (running in CI), not_applicable (does not apply to this project), applicable (relevant but not yet set up)"
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Programming languages used (e.g., ['bash', 'python3', 'nix'])"
+        },
+        "runtime": {
+          "type": "string",
+          "description": "Runtime environment (e.g., 'CLI plugin', 'Node.js server', 'browser SPA')"
+        },
+        "framework": {
+          "type": ["string", "null"],
+          "description": "Primary framework, or null/none if script-based"
+        },
+        "database": {
+          "type": ["string", "null"],
+          "description": "Database technology, or null/none if not applicable"
+        },
+        "distribution": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Distribution channels (e.g., ['nix flake', 'npm package', 'manual install'])"
+        }
+      },
+      "description": "Technology stack details"
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Architecture pattern (e.g., 'plugin', 'monolith', 'microservices')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Prose description of the architecture"
+        },
+        "key_directories": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Map of directory name to description (e.g., { skills: 'skills/*/SKILL.md — skill definitions' })"
+        }
+      },
+      "description": "Architecture pattern and directory layout"
+    },
+    "testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/testing_layer"
+          },
+          "description": "Named testing layers — keys are layer identifiers (e.g., '1_static_analysis', '2_unit_tests')"
+        }
+      },
+      "description": "Testing strategy with ordered layers"
+    },
+    "testing_layer": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/testing_status",
+          "description": "Current status of this testing layer"
+        },
+        "tool": {
+          "type": "string",
+          "description": "Testing tool (e.g., 'shellcheck', 'jest', 'pytest')"
+        },
+        "command": {
+          "type": "string",
+          "description": "Shell command to run this testing layer"
+        },
+        "ci": {
+          "type": "boolean",
+          "description": "Whether this layer runs in CI"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about this testing layer"
+        }
+      },
+      "description": "A single testing layer definition"
+    }
+  }
+}
