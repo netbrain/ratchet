@@ -256,19 +256,62 @@
         }
       }
     },
+    "rationalization_check": {
+      "type": "object",
+      "required": ["assert", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "assert": {
+          "type": "string",
+          "description": "Human-readable description of what this check verifies (e.g., 'No TODO comments in production code')"
+        },
+        "command": {
+          "type": "string",
+          "description": "Shell command to execute — exit 0 = assertion holds, non-zero = assertion violated"
+        }
+      }
+    },
     "guard": {
       "type": "object",
-      "required": ["name", "command", "phase", "blocking"],
       "additionalProperties": false,
+      "if": {
+        "properties": {
+          "type": { "const": "rationalization-check" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "required": ["name", "phase", "blocking", "type", "checks"],
+        "properties": {
+          "command": false
+        }
+      },
+      "else": {
+        "required": ["name", "command", "phase", "blocking"]
+      },
       "properties": {
         "name": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*$",
           "description": "Unique guard identifier"
         },
+        "type": {
+          "type": "string",
+          "enum": ["standard", "rationalization-check"],
+          "default": "standard",
+          "description": "Guard type. standard (default): single command field, exit 0 = pass. rationalization-check: multiple assertion checks, guard passes only if ALL check commands exit 0."
+        },
         "command": {
           "type": "string",
-          "description": "Shell command to execute — exit 0 = pass, non-zero = fail"
+          "description": "Shell command to execute — exit 0 = pass, non-zero = fail. Used by standard guards."
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/rationalization_check"
+          },
+          "description": "Assertion checks for rationalization-check guards. Each check has a human-readable 'assert' and a 'command'. The guard passes only if ALL check commands exit 0."
         },
         "phase": {
           "$ref": "#/$defs/phase",
