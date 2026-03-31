@@ -40,7 +40,7 @@
       "properties": {
         "adapter": {
           "type": "string",
-          "enum": ["none", "markdown", "github-issues", "linear", "jira"],
+          "enum": ["none", "markdown", "github-issues"],
           "default": "none",
           "description": "Work tracking adapter — failures never block debates"
         },

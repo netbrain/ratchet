@@ -32,7 +32,7 @@
       "type": "string",
       "enum": ["human", "tiebreaker", "both", "none"],
       "default": "human",
-      "description": "Escalation policy when max_rounds reached without consensus"
+      "description": "Escalation policy when max_rounds reached without consensus. human: escalate to human via /ratchet:verdict. tiebreaker: auto-escalate to tiebreaker agent. both: tiebreaker first, then human review. none: no escalation — debate ends as unresolved REJECT after max_rounds (useful for CI/automated pipelines where human intervention is unavailable)."
     },
     "progress": {
       "type": "object",
@@ -40,7 +40,7 @@
       "properties": {
         "adapter": {
           "type": "string",
-          "enum": ["none", "markdown", "github-issues", "linear", "jira"],
+          "enum": ["none", "markdown", "github-issues"],
           "default": "none",
           "description": "Work tracking adapter — failures never block debates"
         },
@@ -188,7 +188,7 @@
     },
     "workflow_preset": {
       "type": "string",
-      "enum": ["tdd", "traditional", "review-only", "custom"],
+      "enum": ["tdd", "traditional", "review-only"],
       "description": "Workflow preset selecting phase subsets. tdd: plan→test→build→review→harden. traditional: plan→build→review→harden. review-only: review only."
     },
     "component": {
