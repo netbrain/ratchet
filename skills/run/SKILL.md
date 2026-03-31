@@ -273,6 +273,8 @@ Build a picture of:
 - Which issues can run in **parallel** (no unmet dependencies) vs which must wait
 - Any unresolved conditions from previous CONDITIONAL_ACCEPT verdicts
 - Which **phases** apply based on component workflows
+- Each component's **strategy** (`debate` or `solo`, default: `debate`) — determines whether issue pipelines spawn debate-runners or a single generative agent (see Step 5e). Read from `components[].strategy` in `workflow.yaml`.
+- Each component's **`promote_on_guard_failure`** flag (default: `false`) — relevant only for `strategy: "solo"` components, controls whether guard failures escalate to debate
 
 If no `plan.yaml` exists, check whether the github-issues adapter is configured:
 ```bash
@@ -686,6 +688,17 @@ For each issue in the current ready layer, spawn an Agent with:
 - Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
 - The issue's `ref` is now the GitHub issue number (if promoted) or the local ref (if promotion failed/skipped). The issue pipeline uses numeric refs directly as `progress_ref` for debate publishing and `Fixes #<ref>` in PR bodies.
 
+**Component strategy detection**: Before spawning each issue agent, resolve the component's `strategy` field from `workflow.yaml`. The strategy determines the execution path at Step 5e inside the issue pipeline:
+- `strategy: "debate"` (default) — the issue pipeline spawns debate-runners with generative + adversarial agents
+- `strategy: "solo"` — the issue pipeline spawns a single generative agent directly, with post-execution guards as the quality gate (no adversarial review)
+
+Pass the resolved strategy in the agent context so the issue pipeline can branch at Step 5e without re-reading workflow.yaml:
+```
+Component: [component-name]
+Strategy: [debate|solo]
+Promote on guard failure: [true|false]  # solo mode only
+```
+
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 
 **Branch base resolution for dependent issues:**
@@ -718,6 +731,22 @@ TodoWrite([
   {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
 ])
 ```
+
+**Solo mode TodoWrite examples**: For issues using `strategy: "solo"`, adapt the content to reflect the single-agent execution (no debate rounds):
+
+```
+TodoWrite([
+  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
+  {"id": "m2-issue34", "content": "[ref]: [title] (solo)", "status": "in_progress"},
+  {"id": "m2-issue34-build", "content": "Build phase — generative + guards", "status": "in_progress"},
+  {"id": "m2-issue34-review", "content": "Review phase", "status": "pending"}
+])
+```
+
+After solo execution completes, update with the outcome:
+- Pass: `"Build phase — SOLO PASS"` (all guards passed)
+- Promoted: `"Build phase — SOLO PROMOTED"` (guard failed, escalated to debate)
+- Failed: `"Build phase — SOLO FAILED"` (guard failed, no promotion)
 
 Always include all milestones, all issues, and the phase breakdown for all active issues in the layer.
 
@@ -865,17 +894,34 @@ Milestone: [name] — [description]
 Issues ([N] total, [N] ready to run in parallel):
 
   [ref]: [title]
+    Strategy: debate
     Phase: [current phase]
     Pairs: [pair-name], [pair-name]
-    Pre-debate guards: [guard-name] (blocking)
-    Post-debate guards: [guard-name] (advisory)
+    Pre-execution guards: [guard-name] (blocking)
+    Post-execution guards: [guard-name] (advisory)
+    Est. tokens: ~[N]k per phase (generative + adversarial × max_rounds)
+
+  [ref]: [title]  (solo)
+    Strategy: solo
+    Phase: [current phase]
+    Pairs: [pair-name]
+    Post-execution guards: [guard-name] (blocking)
+    Promote on guard failure: [yes|no]
+    Est. tokens: ~[N]k per phase (generative only, no adversarial)
 
   [ref]: [title]  (depends on [dep-ref])
     Phase: pending — waiting for dependency
     Pairs: [pair-name]
 
 Phase flow per issue: [phase1] → [phase2] → ... → [phaseN]
+
+Token estimates:
+  Debate issues: ~[N]k total (generative + adversarial × rounds × phases)
+  Solo issues:   ~[N]k total (generative × phases, ~40-60% of debate cost)
+  Combined:      ~[N]k estimated for this milestone
 ```
+
+**Token estimation heuristic**: Solo mode issues use roughly 40-60% of the tokens of debate mode issues for the same phase, because they skip adversarial review rounds entirely. The estimate scales with `max_rounds` for debate mode (each round incurs both generative and adversarial tokens) but is fixed at one pass for solo mode.
 
 Then use `AskUserQuestion`:
 - Options: `"Run for real (Recommended)"`, `"Done for now"`
