@@ -59,6 +59,9 @@ Read every available improvement signal from the project:
 **Escalation patterns:**
 - `.ratchet/escalations/*.json` — tiebreaker rulings and dispute patterns
 
+**Execution logs:**
+- `.ratchet/executions/*.yaml` — solo/promoted execution records: mode, guard results, promotion events, files modified, token estimates
+
 **Discoveries:**
 - `.ratchet/plan.yaml` → `epic.discoveries` — pending sidequests from watch, retro, or manual logging
 
@@ -126,6 +129,7 @@ Signal data:
   Performance reviews: [contents of reviews/**/*.json]
   Retro findings: [contents of retros/*.json]
   Escalation rulings: [contents of escalations/*.json]
+  Execution logs: [summary of executions/*.yaml — mode, guard_results, promoted, token_estimate per component]
   Pending discoveries: [epic.discoveries with status == "pending"]
   [If PR mode: PR analysis for #<number>: [CI failures, review comments, merge status]]
 
@@ -186,13 +190,33 @@ Analyze these dimensions:
 
 7. **Workflow preset recommendations** — should any component switch presets?
 
-8. **Guilty-until-proven-innocent compliance** — are agents dismissing test
-   failures as "flaky" or "pre-existing" without evidence?
+8. **Workflow mode effectiveness** — analyze execution logs to evaluate solo vs debate:
+   - Solo guard failure rate per component: if >30% of solo executions fail a
+     blocking guard, recommend promoting that component to `strategy: "debate"`
+   - Promotion frequency: if a component's solo executions are frequently promoted
+     to debate (via `promote_on_guard_failure`), the default mode is wrong —
+     recommend switching the component's `strategy` to `"debate"`
+   - Token cost comparison: compare `token_estimate` across solo vs debate executions
+     for the same component — flag cases where solo + promotion costs more than
+     debate-first would have
+
+9. **Over-engineered workflow detection** — identify components paying for
+   review overhead they don't need:
+   - Pairs with >80% TRIVIAL_ACCEPT verdicts across recent debates: recommend
+     demoting the component to `strategy: "solo"` (guards alone are sufficient)
+   - Components running `full` or `standard` pipeline where tests always pass
+     in round 1 (no adversarial pushback): recommend switching to `standard`
+     or `review` pipeline
+   - Output specific `workflow.yaml` changes: component `pipeline` field,
+     component `strategy` field, pair `enabled` flag
+
+10. **Guilty-until-proven-innocent compliance** — are agents dismissing test
+    failures as "flaky" or "pre-existing" without evidence?
 
 Produce a PRIORITIZED list of actionable improvements, grouped by type:
   A. Pair prompt changes (add knowledge, sharpen adversarial, settle law)
   B. New/modified guards
-  C. Workflow config changes (scope, timing, presets, max_rounds)
+  C. Workflow config changes (scope, timing, presets, max_rounds, strategy, pipeline)
   D. New pairs needed
   E. Pairs to disable/remove
 
