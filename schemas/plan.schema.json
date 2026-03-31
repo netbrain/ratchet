@@ -49,8 +49,7 @@
     },
     "discovery_source": {
       "type": "string",
-      "enum": ["manual", "watch", "tighten", "retro"],
-      "description": "How the discovery was created — manual (sidequest skill), watch (CI/PR monitor), tighten (retrospective), retro (retrospective analysis)"
+      "description": "How the discovery was created — free-form identifier. Conventions: 'manual' (sidequest skill), 'watch' (CI/PR monitor), 'tighten' (retrospective), 'retro' (retrospective analysis), or dynamic refs like 'pr-conflict-20', 'pr-ci-failure-42', 'debate-<id>', 'issue-<ref>'"
     },
     "epic": {
       "type": "object",
@@ -100,6 +99,10 @@
         "milestone_id": {
           "type": "integer",
           "description": "ID of the milestone currently being worked on"
+        },
+        "issue_ref": {
+          "type": ["string", "null"],
+          "description": "Issue ref currently being worked on within the milestone, or null"
         },
         "phase": {
           "$ref": "#/$defs/phase",
