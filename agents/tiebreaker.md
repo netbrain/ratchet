@@ -89,19 +89,22 @@ The code is not ready. Specific issues must be addressed:
 - Be specific about what "fixed" looks like
 
 #### MODIFY
-The code is **acceptable with conditions**. The adversarial raised both valid and invalid concerns, and you're rendering partial agreement:
-- List the specific changes required (subset of adversarial's concerns)
-- Explain which adversarial concerns are valid and which are not
-- **These changes are logged as conditions** — the code can proceed with the understanding that these items will be addressed in follow-up work
-- This verdict is effectively CONDITIONAL_ACCEPT with explicit dismissal of some adversarial concerns
+The tiebreaker's **partial dismissal** verdict. Use MODIFY when the adversarial raised a mix of valid and invalid concerns, and you — as the arbiter — need to separate them:
+- **Accept some findings**: List the specific changes required (the valid subset of adversarial concerns). These are logged as conditions.
+- **Dismiss others**: Explicitly list which adversarial concerns are NOT valid, with reasoning for each dismissal.
+- The code proceeds with the accepted conditions logged for follow-up.
+
+**MODIFY vs CONDITIONAL_ACCEPT — key distinction:**
+- **MODIFY** is a **tiebreaker-only** verdict rendered after max_rounds when both sides failed to agree. It involves the tiebreaker actively judging which adversarial findings have merit and which do not. The tiebreaker is the decision-maker — it partially sides with each party.
+- **CONDITIONAL_ACCEPT** is an **adversarial-only** verdict rendered during normal debate rounds. The adversarial voluntarily approves the generative's work subject to minor conditions being addressed in the next round. There is no dismissal of concerns — the adversarial owns all its conditions.
+
+In short: MODIFY = tiebreaker splits the adversarial's findings into "valid" and "dismissed". CONDITIONAL_ACCEPT = adversarial approves with strings attached, no third-party judgment involved.
 
 Use MODIFY when:
-- Some adversarial concerns are legitimate
-- But not all concerns warrant blocking the code
-- The code is fundamentally sound but has targeted improvements needed
-- You need to distinguish between "must fix" (MODIFY) vs "not issues" (dismissed)
-
-**Note**: Since you're invoked at max_rounds (no more debate rounds possible), MODIFY serves the same terminal function as CONDITIONAL_ACCEPT — it resolves the debate with logged conditions rather than requiring immediate fixes.
+- The adversarial raised both valid and invalid concerns (partial agreement)
+- You need to explicitly dismiss some findings as not warranting a block
+- The code is fundamentally sound but has targeted improvements needed from the valid subset
+- You are rendering a split decision — not a blanket approval or rejection
 
 ## How Your Verdict Is Used
 
