@@ -106,15 +106,20 @@ resolve it directly.
 
 **AGENT GATE — check EVERY Agent tool invocation before spawning it:**
 
-The orchestrator may ONLY spawn agents in these three categories:
+The orchestrator may ONLY spawn agents in these four categories:
 
 1. **Issue pipeline agents** (Step 4b) — agents that run a single issue's phase
    pipeline in an isolated worktree. They spawn debate-runners at Step 5e.
-   The debate-runner is the ONLY valid path for code changes.
-2. **Analyst agents** (Step 8c) — read-only assessment agents
+   The debate-runner is the ONLY valid path for code changes in the standard pipeline.
+2. **Quick-fix generative agents** (Mode Q, Step 2) — a single generative agent
+   spawned for `--quick` mode. Receives the description as prompt with build-phase
+   constraints. Blocking guards serve as the quality gate (no adversarial review).
+   This is the ONLY exception to the debate-runner requirement — justified by
+   Mode Q's narrow scope and mandatory guard gating.
+3. **Analyst agents** (Step 8c) — read-only assessment agents
    (`disallowedTools: Write, Edit`) that analyze data and produce recommendations.
    They NEVER modify files.
-3. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
+4. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
    inherit the same source-code boundary and plan management authority, and
    continue the `/ratchet:run` loop.
 
@@ -122,11 +127,12 @@ The orchestrator may ONLY spawn agents in these three categories:
 to keep the agent chain at 3 levels: orchestrator → debate-runner → gen/adv.
 Spawning milestone-level agents adds a 4th level where chain collapse occurs.
 
-**NEVER spawn an agent with implementation instructions.** If your Agent prompt
-contains phrases like "implement X", "fix Y", "add Z", "write code for", "create
-the file", or "modify the source" — STOP. You are bypassing the debate framework.
-All implementation work MUST flow through: orchestrator -> debate-runner ->
-generative agent. There are no shortcuts.
+**NEVER spawn an agent with implementation instructions** (except Mode Q). If your
+Agent prompt contains phrases like "implement X", "fix Y", "add Z", "write code for",
+"create the file", or "modify the source" — STOP. You are bypassing the debate
+framework. All implementation work MUST flow through: orchestrator -> debate-runner ->
+generative agent — unless `--quick` mode is active, in which case Mode Q's
+single-agent path applies (Step 2, Mode Q).
 
 **Violation examples (all FORBIDDEN):**
 - `Agent("Implement the AGENT GATE feature in skills/run/SKILL.md")` — direct implementation
@@ -137,6 +143,7 @@ generative agent. There are no shortcuts.
 **Correct pattern:**
 - `Agent("Run debate for pair [name] in phase [phase]. ...")` — spawns a debate-runner
 - `Agent("/ratchet:run --issue issue-3 --milestone 2")` with `isolation: "worktree"` — spawns an issue pipeline
+- `Agent("Quick-fix mode — single generative pass. Task: ...")` — spawns a Mode Q generative agent (only when `--quick` is active)
 - `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
 
 Your job is to:
@@ -195,13 +202,14 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run --unsupervised              # Run the full plan end-to-end without human intervention
 /ratchet:run --unsupervised --auto-pr    # Same, but auto-create PRs per issue
 /ratchet:run --go                        # Shorthand for --unsupervised --auto-pr
+/ratchet:run --quick "<description>"     # Quick-fix: skip plan, auto-detect scope, single generative pass
 ```
 
 ## Unsupervised Mode
 
 For unsupervised mode behavior, read `skills/run/unsupervised.md`.
 
-Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, and `--dry-run`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
+Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, `--dry-run`, and `--quick`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
 
 ## Prerequisites
 - `.ratchet/` must exist with valid config
@@ -314,7 +322,155 @@ This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries
 
 ### Step 2: Determine Focus
 
-There are five modes, checked in order:
+There are six modes, checked in order:
+
+#### Mode Q: Quick-fix (--quick "<description>")
+
+If `--quick` is set, skip `plan.yaml` entirely. This mode is a fast path for small, well-understood fixes that don't need epic/milestone/issue management or adversarial review.
+
+**Checked first** — before all other modes. If `--quick` is present, no other mode flags are evaluated.
+
+**Flag interactions:**
+- `--quick --dry-run`: Print the detected component, scope, and guards that would run, then stop. No agent spawned, no changes made.
+- `--quick --auto-pr`: Create a branch and PR after the commit (see step 5).
+- `--quick --unsupervised`: If component auto-detection fails, halt with error. If a guard fails, halt with `failed` (no retry).
+- `--quick --no-cache`: No effect — Mode Q has no file-hash cache.
+
+**1. Parse description:**
+
+The freeform `<description>` argument is the task. It should describe what to do and which files are involved:
+```
+/ratchet:run --quick "Fix off-by-one in src/parser.ts validateToken loop"
+/ratchet:run --quick "Add missing error handling to scripts/deploy.sh"
+```
+
+**2. Auto-detect component from file paths:**
+
+Extract file paths from the description (tokens matching known file extensions or path separators):
+```bash
+# Extract candidate paths from the description
+PATHS=$(echo "$DESCRIPTION" | grep -oE '[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10}' | sort -u)
+
+# Match each path against component scope globs in workflow.yaml
+for path in $PATHS; do
+  for component in $(yq eval '.components[].name' .ratchet/workflow.yaml); do
+    scope=$(yq eval ".components[] | select(.name == \"$component\") | .scope" .ratchet/workflow.yaml)
+    # Check if path matches the component's scope glob
+    # Use bash globbing or a dedicated match utility
+  done
+done
+```
+
+If no file paths are detected or no component matches, use `AskUserQuestion`:
+- Question: "Could not auto-detect component from the description. Which component?"
+- Options: one per component in `workflow.yaml`, plus `"Cancel"`
+
+In unsupervised mode with no component match: halt with error — quick-fix requires a detectable scope.
+
+**3. Spawn one generative agent:**
+
+Spawn a single generative agent (using the resolved `generative` model) with the description as the prompt. The agent receives build-phase constraints (it can read, write, and edit files within the detected component's scope):
+
+```
+Quick-fix mode — single generative pass.
+
+Task: <description>
+Component: <detected-component>
+Scope: <component scope glob>
+
+Constraints:
+  - You are in build-phase mode: read, write, edit files within scope.
+  - No adversarial review — blocking guards are the quality gate.
+  - Keep changes minimal and focused on the described task.
+  - Do NOT modify files outside the component scope.
+
+PRINCIPLE — Guilty Until Proven Innocent:
+  If any test or guard fails after your changes, YOUR changes caused it
+  unless you can prove otherwise on a clean checkout.
+```
+
+**Tool boundaries for the quick-fix generative agent:**
+- tools: Read, Grep, Glob, Bash, Write, Edit
+- Same as debate-mode generative agent — the only difference is no adversarial review and no debate structure
+
+**4. Run blocking guards:**
+
+After the generative agent returns, run all blocking guards for the detected component's phase (use `review` phase guards as default):
+
+```bash
+test -f .claude/ratchet-scripts/run-guards.sh \
+  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
+
+bash .claude/ratchet-scripts/run-guards.sh quick-fix review <guard-name> "<guard-command>" true
+```
+
+- If any blocking guard fails:
+  - **Guilty until proven innocent**: the quick-fix caused it. Verify on clean master before dismissing.
+  - In supervised mode: use `AskUserQuestion`: "Guard '[name]' failed: [summary]."
+    - Options: `"Fix and re-run"`, `"Abort quick-fix"`, `"Override guard"`
+  - In unsupervised mode: halt with status `failed` — quick-fix does not retry automatically.
+- Advisory guards: log and continue.
+
+**5. Commit and optionally create PR:**
+
+If all blocking guards pass, commit with a message derived from the description.
+
+If `--auto-pr` is also set, create a branch first:
+```bash
+# Create branch before committing (only with --auto-pr)
+BRANCH="ratchet/quick-fix/$(echo "$DESCRIPTION" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-50)"
+git checkout -b "$BRANCH"
+```
+
+Then commit (on the new branch if `--auto-pr`, or the current branch otherwise):
+```bash
+git add -A
+git commit -m "<description>"
+```
+
+If `--auto-pr` is set, push and create the PR:
+```bash
+git push -u origin "$BRANCH"
+gh pr create --title "$DESCRIPTION" --body "Quick-fix via \`/ratchet:run --quick\`"
+```
+
+**6. Write execution log:**
+
+```bash
+EXEC_ID="quick-fix-$(date +%Y%m%dT%H%M%S)"
+mkdir -p .ratchet/executions
+cat > ".ratchet/executions/${EXEC_ID}.yaml" <<EOF
+id: "${EXEC_ID}"
+mode: quick-fix
+component: <detected-component>
+issue: null
+started: "<timestamp>"
+resolved: "<timestamp>"
+guard_results: [<guard results>]
+description: "<description>"
+files_modified: [<files>]
+EOF
+```
+
+**7. Skip epic/milestone/issue management:**
+
+Mode Q does not read or write `plan.yaml`. No milestone, issue, or phase tracking. No debate artifacts. The commit is local unless `--auto-pr` creates a branch and PR (see step 5).
+
+> **Note on Step 1**: Mode Q still requires Step 1a (workspace resolution) to locate `workflow.yaml` for component auto-detection. However, Step 1b's `plan.yaml` reading is skipped entirely — Mode Q has no concept of milestones, issues, or phases.
+
+**8. Output summary:**
+
+```
+Quick-fix complete:
+  mode: quick-fix
+  description: <description>
+  component: <detected-component>
+  files_modified: [<files>]
+  guards: [<pass/fail summary>]
+  execution_log: .ratchet/executions/<EXEC_ID>.yaml
+```
+
+Then stop — do not continue to any other step. Mode Q is a terminal path.
 
 #### Mode M: Single-milestone pipeline (--milestone <id>)
 If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3b** to build the issue dependency graph for this single milestone. Execute Steps 3b → 4 → 8 for this milestone, then proceed to Step 10. This mode is used for focused runs on a single milestone (user-invoked or continuation agents).

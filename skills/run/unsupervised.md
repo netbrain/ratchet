@@ -81,3 +81,4 @@ Unsupervised run [completed|paused]:
 - `--unsupervised --dry-run`: Dry-run takes precedence (preview only, no execution)
 - `--go --no-cache`: Combines `--go` with `--no-cache` (force re-debate, unsupervised, auto-PR)
 - `--go --all-files`: Combines `--go` with `--all-files` (all pairs, unsupervised, auto-PR)
+- `--quick "<description>"`: Compatible with `--unsupervised`. In unsupervised mode, if component auto-detection fails, Mode Q halts with error (no interactive fallback). If a blocking guard fails, Mode Q halts with status `failed` (no retry). Combinable with `--auto-pr` to auto-create a branch and PR from the quick-fix commit.
