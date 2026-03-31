@@ -55,21 +55,20 @@ fi
 ISSUE_BODY="${ISSUE_BODY}---
 <!-- ratchet-managed -->"
 
-# Build label args
-LABEL_ARGS=""
+# Build label args as array to handle labels with spaces correctly
+LABEL_ARGS=()
 for label in "${LABELS[@]}"; do
-    LABEL_ARGS="${LABEL_ARGS} --label ${label}"
+    LABEL_ARGS+=(--label "$label")
 done
 
 # Create the issue and extract the number
-# shellcheck disable=SC2086
-ISSUE_URL=$(gh issue create --title "$TITLE" --body "$ISSUE_BODY" $LABEL_ARGS 2>/dev/null) || {
-    echo "Error: Failed to create GitHub issue" >&2
+ISSUE_URL=$(gh issue create --title "$TITLE" --body "$ISSUE_BODY" ${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"} 2>&1) || {
+    echo "Error: Failed to create GitHub issue: $ISSUE_URL" >&2
     exit 1
 }
 
 # Extract issue number from URL (https://github.com/owner/repo/issues/123)
-ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$') || true
 
 if [ -z "$ISSUE_NUM" ]; then
     echo "Error: Could not parse issue number from: $ISSUE_URL" >&2
