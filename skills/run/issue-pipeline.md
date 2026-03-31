@@ -13,7 +13,7 @@ This is the phase-gated loop for a single issue. Each issue runs as a separate a
 **Execution context:**
 - Spawned by Step 4b as a parallel Agent invocation (one per issue in the current layer)
 - Runs in an isolated git worktree (provided by `isolation: "worktree"`)
-- Spawns debate-runner agents at Step 5e
+- Spawns debate-runner agents at Step 5e (or generative agent directly in solo mode — Step 5d-solo)
 - Returns a structured completion summary (Step 5h) — does NOT write plan.yaml (the parent orchestrator handles that in Step 4c)
 
 The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on workflow), then returns control to Step 4c for state persistence.
@@ -132,6 +132,171 @@ flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <m
   - Log the failure and pass the output as context to the debates (the debates must address it — guilty until proven innocent)
   - Continue to debate creation
 
+#### 5d-solo. Solo Execution Branch
+
+**Before** preparing debate context, check if the component's `strategy` is `solo`. The `strategy` field on a component in `workflow.yaml` determines the execution mode:
+
+- `strategy: "debate"` (default, omitted) — full adversarial debate via debate-runner (Steps 5d–5e)
+- `strategy: "solo"` — generative agent + guards, no adversarial review
+
+If the component's strategy is NOT `solo`, skip this section entirely and proceed to **Step 5d**.
+
+**Solo mode execution:**
+
+Solo mode skips the debate-runner entirely. It spawns the generative agent directly, runs post-build guards, and uses guard results as the quality gate instead of adversarial consensus.
+
+**Worktree isolation**: Solo mode runs under the same worktree isolation constraints as debate mode. The issue agent is already in an isolated worktree (from Step 4b's `isolation: "worktree"`). The generative agent spawned here operates within that worktree — same as in debate mode.
+
+**Tool boundaries for the solo generative agent:**
+- The generative agent has: Read, Grep, Glob, Bash, Write, Edit
+- It operates on source code within the worktree scope
+- No adversarial agent is spawned — guards serve as the quality gate
+
+**Step 1 — Spawn generative agent:**
+
+Spawn the generative agent directly with the build-phase prompt. Use the resolved `generative` model (pair-level override if set, otherwise global from `workflow.yaml`).
+
+```
+Run solo execution for pair [pair-name] in phase [phase].
+
+ROLE — You are the generative agent in solo mode (no adversarial review).
+Your output will be validated by deterministic guards, not an adversarial agent.
+Write clean, correct code — guards are your quality gate.
+
+PRINCIPLE — Guilty Until Proven Innocent:
+  Guard failures are YOUR fault unless you can prove they exist on clean master.
+
+Pair definition: .ratchet/pairs/<name>/generative.md
+
+Context:
+  Worktree: [absolute path to issue worktree]
+  Phase: [current phase]
+  Milestone: [id, name, description]
+  Issue: [issue ref]
+  Files in scope: [matched file list]
+  Plan phase output: [path, if phase > plan]
+  Test phase output: [paths, if phase > test]
+  Models:
+    generative: [resolved model]
+```
+
+Wait for the generative agent to complete. Collect `files_modified` from the agent's output.
+
+**Step 2 — Run post-build guards:**
+
+Run all guards where `timing: "post-debate"` (or no timing field) for the current phase — identical to the guard execution in Step 5f. The same resource provisioning, singleton locking, and `run-guards.sh` invocation apply:
+
+```bash
+# Verify guard script exists before running
+test -f .claude/ratchet-scripts/run-guards.sh \
+  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
+
+bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+```
+
+**Step 3 — Evaluate guard results:**
+
+**(a) All guards pass → success:**
+
+Create the executions directory if it doesn't exist, then write execution log:
+
+```bash
+mkdir -p .ratchet/executions
+```
+
+Write execution log to `.ratchet/executions/<id>.yaml`:
+
+```yaml
+id: "<pair-name>-<ISO-timestamp>"
+mode: solo
+component: "<component-name>"
+issue: "<issue-ref>"
+started: "<ISO-start>"
+resolved: "<ISO-now>"
+guard_results:
+  - name: "<guard-name>"
+    passed: true
+    duration_ms: <ms>
+promoted: false
+promotion_reason: null
+debate_id: null
+files_modified:
+  - "<file1>"
+  - "<file2>"
+```
+
+The execution log MUST conform to `schemas/execution.schema.json`. Update the issue's `files` array with `files_modified`. Mark the current phase as `done` in `phase_status`. Proceed to the next phase (loop back to Step 5a) or output the completion summary (Step 5h) if all phases are done.
+
+**(b) Any blocking guard fails AND `promote_on_guard_failure: true`:**
+
+The `promote_on_guard_failure` field is set on the component in `workflow.yaml` (default: `false`). When `true`, a solo-mode guard failure escalates to the full debate path instead of failing outright.
+
+1. Log the promotion event in the execution log:
+   ```yaml
+   id: "<pair-name>-<ISO-timestamp>"
+   mode: promoted
+   component: "<component-name>"
+   issue: "<issue-ref>"
+   started: "<ISO-start>"
+   resolved: null  # still in progress — debate will resolve it
+   guard_results:
+     - name: "<guard-name>"
+       passed: false
+       reason: "<guard output summary>"
+       duration_ms: <ms>
+   promoted: true
+   promotion_reason: "guard <guard-name> failed"
+   debate_id: null  # filled in after debate completes
+   files_modified:
+     - "<file1>"
+     - "<file2>"
+   ```
+
+2. **Fall through to the existing debate path** (Steps 5d → 5e). The generative agent's changes remain in the worktree — the debate-runner picks up from the current state. Pass the guard failure output as additional context to the debate so the adversarial agent can focus on the failure:
+   ```
+   PROMOTION CONTEXT — Solo mode guard failure:
+     Guard: [guard-name]
+     Output: [guard failure output]
+     The generative agent's changes are in the worktree. The adversarial agent
+     should focus on why the guard failed and whether the changes are correct.
+   ```
+
+3. After the debate completes, update the execution log's `debate_id` and `resolved` fields.
+
+**(c) Any blocking guard fails AND `promote_on_guard_failure: false` (default):**
+
+1. Write execution log with `mode: solo` and the failed guard result:
+   ```yaml
+   id: "<pair-name>-<ISO-timestamp>"
+   mode: solo
+   component: "<component-name>"
+   issue: "<issue-ref>"
+   started: "<ISO-start>"
+   resolved: "<ISO-now>"
+   guard_results:
+     - name: "<guard-name>"
+       passed: false
+       reason: "<guard output summary>"
+       duration_ms: <ms>
+   promoted: false
+   promotion_reason: null
+   debate_id: null
+   files_modified:
+     - "<file1>"
+     - "<file2>"
+   ```
+
+2. Return failure. In unsupervised mode, set issue status to `failed` with `halt_reason: "solo guard failure: <guard-name>"`. In supervised mode, use `AskUserQuestion`:
+   - Question: "Solo execution guard '[guard-name]' failed: [summary]."
+   - Options: `"Fix and re-run (Recommended)"`, `"Promote to debate"`, `"Cancel — skip this phase"`
+   - If "Promote to debate" is selected: follow the promotion path described in (b) above.
+
+**(d) Advisory guard fails:**
+
+Log the failure in the execution log but continue. Advisory guards do not block advancement — same behavior as in debate mode (Step 5f).
+
+---
+
 #### 5d. Prepare Debate Context
 
 For each matched pair, prepare the context for the **debate-runner** agent:
@@ -230,7 +395,7 @@ If the Task/Agent tool is unavailable or debate-runner spawning fails (e.g., nes
 - Retry spawning the debate-runner up to 3 times with exponential backoff (5s, 10s, 20s)
 - If all retries fail, escalate to human or halt (depending on mode)
 
-**No Fallback Validation**: The debate-runner is the ONLY acceptable path for quality enforcement. Guards alone are insufficient substitutes for adversarial review. Auto-approval without debate violates the quality contract.
+**No Fallback Validation** (debate-mode components only): For components with `strategy: "debate"` (the default), the debate-runner is the ONLY acceptable path for quality enforcement. Guards alone are insufficient substitutes for adversarial review. Auto-approval without debate violates the quality contract. Components with `strategy: "solo"` use guards as the quality gate by design — see Step 5d-solo.
 
 #### Handle Debate Results
 
@@ -367,6 +532,7 @@ Issue [ref] complete:
     [phase]: skipped ([reason, e.g. traditional workflow])
     ...
   debates: [debate-id-1, debate-id-2, ...]
+  executions: [execution-id-1, ...]  # solo/promoted execution logs (omit if none)
   files: [file1, file2, ...]
   worktree: [absolute path to worktree with uncommitted changes]
 ```
@@ -386,6 +552,7 @@ Issue [ref] [blocked|escalated|failed]:
   halted_at: [phase]
   halt_reason: [reason]
   debates: [debate-id-1, ...]
+  executions: [execution-id-1, ...]  # solo/promoted execution logs (omit if none)
   files: [file1, ...]
   worktree: [absolute path or "none"]
 ```

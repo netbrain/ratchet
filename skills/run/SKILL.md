@@ -842,6 +842,7 @@ orchestrator parses in Step 4c.
 - **5b.** File-hash cache check (skip unchanged pairs)
 - **Shared Resources** — provisioning, singleton locking via flock
 - **5c.** Pre-debate guards (blocking/advisory)
+- **5d-solo.** Solo execution branch — if component `strategy: "solo"`, spawn generative agent directly + guards (skip debate-runner)
 - **5d.** Prepare debate context (models, publish config, escalation precedents)
 - **5e.** Run debates — spawn debate-runners, handle results (ACCEPT, CONDITIONAL_ACCEPT, ESCALATED, REGRESS)
 - **5f.** Phase gate — post-debate guards, advance phase, commit/PR at configured boundaries

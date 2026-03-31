@@ -208,6 +208,17 @@
         "workflow": {
           "$ref": "#/$defs/workflow_preset",
           "description": "Which phases apply to this component"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["debate", "solo"],
+          "default": "debate",
+          "description": "Execution strategy. debate (default): full adversarial debate via debate-runner. solo: generative agent + guards, no adversarial review."
+        },
+        "promote_on_guard_failure": {
+          "type": "boolean",
+          "default": false,
+          "description": "Solo mode only. When true, a guard failure in solo mode promotes the execution to a full debate instead of failing. When false (default), guard failure in solo mode is a hard failure."
         }
       }
     },
