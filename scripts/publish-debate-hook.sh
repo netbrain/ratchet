@@ -25,11 +25,11 @@ ARTIFACT_TYPE=""
 case "$FILE_PATH" in
     */.ratchet/debates/*/rounds/round-*-generative.md)
         ARTIFACT_TYPE="generative"
-        DEBATE_DIR=$(echo "$FILE_PATH" | sed 's|/rounds/round-.*||')
+        DEBATE_DIR="${FILE_PATH%%/rounds/round-*}"
         ;;
     */.ratchet/debates/*/rounds/round-*-adversarial.md)
         ARTIFACT_TYPE="adversarial"
-        DEBATE_DIR=$(echo "$FILE_PATH" | sed 's|/rounds/round-.*||')
+        DEBATE_DIR="${FILE_PATH%%/rounds/round-*}"
         ;;
     */.ratchet/debates/*/meta.json)
         # Final meta.json write — check if debate just completed for summary publish
@@ -56,17 +56,19 @@ STATUS=$(jq -r '.status // empty' "$META_FILE" 2>/dev/null) || true
 
 # --- Locate workflow.yaml to read publish config ---
 # Walk up from the debate directory to find .ratchet/workflow.yaml
-RATCHET_DIR=$(echo "$DEBATE_DIR" | sed 's|/.ratchet/debates/.*|/.ratchet|')
+RATCHET_DIR="${DEBATE_DIR%%/.ratchet/debates/*}/.ratchet"
 PROJECT_DIR=$(dirname "$RATCHET_DIR")
 WORKFLOW_FILE="$RATCHET_DIR/workflow.yaml"
 
 if [ ! -f "$WORKFLOW_FILE" ]; then
+    echo "Warning: publish-debate-hook: workflow.yaml not found at $WORKFLOW_FILE — debate publishing disabled" >&2
     exit 0
 fi
 
 # Read publish config from workflow.yaml
-# Requires yq — fall back silently if unavailable
+# Requires yq — fall back with warning if unavailable
 if ! command -v yq >/dev/null 2>&1; then
+    echo "Warning: publish-debate-hook: yq not found — debate publishing disabled (install yq to enable)" >&2
     exit 0
 fi
 

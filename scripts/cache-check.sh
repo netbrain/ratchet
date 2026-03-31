@@ -33,6 +33,16 @@ matched_files=""
 IFS=',' read -ra globs <<< "$SCOPE_GLOB"
 for glob in "${globs[@]}"; do
     glob="$(echo "$glob" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s|\*\*/|*|g;s|\*\*|*|g')"
+    # Validate glob pattern: must contain only safe characters for find -path
+    # Reject empty patterns or patterns with characters that could cause issues
+    if [ -z "$glob" ]; then
+        echo "Warning: empty glob pattern skipped" >&2
+        continue
+    fi
+    if [[ "$glob" =~ [[:cntrl:]] ]] || [[ "$glob" == *$'\n'* ]]; then
+        echo "Warning: glob pattern contains control characters, skipped: $glob" >&2
+        continue
+    fi
     matches=$(find . -path "./$glob" -type f 2>/dev/null || true)
     if [ -n "$matches" ]; then
         matched_files="${matched_files:+${matched_files}
