@@ -172,6 +172,29 @@ Returned to caller:
 
 ## Execution Protocol
 
+### 0. Pre-flight Validation
+
+Before any debate work, validate the environment:
+
+**Worktree check** (if a `Worktree` path was provided in the task context):
+```bash
+if [ ! -d "<worktree-path>" ]; then
+  echo "ERROR: Worktree path does not exist: <worktree-path>" >&2
+  echo "The worktree may have been cleaned up or never created." >&2
+  echo "Re-run the orchestrator to create a fresh worktree." >&2
+  exit 1
+fi
+if [ ! -w "<worktree-path>" ]; then
+  echo "ERROR: Worktree path is not writable: <worktree-path>" >&2
+  echo "Check filesystem permissions." >&2
+  exit 1
+fi
+```
+
+If the worktree path does not exist or is not writable, **fail immediately** — do not create the debate directory, write meta.json, or spawn any agents. Return an error to the caller with the message above. No debate artifacts are created on pre-flight failure.
+
+**Pair definition check**: Verify both `.ratchet/pairs/<name>/generative.md` and `.ratchet/pairs/<name>/adversarial.md` exist (this is also covered in Error Handling below, but checking here prevents wasted work).
+
 ### 1. Create Debate Directory
 
 Generate debate ID: `<pair-name>-<timestamp>` (e.g., `api-contracts-20260314T100000`).
@@ -245,12 +268,12 @@ When constructing the `[If round > 1: ...]` sections in both generative and adve
 Prior round history (summarized):
 
 Round 1:
-- Generative: [2-3 sentence summary of what was proposed/changed]
-- Adversarial: [verdict] — [1-2 sentence summary of key concerns raised]
+- Generative: verdict=N/A | changed: file1.md, file2.md (+40/-12) | action: [imperative sentence: what was proposed or changed]
+- Adversarial: verdict=REJECT | evidence: [file:line refs or command output cited] | conditions: [numbered list of unresolved items] | key concern: [single sentence]
 
 Round 2:
-- Generative: [2-3 sentence summary of what was addressed/changed]
-- Adversarial: [verdict] — [1-2 sentence summary of remaining concerns]
+- Generative: verdict=N/A | changed: file1.md (+5/-3) | action: [what was addressed]
+- Adversarial: verdict=CONDITIONAL_ACCEPT | evidence: [refs] | conditions: [remaining items] | key concern: [single sentence]
 
 [...repeat for each prior round through N-2...]
 
@@ -259,7 +282,19 @@ Most recent round (full text):
 [full content of round-(N-1)-adversarial.md]
 ```
 
-The debate-runner generates these summaries by reading each prior round file and extracting: (1) the key changes or proposals from the generative output, (2) the verdict and primary concerns from the adversarial output. Keep summaries factual and specific — include file names, issue counts, and verdict keywords. Do not editorialize.
+**Summarization extraction rules** (the debate-runner generates these by reading each prior round file):
+
+For each **generative** round file, extract:
+1. **changed**: List every file path modified, with aggregate diffstat (lines added/removed). If the generative output includes a `changes_made` JSON field, use it directly.
+2. **action**: One imperative sentence describing the primary change (e.g., "Add worktree validation to step 1" not "The agent improved validation").
+
+For each **adversarial** round file, extract:
+1. **verdict**: The exact verdict keyword (ACCEPT, CONDITIONAL_ACCEPT, REJECT, TRIVIAL_ACCEPT, REGRESS).
+2. **evidence**: Up to 3 specific file:line references or command outputs the adversarial cited as evidence. If the adversarial JSON has a `findings` array, extract `file` and `line` from each entry.
+3. **conditions**: Numbered list of unresolved items (from `findings` with severity critical or major, or from CONDITIONAL_ACCEPT conditions).
+4. **key concern**: The single most important concern — extract from `verdict_reasoning` if present, otherwise from the highest-severity finding.
+
+Keep summaries factual. Use file names, line numbers, and verdict keywords. Do not editorialize or paraphrase subjective assessments.
 
 Spawn an Agent with `model` set to the generative model from the task context (e.g., `model: "opus"`). Use the phase-specific prompt:
 

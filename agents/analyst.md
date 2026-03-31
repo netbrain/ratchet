@@ -305,6 +305,24 @@ Before generating pair definitions, **discuss each pair individually** with the 
 
 The human's answers here directly shape the agent prompts — this is the most impactful part of init. Don't rush it.
 
+### Pair Approval Protocol
+
+After presenting each pair and incorporating the human's feedback, use `AskUserQuestion` to get an explicit decision:
+
+- Options: `"Approve this pair"`, `"Revise — I have more feedback"`, `"Drop this pair"`, `"Skip for now — decide later"`
+
+**Handle each response:**
+
+1. **Approve**: Generate the pair definition files immediately. Move to the next pair.
+2. **Revise**: Ask a follow-up question to understand what needs changing. Apply the feedback and re-present the revised pair. Allow up to **3 revision cycles** per pair — if the human is still unsatisfied after 3 iterations, offer:
+   - `"Drop this pair (Recommended — we can revisit later)"`, `"One more revision"`, `"Approve as-is with a note"`
+3. **Drop**: Do not generate pair definitions. Record the dropped pair and reason in a `dropped_pairs` list in `plan.yaml` under the milestone for traceability. Move to the next pair.
+4. **Skip**: Set the pair aside. After all other pairs are processed, re-present skipped pairs as a batch: `"You skipped N pairs. Review them now, or drop all?"` with options `"Review now"`, `"Drop all skipped pairs"`
+
+**Ordering**: If one pair depends on another (e.g., a build pair depends on a test pair's output), present the dependency first. If the human drops a dependency, warn: `"Pair X depends on the pair you just dropped. Drop X too, or keep it standalone?"`
+
+**Empty result**: If the human drops ALL proposed pairs, do not silently proceed with zero pairs. Use `AskUserQuestion`: `"All proposed pairs were dropped. Would you like to describe the quality dimensions you care about, or exit init?"` with options `"Describe what I want"`, `"Exit init"`
+
 ### Draw from Ecosystem Expertise
 
 When designing pairs, actively draw inspiration from ecosystem projects to enrich agent knowledge — don't just suggest these as tools to install, use their domain expertise as source material for pair design:
