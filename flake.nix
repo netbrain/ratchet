@@ -49,6 +49,7 @@
             bash
             go
             golangci-lint
+            check-jsonschema
           ];
           shellHook = ''
             echo "Ratchet development environment loaded"
