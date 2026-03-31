@@ -318,6 +318,73 @@ yq eval '.epic' .ratchet/plan.yaml > /dev/null 2>&1 \
 ```
 This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries automatically. The loop is stopped in Step 9 when the run completes. Skip this if no PRs exist yet (first run of a new epic).
 
+#### 1c. Orphan Detection
+
+Run the orphan detection script to identify stale state from previous runs (abandoned worktrees, unresolved debates, incomplete executions, stale in-progress issues). Orphan detection is advisory — it never blocks the pipeline.
+
+```bash
+if [ ! -f .claude/ratchet-scripts/check-orphans.sh ]; then
+  echo "Warning: .claude/ratchet-scripts/check-orphans.sh not found. Skipping orphan detection." >&2
+  ORPHAN_FINDINGS="[]"
+else
+  ORPHAN_FINDINGS=$(bash .claude/ratchet-scripts/check-orphans.sh --ratchet-dir "$RATCHET_DIR" 2>/dev/null || echo "[]")
+fi
+ORPHAN_COUNT=$(printf '%s' "$ORPHAN_FINDINGS" | jq 'length' 2>/dev/null || echo "0")
+```
+
+**If findings exist** (`ORPHAN_COUNT > 0`):
+
+Parse each finding from the JSON array. Each finding has: `type` (stale_issue, unresolved_debate, orphan_worktree, incomplete_execution), `ref`, `age`, and `suggested_action`.
+
+**In supervised mode**, present each finding via `AskUserQuestion`:
+
+```
+Orphan detected: [type] — [ref] (age: [age])
+[suggested_action]
+```
+
+Options per finding:
+- `"Resume"` — set the referenced item as current focus (for stale issues: set `current_focus` to this issue; for unresolved debates: resume with `/ratchet:debate`; for incomplete executions: re-launch the issue pipeline)
+- `"Abandon"` — reset the item to a clean state (for stale issues: set status back to `pending` and clear `phase_status` progress; for orphan worktrees: remove with `git worktree remove`; for unresolved debates: delete the debate directory; for incomplete executions: remove the execution log)
+- `"Ignore"` — skip this finding, take no action, proceed to the next
+
+**In `--unsupervised` mode**, auto-select based on finding age:
+
+```
+age_hours = parse hours from finding.age (e.g., "36h" → 36, "2d" → 48, "unknown" → 999)
+
+if age_hours > 24:
+    auto-select "Abandon" — stale items are cleaned up automatically
+elif age_hours < 4:
+    auto-select "Resume" — recent items are likely interrupted work worth continuing
+else:
+    auto-select "Ignore" — ambiguous age, leave for human review on next supervised run
+```
+
+For `"unknown"` age, treat as stale (auto-select Abandon in unsupervised mode).
+
+**Abandon actions by finding type:**
+
+| Finding type | Abandon action |
+|---|---|
+| `stale_issue` | `yq eval -i '(.epic.milestones[].issues[] \| select(.ref == "REF")).status = "pending"' .ratchet/plan.yaml` — also reset `phase_status` entries that were `in_progress` back to `pending` |
+| `unresolved_debate` | `rm -rf .ratchet/debates/<debate-id>` |
+| `orphan_worktree` | `git worktree remove .claude/worktrees/<name> 2>/dev/null \|\| git worktree remove --force .claude/worktrees/<name>` |
+| `incomplete_execution` | `rm -f .ratchet/executions/<exec-id>.yaml` |
+
+**Resume actions by finding type:**
+
+| Finding type | Resume action |
+|---|---|
+| `stale_issue` | Set `current_focus` to this issue's ref and milestone — the issue will be picked up in Step 2 |
+| `unresolved_debate` | Log `"Resumable debate: <debate-id>. Will be continued in the issue pipeline."` — the debate-runner handles continuation |
+| `orphan_worktree` | Log `"Worktree <name> retained for manual inspection."` — no automated resume for worktrees |
+| `incomplete_execution` | Log `"Execution <exec-id> retained. Will be re-attempted in the issue pipeline."` |
+
+After processing all findings, continue to the CHECKPOINT below.
+
+**If no findings** (`ORPHAN_COUNT == 0`): continue silently.
+
 **CHECKPOINT**: You now understand the project state. Do NOT act on it — do not analyze code, do not plan fixes, do not write implementations. Your next action is Step 2: present choices to the user (or auto-select in unsupervised mode). Then Step 4: launch issue pipelines. The pipelines do the work.
 
 ### Step 2: Determine Focus

@@ -13,6 +13,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 ## Behavior
 
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
+- **Step 1c (orphan detection)**: Auto-select based on finding age: Abandon for stale items (>24h or unknown age), Resume for recent items (<4h), Ignore for ambiguous (4-24h). See Step 1c in SKILL.md for the full decision matrix.
 - **Step 2 (focus)**: Auto-select "Run all ready issues sequentially" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
 - **Step 4 (issue pipelines)**: Execute all ready issues sequentially inline. Each issue pipeline runs in an isolated worktree, spawning only debate-runner agents.
 - **Step 5-dry (dry-run)**: Dry-run takes precedence — produce the preview (including token and cost estimates), log the estimates to stdout, and stop. No agents are spawned. The `AskUserQuestion` confirmation is skipped (estimates are informational only).
