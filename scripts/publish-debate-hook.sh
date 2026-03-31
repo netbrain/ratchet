@@ -60,9 +60,65 @@ RATCHET_DIR="${DEBATE_DIR%%/.ratchet/debates/*}/.ratchet"
 PROJECT_DIR=$(dirname "$RATCHET_DIR")
 WORKFLOW_FILE="$RATCHET_DIR/workflow.yaml"
 
+# Worktree-aware fallback: in bare-repo worktree setups, debates land in the
+# bare repo's .ratchet/ but workflow.yaml and scripts/ live in the worktree.
 if [ ! -f "$WORKFLOW_FILE" ]; then
-    echo "Warning: publish-debate-hook: workflow.yaml not found at $WORKFLOW_FILE — debate publishing disabled" >&2
-    exit 0
+    RESOLVED=false
+
+    # Fallback 1: git worktree list — find the main worktree
+    if command -v git >/dev/null 2>&1; then
+        # First line of `git worktree list` is the main worktree
+        MAIN_WORKTREE=$(git worktree list 2>/dev/null | head -1 | awk '{print $1}') || true
+        if [ -n "$MAIN_WORKTREE" ] && [ -f "$MAIN_WORKTREE/.ratchet/workflow.yaml" ]; then
+            RATCHET_DIR="$MAIN_WORKTREE/.ratchet"
+            PROJECT_DIR="$MAIN_WORKTREE"
+            WORKFLOW_FILE="$RATCHET_DIR/workflow.yaml"
+            RESOLVED=true
+            echo "Info: publish-debate-hook: resolved workflow.yaml via git worktree at $MAIN_WORKTREE" >&2
+        fi
+    fi
+
+    # Fallback 2: GIT_WORK_TREE environment variable
+    if [ "$RESOLVED" = false ] && [ -n "${GIT_WORK_TREE:-}" ]; then
+        if [ -f "$GIT_WORK_TREE/.ratchet/workflow.yaml" ]; then
+            RATCHET_DIR="$GIT_WORK_TREE/.ratchet"
+            PROJECT_DIR="$GIT_WORK_TREE"
+            WORKFLOW_FILE="$RATCHET_DIR/workflow.yaml"
+            RESOLVED=true
+            echo "Info: publish-debate-hook: resolved workflow.yaml via GIT_WORK_TREE=$GIT_WORK_TREE" >&2
+        fi
+    fi
+
+    # Fallback 3: walk up from GIT_DIR looking for a worktree with .ratchet/workflow.yaml
+    if [ "$RESOLVED" = false ]; then
+        GIT_DIR_PATH=""
+        if command -v git >/dev/null 2>&1; then
+            GIT_DIR_PATH=$(git rev-parse --git-dir 2>/dev/null) || true
+        fi
+        # Also try GIT_DIR env var directly (covers bare-repo setups where git rev-parse may not work)
+        if [ -z "$GIT_DIR_PATH" ] && [ -n "${GIT_DIR:-}" ] && [ -d "$GIT_DIR" ]; then
+            GIT_DIR_PATH="$GIT_DIR"
+        fi
+        if [ -n "$GIT_DIR_PATH" ]; then
+            SEARCH_DIR=$(cd "$GIT_DIR_PATH" && pwd -P) || true
+            while [ -n "$SEARCH_DIR" ] && [ "$SEARCH_DIR" != "/" ]; do
+                if [ -f "$SEARCH_DIR/.ratchet/workflow.yaml" ]; then
+                    RATCHET_DIR="$SEARCH_DIR/.ratchet"
+                    PROJECT_DIR="$SEARCH_DIR"
+                    WORKFLOW_FILE="$RATCHET_DIR/workflow.yaml"
+                    RESOLVED=true
+                    echo "Info: publish-debate-hook: resolved workflow.yaml by walking up from GIT_DIR at $SEARCH_DIR" >&2
+                    break
+                fi
+                SEARCH_DIR=$(dirname "$SEARCH_DIR")
+            done
+        fi
+    fi
+
+    if [ "$RESOLVED" = false ]; then
+        echo "Warning: publish-debate-hook: workflow.yaml not found at $WORKFLOW_FILE (also tried worktree fallbacks) — debate publishing disabled" >&2
+        exit 0
+    fi
 fi
 
 # Read publish config from workflow.yaml
