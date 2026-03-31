@@ -119,6 +119,12 @@ When multiple skills define the same data structure (e.g., discovery schema):
 2. Diff EVERY file that uses that structure against the canonical list
 3. Fix ALL divergences in one round — don't fix one file and miss others
 
+## Field Rename Detection (after any field name change)
+
+When renaming fields in YAML examples, JSON schemas, or data structures:
+1. Grep ALL in-scope files for the OLD field name in prose, comments, and examples
+2. Every occurrence must be updated — stale prose references cause R2 debates
+
 ## yq/jq Command Safety (MANDATORY for any data manipulation)
 
 When writing or reviewing yq/jq commands in skills:

@@ -14,6 +14,7 @@ models:
 
 progress:
   adapter: github-issues
+  publish_debates: per-round
 
 components:
   - name: skills
@@ -48,7 +49,7 @@ pairs:
   - name: agent-effectiveness
     component: agents
     phase: review
-    scope: "agents/*.md"
+    scope: "agents/*.md,.ratchet/pairs/*/generative.md,.ratchet/pairs/*/adversarial.md"
     enabled: true
 
   - name: schema-correctness
@@ -73,7 +74,11 @@ guards:
     components: [scripts]
 
   - name: schema-valid
-    command: "nix develop --command jq empty schemas/workflow.schema.json"
+    command: |
+      for schema in schemas/*.schema.json; do
+        [ -f "$schema" ] || continue
+        nix develop --command jq empty "$schema" || exit 1
+      done
     phase: review
     blocking: true
     timing: post-debate

@@ -72,6 +72,9 @@ The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION co
 - [ ] **JSON writes must be atomic**: Use temp file + mv pattern (`tmp=$(mktemp); ... > "$tmp" && mv "$tmp" "$target"`)
 - [ ] **JSON reads must handle parse errors**: `jq empty "$file" 2>/dev/null || handle_error`
 
+**Parallel Safety (flock):**
+- [ ] When scripts use flock for concurrent access, verify: (a) lock file path is deterministic, (b) timeout behavior documented, (c) fallback on lock failure exists. Run: `grep -n 'flock' scripts/**/*.sh`
+
 **Error Messages:**
 - [ ] User-facing error messages must be clear, actionable, and include the path checked
 - [ ] Exit-1 paths must use `Error:`, not `Warning:` (which implies non-fatal)
