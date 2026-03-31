@@ -42,6 +42,56 @@ jq empty .ratchet/debates/<id>/meta.json 2>/dev/null \
   || { echo "Error: meta.json for debate '<id>' is malformed JSON. It may have been corrupted by an interrupted write." >&2; exit 1; }
 ```
 
+**Recovery procedure for corrupted meta.json**:
+
+If `meta.json` fails JSON validation, attempt recovery before giving up:
+
+1. **Regenerate from round files** — reconstruct meta.json from the round files on disk:
+   ```bash
+   debate_dir=".ratchet/debates/<id>"
+   pair_name=$(echo "<id>" | sed 's/-[0-9T]*$//')
+   round_count=$(ls "$debate_dir/rounds"/round-*-adversarial.md 2>/dev/null | wc -l)
+   last_round="$debate_dir/rounds/round-${round_count}-adversarial.md"
+
+   # Extract verdict from the last adversarial round (look for verdict keywords)
+   verdict=""
+   if [ -f "$last_round" ]; then
+     verdict=$(grep -oE '(ACCEPT|CONDITIONAL_ACCEPT|TRIVIAL_ACCEPT|REJECT|REGRESS)' \
+       "$last_round" | head -1)
+   fi
+
+   # Reconstruct minimal meta.json
+   cat > "$debate_dir/meta.json" << EOF
+   {
+     "id": "<id>",
+     "pair": "$pair_name",
+     "phase": "unknown",
+     "status": "$([ -n "$verdict" ] && echo 'consensus' || echo 'initiated')",
+     "rounds": $round_count,
+     "max_rounds": 3,
+     "started": "unknown",
+     "resolved": null,
+     "verdict": $([ -n "$verdict" ] && echo "\"$verdict\"" || echo 'null'),
+     "fast_path": false,
+     "recovered": true,
+     "recovery_note": "Regenerated from round files after corruption"
+   }
+   EOF
+   echo "meta.json regenerated from $round_count round files. Review and correct any 'unknown' fields." >&2
+   ```
+
+2. **If no round files exist** — the debate has no recoverable state:
+   ```bash
+   if [ "$round_count" -eq 0 ]; then
+     echo "Error: No round files found for debate '<id>'. Cannot recover. Delete the debate directory and re-run." >&2
+     # Suggest: rm -rf .ratchet/debates/<id> && /ratchet:run
+   fi
+   ```
+
+After recovery, inform the user via `AskUserQuestion`:
+- Question: "Debate '<id>' meta.json was corrupted and has been recovered from round files. Some fields may need manual correction. How would you like to proceed?"
+- Options: `"View recovered debate (Recommended)"`, `"Re-run debate from scratch"`, `"Delete and skip"`
+
 > **Verdict storage note**: Verdicts may exist in two locations depending on how the debate was resolved:
 > - `meta.json` → `verdict` field: populated by the debate-runner for consensus (ACCEPT, CONDITIONAL_ACCEPT) or tiebreaker verdicts. This is an embedded object.
 > - `verdict.json` (separate file in the debate directory): populated by `/ratchet:verdict` for human-cast verdicts. Read both; prefer `verdict.json` if it exists (human decision overrides).

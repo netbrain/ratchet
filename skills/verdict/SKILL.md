@@ -71,19 +71,82 @@ After recording the verdict, update `.ratchet/plan.yaml` to reflect the issue's 
    - If `decision: modify` → set status to `in_progress` with conditions logged
 4. **Handle partial completion**: If other debates for this issue are still running, do NOT advance the phase yet
 
-Example logic:
+Working commands:
 ```bash
-# Check if this is the last debate for the issue
+# 1. Get the issue ref from the debate's meta.json
 issue_ref=$(jq -r '.issue' .ratchet/debates/<id>/meta.json)
+
+# 2. Count remaining pending debates for this issue
 pending_debates=$(for f in .ratchet/debates/*/meta.json; do
+  [ -f "$f" ] || continue
   jq -e --arg ref "$issue_ref" \
     '.issue == $ref and (.status == "initiated" or .status == "in_progress")' \
     "$f" 2>/dev/null
 done | grep -c "^true$")
 
-if [ "$pending_debates" -eq 0 ]; then
-  # This was the last debate - safe to advance phase
-  # Update plan.yaml with phase advancement logic
+# 3. Locate which milestone contains this issue (returns 0-based index)
+milestone_idx=$(yq eval '
+  .epic.milestones | to_entries | .[] |
+  select(.value.issues[] | .ref == "'"$issue_ref"'") | .key
+' .ratchet/plan.yaml)
+
+# 4. Locate the issue index within that milestone
+issue_idx=$(yq eval '
+  .epic.milestones['"$milestone_idx"'].issues | to_entries | .[] |
+  select(.value.ref == "'"$issue_ref"'") | .key
+' .ratchet/plan.yaml)
+
+# 5. Determine current phase
+current_phase=$(yq eval '
+  .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status |
+  to_entries | .[] | select(.value == "in_progress") | .key
+' .ratchet/plan.yaml)
+
+# 6. Update based on verdict
+decision="<accept|reject|modify>"  # from verdict.json
+
+if [ "$decision" = "accept" ] && [ "$pending_debates" -eq 0 ]; then
+  # Mark current phase done
+  yq eval -i '
+    .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status.'"$current_phase"' = "done"
+  ' .ratchet/plan.yaml
+
+  # Advance to next phase (phase order: plan, test, build, review, harden)
+  phases=(plan test build review harden)
+  for i in "${!phases[@]}"; do
+    if [ "${phases[$i]}" = "$current_phase" ] && [ $((i + 1)) -lt ${#phases[@]} ]; then
+      next_phase="${phases[$((i + 1))]}"
+      yq eval -i '
+        .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status.'"$next_phase"' = "in_progress"
+      ' .ratchet/plan.yaml
+      break
+    fi
+  done
+
+elif [ "$decision" = "reject" ]; then
+  # Keep current phase as in_progress — generative needs to address issues
+  yq eval -i '
+    .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status.'"$current_phase"' = "in_progress"
+  ' .ratchet/plan.yaml
+
+elif [ "$decision" = "modify" ]; then
+  # Keep current phase as in_progress with conditions logged
+  yq eval -i '
+    .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status.'"$current_phase"' = "in_progress"
+  ' .ratchet/plan.yaml
+fi
+
+# 7. If accept and all phases done, mark issue as done
+if [ "$decision" = "accept" ] && [ "$pending_debates" -eq 0 ]; then
+  all_done=$(yq eval '
+    .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].phase_status |
+    to_entries | .[] | select(.value != "done") | .key
+  ' .ratchet/plan.yaml)
+  if [ -z "$all_done" ]; then
+    yq eval -i '
+      .epic.milestones['"$milestone_idx"'].issues['"$issue_idx"'].status = "done"
+    ' .ratchet/plan.yaml
+  fi
 fi
 ```
 

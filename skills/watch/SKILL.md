@@ -19,7 +19,7 @@ Uses Claude Code's `/loop` feature to poll every 10 minutes.
 
 ## Prerequisites
 - `.ratchet/plan.yaml` must exist with issues that have `pr` fields populated
-- `gh` CLI must be authenticated
+- `gh` CLI must be installed and authenticated
 
 If no PRs exist in plan.yaml, inform the user:
 > "No PRs found in plan.yaml. PRs are created by /ratchet:run when issues complete."
@@ -28,13 +28,22 @@ If no PRs exist in plan.yaml, inform the user:
 
 ### Starting
 
-1. **Resolve workspace** (same logic as `/ratchet:run` Step 1a)
-2. **Verify PRs exist** — scan plan.yaml for issues with non-null `pr` fields
-3. **Start loop**:
+1. **Verify `gh` authentication** before any GitHub API calls:
+   ```bash
+   gh auth status >/dev/null 2>&1
+   ```
+   If the check fails (`exit code != 0`), inform the user via `AskUserQuestion`:
+   - Question: "GitHub CLI is not authenticated. /ratchet:watch requires 'gh' to check PR status. Please run 'gh auth login' in your terminal first."
+   - Options: `"I've authenticated — retry"`, `"Cancel"`
+   If "retry", re-run the `gh auth status` check. If "Cancel", exit the skill.
+
+2. **Resolve workspace** (same logic as `/ratchet:run` Step 1a)
+3. **Verify PRs exist** — scan plan.yaml for issues with non-null `pr` fields
+4. **Start loop**:
    ```
    /loop 10m check Ratchet PRs for conflicts and CI failures
    ```
-4. **Confirm**: "Watching [N] PRs. Checking every 10 minutes. Use /ratchet:watch --stop to end."
+5. **Confirm**: "Watching [N] PRs. Checking every 10 minutes. Use /ratchet:watch --stop to end."
 
 ### Each Poll Cycle
 

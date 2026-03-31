@@ -485,13 +485,23 @@ After generation, verify:
 
 After verifying output, check whether the repository has recommended settings for a Ratchet workflow. Only run this step if: (1) the project is a git repo, (2) `gh` CLI is available, and (3) the repo has a GitHub remote.
 
+**Authentication check**: Before any `gh` commands, verify authentication:
+```bash
+if ! gh auth status >/dev/null 2>&1; then
+  echo "Warning: GitHub CLI is not authenticated. Skipping repository settings check." >&2
+  echo "Run 'gh auth login' to enable GitHub integration features." >&2
+  # Skip this entire step — do not proceed to Detection
+fi
+```
+If the auth check fails, skip Step 9b entirely and proceed to Step 10. Do not prompt the user to authenticate here — init can complete without GitHub settings. The warning is informational.
+
 **Detection**: Query current settings:
 ```bash
 gh repo view --json deleteBranchOnMerge,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed \
   2>/dev/null || echo "SKIP"
 ```
 
-If the query fails (no `gh`, no remote, auth issues), skip this step silently.
+If the query fails (no remote, permission issues), skip this step silently.
 
 **Issues enabled check**: If the user selected the `github-issues` progress adapter in Step 6e, also query `hasIssuesEnabled` and warn if issues are disabled on the repo — the adapter requires GitHub Issues to be enabled. Add `hasIssuesEnabled` to the `--json` fields list in that case only.
 
