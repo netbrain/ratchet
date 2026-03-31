@@ -159,6 +159,19 @@ For agents that produce structured output (analyst, tiebreaker):
 3. Verify case sensitivity, field names, and structure match
 4. Flag any mismatches as they cause runtime failures
 
+## Enum / Status Value Safety (when introducing or referencing status-like fields)
+
+Before introducing, referencing, or using any status value, enum, or keyword:
+1. **Find the canonical definition** — grep schemas, workflow.yaml, and plan.yaml for all locations where valid values are defined
+2. **Cross-reference** — verify the value you're using appears in EVERY definition site
+3. **If it doesn't exist** — do NOT use it; either add it to all canonical sites first or pick an existing value
+
+```bash
+# Find all enum definitions for a field
+jq '.. | .enum? // empty' schemas/plan.schema.json schemas/workflow.schema.json
+grep -rn 'status.*enum\|valid.*status' schemas/ skills/ agents/
+```
+
 ## Tools Available
 
 - Read, Grep, Glob — review agents and skills
