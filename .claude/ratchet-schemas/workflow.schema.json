@@ -30,9 +30,9 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["human", "tiebreaker", "both", "none"],
+      "enum": ["human", "tiebreaker", "both", "none", "promote"],
       "default": "human",
-      "description": "Escalation policy when max_rounds reached without consensus"
+      "description": "Escalation policy when max_rounds reached without consensus. human: escalate to human via /ratchet:verdict. tiebreaker: auto-escalate to tiebreaker agent. both: tiebreaker first, then human review. none: no escalation — debate ends as unresolved REJECT after max_rounds (useful for CI/automated pipelines where human intervention is unavailable). promote: auto-promote to next phase despite unresolved debate."
     },
     "progress": {
       "type": "object",
@@ -186,14 +186,13 @@
       "enum": ["plan", "test", "build", "review", "harden"],
       "description": "Ordered development phase — plan → test → build → review → harden"
     },
-    "workflow_preset": {
+    "pipeline_preset": {
       "type": "string",
-      "enum": ["tdd", "traditional", "review-only", "custom"],
-      "description": "Workflow preset selecting phase subsets. tdd: plan→test→build→review→harden. traditional: plan→build→review→harden. review-only: review only."
+      "enum": ["full", "standard", "review", "hotfix", "secure"],
+      "description": "Pipeline preset selecting phase subsets. full: plan→test→build→review→harden (all phases). standard: plan→build→review→harden (skip test). review: review only. hotfix: build→review (minimal path for urgent fixes). secure: review→harden (audit and hardening only)."
     },
     "component": {
       "type": "object",
-      "required": ["name", "scope", "workflow"],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -205,11 +204,40 @@
           "type": "string",
           "description": "Comma-separated file glob patterns for this component"
         },
-        "workflow": {
-          "$ref": "#/$defs/workflow_preset",
+        "pipeline": {
+          "$ref": "#/$defs/pipeline_preset",
           "description": "Which phases apply to this component"
+        },
+        "workflow": {
+          "$ref": "#/$defs/pipeline_preset",
+          "description": "Deprecated alias for 'pipeline' — accepted for backward compatibility. Use 'pipeline' in new configs."
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/phase"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Explicit phase array — when present, overrides pipeline/workflow preset. Allows arbitrary phase combinations (e.g., [\"build\", \"review\"])."
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["debate", "solo"],
+          "default": "debate",
+          "description": "Execution strategy for this component. debate (default): generative + adversarial debate. solo: single agent, no adversarial review."
+        },
+        "promote_on_guard_failure": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, promote to next phase even when a blocking guard fails. Use with caution — bypasses safety checks."
         }
-      }
+      },
+      "anyOf": [
+        { "required": ["name", "scope", "pipeline"] },
+        { "required": ["name", "scope", "workflow"] },
+        { "required": ["name", "scope", "phases"] }
+      ]
     },
     "pair": {
       "type": "object",
@@ -280,9 +308,9 @@
         },
         "timing": {
           "type": "string",
-          "enum": ["pre-debate", "post-debate"],
-          "default": "post-debate",
-          "description": "When this guard runs — pre-debate (before debates start) or post-debate (after debates complete, default)"
+          "enum": ["pre-execution", "post-execution", "pre-debate", "post-debate"],
+          "default": "post-execution",
+          "description": "When this guard runs relative to phase execution. Canonical values: pre-execution (before phase starts) or post-execution (after phase completes, default). Legacy values pre-debate and post-debate are accepted for backward compatibility."
         },
         "components": {
           "type": "array",
