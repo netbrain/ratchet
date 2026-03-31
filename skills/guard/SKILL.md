@@ -136,30 +136,35 @@ If any blocking guards failed, use `AskUserQuestion`:
 
 #### Guard Results
 
-Guard results are stored as JSON in `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard-name>.json` with this structure:
+Guard results are stored as JSON in `.ratchet/guards/<milestone-id>/<phase>/<guard-name>.json` with this structure:
 
 ```json
 {
   "guard": "<guard-name>",
+  "phase": "<phase>",
   "command": "<command that was executed>",
   "exit_code": 0,
-  "stdout": "<command output>",
-  "stderr": "<error output if any>",
-  "passed": true,
+  "output": "<combined stdout+stderr>",
   "blocking": true,
-  "timestamp": "<ISO timestamp>",
-  "overridden": false,
-  "override_reason": null
+  "timestamp": "<ISO timestamp>"
 }
 ```
 
-When a guard is overridden, `overridden` becomes `true` and `override_reason` contains the human's justification.
+These fields are produced by `scripts/run-guards.sh`. When a guard is overridden (via the `override` subcommand), the following fields are patched onto the existing JSON — the original fields are preserved:
+
+```json
+{
+  "overridden": true,
+  "override_reason": "<human justification>",
+  "override_timestamp": "<ISO timestamp>"
+}
+```
 
 ### override — Override a Failed Guard
 
-Read the guard result from `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json`.
+Read the guard result from `.ratchet/guards/<milestone-id>/<phase>/<name>.json`.
 
-Determine `<issue-ref>` from the current active issue in `.ratchet/plan.yaml` (`current_focus`), or require it as an argument: `guard override <name> --issue <ref>`.
+Determine `<milestone-id>` from the current active milestone in `.ratchet/plan.yaml`, or require it as an argument: `guard override <name> --milestone <id>`.
 
 If no failure exists for this guard:
 > "Guard '[name]' has no recent failure to override."
@@ -173,11 +178,11 @@ If "Override with reason": use follow-up `AskUserQuestion` (freeform) to capture
 Update the existing guard result JSON (do NOT overwrite — patch only the override fields):
 ```bash
 jq '.overridden = true | .override_reason = "<user reason>" | .override_timestamp = "<ISO timestamp>"' \
-  .ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json > /tmp/guard-override-tmp.json \
-  && mv /tmp/guard-override-tmp.json .ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<name>.json
+  .ratchet/guards/<milestone-id>/<phase>/<name>.json > /tmp/guard-override-tmp.json \
+  && mv /tmp/guard-override-tmp.json .ratchet/guards/<milestone-id>/<phase>/<name>.json
 ```
 
-This preserves the original `exit_code`, `stdout`, `stderr`, and `command` fields.
+This preserves the original `exit_code`, `output`, `command`, and `phase` fields.
 
 ### remove — Remove a Guard
 
