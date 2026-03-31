@@ -252,7 +252,7 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
   - `"Yes — post each round as a comment (per-round)"` — sets `publish_debates: per-round`
   - `"No — debates stay local only"` — sets `publish_debates: false`
 
-Skip this step entirely if the adapter selected in Step 6e is anything other than `github-issues` (i.e., `none`, `markdown`, `linear`, or `jira`).
+Skip this step entirely if the adapter selected in Step 6e is anything other than `github-issues` (i.e., `none` or `markdown`).
 
 **6g. Final review** — only after walking through each area, present the complete config for approval:
 - Question: "[full formatted config]. Everything look right?"
@@ -353,7 +353,7 @@ max_rounds: 3
 escalation: human  # human | tiebreaker | both | none
 
 progress:
-  adapter: none  # none | markdown | github-issues | linear | jira
+  adapter: none  # none | markdown | github-issues
   # publish_debates: false  # Only valid when adapter is github-issues.
   #   false (default) — debates stay local
   #   per-round       — post each debate round as a GitHub issue comment
