@@ -15,7 +15,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
 - **Step 2 (focus)**: Auto-select "Run all ready issues sequentially" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
 - **Step 4 (issue pipelines)**: Execute all ready issues sequentially inline. Each issue pipeline runs in an isolated worktree, spawning only debate-runner agents.
-- **Step 5-dry (dry-run)**: Incompatible with `--unsupervised` — if both are set, ignore `--dry-run`.
+- **Step 5-dry (dry-run)**: Dry-run takes precedence — produce the preview (including token and cost estimates), log the estimates to stdout, and stop. No agents are spawned. The `AskUserQuestion` confirmation is skipped (estimates are informational only).
 - **Step 5c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, that issue **halts** (other issues continue).
 - **Step 6 (static analysis)**: Auto-select "Fix these before running". Same 2-attempt retry, then halt.
 - **Step 5e (debates)**: Run normally. Debates are autonomous by nature. If debate-runner cannot be spawned (tool unavailable), the issue **halts** with status `blocked` — quality gates cannot be compromised.
