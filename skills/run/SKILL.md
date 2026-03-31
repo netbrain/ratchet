@@ -440,6 +440,7 @@ Options:
    yq eval -i "(.epic.milestones[] | select(.id == \"$milestone_id\")).issues += [{
      \"ref\": \"$new_ref\",
      \"title\": \"$discovery_title\",
+     \"description\": \"$discovery_description\",
      \"pairs\": [\"$pair_name\"],
      \"depends_on\": [],
      \"phase_status\": {\"plan\": \"pending\", \"test\": \"pending\", \"build\": \"pending\", \"review\": \"pending\", \"harden\": \"pending\"},
@@ -626,10 +627,32 @@ For each issue in the current ready layer whose `ref` is NOT already a number:
 1. If the `github-issues` adapter is configured and `gh` is available:
    ```bash
    PARENT_ISSUE=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .github_issue // null" .ratchet/plan.yaml)
+   MS_NAME=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .name" .ratchet/plan.yaml)
+   MS_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .description" .ratchet/plan.yaml)
+   ISSUE_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .description // \"\"" .ratchet/plan.yaml)
+   ISSUE_PAIRS=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .pairs | join(\", \")" .ratchet/plan.yaml)
+   ISSUE_FILES=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .files | join(\", \")" .ratchet/plan.yaml)
+
+   # Build a rich issue body with context
+   ISSUE_BODY="## Context
+
+   Milestone: **${MS_NAME}** — ${MS_DESC}
+
+   ## Description
+
+   ${ISSUE_DESC:-$ISSUE_TITLE}
+
+   ## Scope
+
+   **Pairs:** ${ISSUE_PAIRS:-none assigned}
+   **Files:** ${ISSUE_FILES:-to be determined during plan phase}"
+
    ISSUE_NUM=$(bash .claude/ratchet-scripts/progress/github-issues/create-issue.sh \
-     "$ISSUE_TITLE" "$ISSUE_DESCRIPTION" \
+     "$ISSUE_TITLE" "$ISSUE_BODY" \
      ${PARENT_ISSUE:+--parent "$PARENT_ISSUE"} 2>/dev/null) || true
    ```
+
+   **Issue descriptions in plan.yaml**: When creating epics and milestones, always include a `description` field on each issue (not just `title`). The description should explain *what* and *why* — enough context for someone reading the GitHub issue to understand the problem and approach without needing plan.yaml.
 2. If creation succeeds: rewrite `ref` to the returned number, update any `depends_on` arrays in the same milestone that referenced the old ref, write plan.yaml
    ```bash
    OLD_REF="$ISSUE_REF"
