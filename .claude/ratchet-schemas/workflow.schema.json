@@ -30,9 +30,9 @@
     },
     "escalation": {
       "type": "string",
-      "enum": ["human", "tiebreaker", "both", "none"],
+      "enum": ["human", "tiebreaker", "both", "none", "promote"],
       "default": "human",
-      "description": "Escalation policy when max_rounds reached without consensus. human: escalate to human via /ratchet:verdict. tiebreaker: auto-escalate to tiebreaker agent. both: tiebreaker first, then human review. none: no escalation — debate ends as unresolved REJECT after max_rounds (useful for CI/automated pipelines where human intervention is unavailable)."
+      "description": "Escalation policy when max_rounds reached without consensus. human: escalate to human via /ratchet:verdict. tiebreaker: auto-escalate to tiebreaker agent. both: tiebreaker first, then human review. none: no escalation — debate ends as unresolved REJECT after max_rounds. promote: auto-promote the issue despite lack of consensus (useful for low-risk changes where progress is preferred over perfection)."
     },
     "progress": {
       "type": "object",
@@ -186,14 +186,14 @@
       "enum": ["plan", "test", "build", "review", "harden"],
       "description": "Ordered development phase — plan → test → build → review → harden"
     },
-    "workflow_preset": {
+    "pipeline_preset": {
       "type": "string",
-      "enum": ["tdd", "traditional", "review-only"],
-      "description": "Workflow preset selecting phase subsets. tdd: plan→test→build→review→harden. traditional: plan→build→review→harden. review-only: review only."
+      "enum": ["full", "standard", "review", "hotfix", "secure"],
+      "description": "Pipeline preset selecting phase subsets. full (was tdd): plan→test→build→review→harden. standard (was traditional): plan→build→review→harden. review: review only. hotfix: build→review. secure: review→harden."
     },
     "component": {
       "type": "object",
-      "required": ["name", "scope", "workflow"],
+      "required": ["name", "scope", "pipeline"],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -205,9 +205,29 @@
           "type": "string",
           "description": "Comma-separated file glob patterns for this component"
         },
-        "workflow": {
-          "$ref": "#/$defs/workflow_preset",
+        "pipeline": {
+          "$ref": "#/$defs/pipeline_preset",
           "description": "Which phases apply to this component"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/phase"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Explicit phase array — overrides pipeline preset when present. Example: [plan, test, build, review, harden]"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["debate", "solo"],
+          "default": "debate",
+          "description": "Execution strategy — debate (default): generative + adversarial pair. solo: single agent, no adversarial review."
+        },
+        "promote_on_guard_failure": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, promote the issue even when a guard fails (overrides blocking guards for this component)"
         }
       }
     },
@@ -280,9 +300,12 @@
         },
         "timing": {
           "type": "string",
-          "enum": ["pre-debate", "post-debate"],
-          "default": "post-debate",
-          "description": "When this guard runs — pre-debate (before debates start) or post-debate (after debates complete, default)"
+          "oneOf": [
+            { "enum": ["pre-execution", "post-execution"] },
+            { "enum": ["pre-debate", "post-debate"], "description": "Deprecated — use pre-execution/post-execution instead" }
+          ],
+          "default": "post-execution",
+          "description": "When this guard runs — pre-execution (before debates start) or post-execution (after debates complete, default). Legacy values pre-debate/post-debate are accepted for backward compatibility."
         },
         "components": {
           "type": "array",

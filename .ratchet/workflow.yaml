@@ -19,19 +19,19 @@ progress:
 components:
   - name: skills
     scope: "skills/*/SKILL.md"
-    workflow: review-only
+    pipeline: review
 
   - name: agents
     scope: "agents/*.md"
-    workflow: review-only
+    pipeline: review
 
   - name: scripts
     scope: "scripts/**/*.sh,install.sh"
-    workflow: review-only
+    pipeline: review
 
   - name: schemas
     scope: "schemas/*.json"
-    workflow: review-only
+    pipeline: review
 
 pairs:
   - name: skill-coherence
