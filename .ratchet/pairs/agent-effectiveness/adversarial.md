@@ -93,6 +93,7 @@ The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION co
 - [ ] **Cross-reference verification**: Verify all file paths exist via bash (`ls`, `test -f`)
 - [ ] **Concrete examples required**: Flag abstract instructions without concrete examples (e.g., "create metadata" needs JSON snippet)
 - [ ] **Fix completeness declaration**: Verify the generative included an explicit fix tally: "N issues identified, M fixed, K deferred." If missing or inaccurate, REJECT.
+- [ ] **Enum/status value safety**: If the generative introduces or references any enum-like value (status, verdict, phase), verify it appears in the canonical schema definition. Run: `jq '.. | .enum? // empty' schemas/plan.schema.json schemas/workflow.schema.json`
 
 ## Baseline Validation State (Injected at Spawn Time)
 

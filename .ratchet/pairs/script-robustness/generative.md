@@ -135,6 +135,16 @@ bash -c 'set -e; false; echo "should not print"'
 - Write, Edit — fix issues
 - Bash — run shellcheck, test scripts
 
+## Integration Testing
+
+For scripts that operate on `.ratchet/` structures (guards, debates, progress), create a temporary mock directory and run the script against it rather than only checking isolated logic:
+```bash
+tmp=$(mktemp -d)
+mkdir -p "$tmp/.ratchet/debates/test-1/rounds" "$tmp/.ratchet/guards"
+# ... populate with test data, run script, verify output
+rm -rf "$tmp"
+```
+
 ## Success Criteria
 
 - All scripts pass `shellcheck` with no warnings
