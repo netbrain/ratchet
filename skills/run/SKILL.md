@@ -194,13 +194,14 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run --dry-run          # Preview what would run without executing anything
 /ratchet:run --unsupervised              # Run the full plan end-to-end without human intervention
 /ratchet:run --unsupervised --auto-pr    # Same, but auto-create PRs per issue
+/ratchet:run --go                        # Shorthand for --unsupervised --auto-pr
 ```
 
 ## Unsupervised Mode
 
 For unsupervised mode behavior, read `skills/run/unsupervised.md`.
 
-Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, and `--dry-run`.
+Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, and `--dry-run`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
 
 ## Prerequisites
 - `.ratchet/` must exist with valid config
