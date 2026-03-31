@@ -289,6 +289,30 @@ do_install() {
     done
     echo "  Installed commands to $commands_dir/"
 
+    # Install top-level command aliases (shortcuts outside the ratchet/ subdirectory)
+    # These create e.g. .claude/commands/rr.md -> ratchet/run.md
+    local aliases_dir="$target/commands"
+    local -a alias_pairs=(
+        "rr:run"
+        "rrs:status"
+        "rrt:tighten"
+    )
+    for alias_entry in "${alias_pairs[@]}"; do
+        local alias_name="${alias_entry%%:*}"
+        local skill_target="${alias_entry#*:}"
+        local alias_file="$aliases_dir/$alias_name.md"
+        local target_file="$commands_dir/$skill_target.md"
+        # Only create alias if the target skill was installed
+        if [ -f "$target_file" ] || [ -L "$target_file" ]; then
+            if [ "$use_symlinks" = true ]; then
+                ln -sf "ratchet/$skill_target.md" "$alias_file" || die "Failed to link alias: $alias_name"
+            else
+                cp "$target_file" "$alias_file" || die "Failed to copy alias: $alias_name"
+            fi
+        fi
+    done
+    echo "  Installed command aliases (rr, rrs, rrt)"
+
     # Install agents alongside commands
     if [ -d "$SCRIPT_DIR/agents" ] && ls "$SCRIPT_DIR"/agents/*.md >/dev/null 2>&1; then
         mkdir -p "$commands_dir/agents" || die "Failed to create agents directory: $commands_dir/agents"
@@ -375,6 +399,16 @@ do_uninstall() {
     local scripts_dir="$target/ratchet-scripts"
 
     echo "Uninstalling ratchet from $target ..."
+
+    # Remove command aliases (must happen before rmdir on commands/)
+    local -a alias_names=("rr" "rrs" "rrt")
+    for alias_name in "${alias_names[@]}"; do
+        local alias_file="$target/commands/$alias_name.md"
+        if [ -f "$alias_file" ] || [ -L "$alias_file" ]; then
+            rm -f "$alias_file"
+        fi
+    done
+    echo "  Removed command aliases"
 
     # Remove commands
     if [ -d "$commands_dir" ]; then
