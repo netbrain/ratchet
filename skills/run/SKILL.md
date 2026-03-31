@@ -838,15 +838,17 @@ debate-runner agents and returns a structured completion summary that the
 orchestrator parses in Step 4c.
 
 **Pipeline stages** (detailed in `skills/run/issue-pipeline.md`):
-- **5a.** Determine current phase and match pairs
+- **5a.** Determine current phase, match pairs, resolve component strategy (`debate` or `solo`)
 - **5b.** File-hash cache check (skip unchanged pairs)
 - **Shared Resources** — provisioning, singleton locking via flock
-- **5c.** Pre-debate guards (blocking/advisory)
-- **5d.** Prepare debate context (models, publish config, escalation precedents)
-- **5e.** Run debates — spawn debate-runners, handle results (ACCEPT, CONDITIONAL_ACCEPT, ESCALATED, REGRESS)
-- **5f.** Phase gate — post-debate guards, advance phase, commit/PR at configured boundaries
-- **5g.** Phase regression (REGRESS handling, budget tracking)
-- **5h.** Issue complete — structured completion summary output
+- **5c.** Pre-execution guards (blocking/advisory)
+- **5d.** Prepare execution context (models, publish config, escalation precedents)
+- **5e.** Execute phase (strategy branch):
+  - **5e-debate** — spawn debate-runners, handle results (ACCEPT, CONDITIONAL_ACCEPT, ESCALATED, REGRESS)
+  - **5e-solo** — spawn generative agent directly, run post-execution guards, handle promotion on guard failure
+- **5f.** Phase gate — post-execution guards (debate mode), advance phase
+- **5g.** Phase regression (REGRESS handling, budget tracking — debate mode only)
+- **5h.** Issue complete — structured completion summary output (includes `execution_mode`)
 
 ---
 
