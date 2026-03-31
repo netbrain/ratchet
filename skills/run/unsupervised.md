@@ -8,6 +8,8 @@
 
 When `--unsupervised` is set, the run loop executes the entire plan (all milestones, all phases) without human interaction. The principle is simple: **wherever an `AskUserQuestion` has a "(Recommended)" option, auto-select it.**
 
+> **`--go` flag**: `--go` is shorthand for `--unsupervised --auto-pr`. It is equivalent in every way — the same behavior, halt conditions, and self-continuation rules apply.
+
 ## Behavior
 
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
@@ -72,7 +74,10 @@ Unsupervised run [completed|paused]:
 
 ## Combining with Other Flags
 
+- `--go`: Shorthand for `--unsupervised --auto-pr` (identical behavior)
 - `--unsupervised --auto-pr`: Auto-create PRs at milestone boundaries (human pre-approves by passing this flag)
 - `--unsupervised --no-cache`: Force re-debate all files, unsupervised
 - `--unsupervised --all-files`: Run all pairs against all files, unsupervised
 - `--unsupervised --dry-run`: Dry-run takes precedence (preview only, no execution)
+- `--go --no-cache`: Combines `--go` with `--no-cache` (force re-debate, unsupervised, auto-PR)
+- `--go --all-files`: Combines `--go` with `--all-files` (all pairs, unsupervised, auto-PR)
