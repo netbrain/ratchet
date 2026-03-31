@@ -79,6 +79,15 @@ guards:
         [ -f "$schema" ] || continue
         nix develop --command jq empty "$schema" || exit 1
       done
+      if [ -f ".ratchet/workflow.yaml" ] && [ -f "schemas/workflow.schema.json" ]; then
+        nix develop --command bash -c '
+          if command -v check-jsonschema >/dev/null 2>&1; then
+            yq -o json ".ratchet/workflow.yaml" | check-jsonschema --schemafile "schemas/workflow.schema.json" -
+          else
+            echo "Warning: check-jsonschema not available, skipping conformance validation" >&2
+          fi
+        ' || exit 1
+      fi
     phase: review
     blocking: true
     timing: post-debate
