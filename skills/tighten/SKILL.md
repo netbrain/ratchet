@@ -155,6 +155,30 @@ Analyze these dimensions:
 4. **Escalation patterns** — settled law injection:
    - If a dispute type has 3+ rulings in the same direction, inject as "settled law"
      in the adversarial prompt to stop re-litigating settled disputes
+   - **Injection procedure**: When settled law is detected, edit the adversarial
+     prompt file (`.ratchet/pairs/<pair-name>/adversarial.md`) as follows:
+     1. Locate the `### Settled Law (Patterns from Prior Debates)` section. If it does not exist, create it
+        immediately before the last `## ` heading in the file (typically
+        `## Validation Method` or `## Success Criteria`).
+     2. Append a new entry in this format:
+        ```markdown
+        ### Settled Law (Patterns from Prior Debates)
+
+        - [ ] **<dispute type>**: <N> prior rulings consistently found <direction>.
+              Treat as settled — do not re-litigate. Escalations matching this
+              pattern should follow the established precedent unless new evidence
+              contradicts it.
+              Source: escalations/<debate-id-1>.json, <debate-id-2>.json, ...
+        ```
+     3. Each entry becomes a checklist item in the adversarial's review so the
+        adversarial agent checks for the pattern without debating it again.
+     4. If the section already exists, append the new entry to the existing list.
+     5. **Verification**: After editing, confirm the adversarial file still parses
+        as valid markdown and the settled law section appears in the expected location:
+        ```bash
+        grep -c "Settled Law" .ratchet/pairs/<pair-name>/adversarial.md
+        # Expected: 1 (the section heading)
+        ```
 
 5. **Scope coverage gaps** — files modified that fall outside all pair scopes
 

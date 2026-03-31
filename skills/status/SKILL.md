@@ -5,17 +5,35 @@ description: Show milestone and phase progress at a glance
 
 ## Boot Context (pre-loaded at skill invocation)
 
-The following state is injected at startup so the status skill renders immediately without requiring file reads at runtime. All blocks fail gracefully.
+The following state is injected at startup so the status skill renders immediately without requiring file reads at runtime. All blocks fail gracefully with explicit fallback messages.
 
 **Plan:**
 ```
-$(cat .ratchet/plan.yaml 2>/dev/null || echo "No plan found")
+$(cat .ratchet/plan.yaml 2>/dev/null || echo "No plan.yaml found — run /ratchet:init to create a project plan.")
 ```
 
 **Debate count:**
 ```
-Total debates: $(for f in .ratchet/debates/*/meta.json; do [ -f "$f" ] && echo "$f"; done 2>/dev/null | wc -l)
+$(if [ -d .ratchet/debates ] && ls .ratchet/debates/*/meta.json >/dev/null 2>&1; then
+  echo "Total debates: $(ls .ratchet/debates/*/meta.json 2>/dev/null | wc -l)"
+else
+  echo "No debates found — run /ratchet:run to start your first debate."
+fi)
 ```
+
+**Ratchet directory check:**
+```
+$(if [ ! -d .ratchet ]; then
+  echo "Ratchet not initialized — run /ratchet:init to set up."
+fi)
+```
+
+**Fallback behavior summary:**
+| Condition | Fallback message |
+|---|---|
+| `.ratchet/` directory missing | `"Ratchet not initialized — run /ratchet:init to set up."` |
+| `.ratchet/plan.yaml` missing | `"No plan.yaml found — run /ratchet:init to create a project plan."` |
+| `.ratchet/debates/` empty or missing | `"No debates found — run /ratchet:run to start your first debate."` |
 
 ---
 
