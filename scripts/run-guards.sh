@@ -35,7 +35,7 @@ trap 'rm -f "$stderr_tmp"' EXIT
 # Temporarily disable set -e to capture exit code correctly
 # Without this, command substitution failure causes immediate exit
 set +e
-stdout_output=$(eval "$GUARD_COMMAND" 2>"$stderr_tmp")
+stdout_output=$(bash -c "$GUARD_COMMAND" 2>"$stderr_tmp")
 exit_code=$?
 stderr_output=$(cat "$stderr_tmp")
 rm -f "$stderr_tmp"
@@ -54,10 +54,15 @@ timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 if [ "$BLOCKING" = "true" ]; then blocking_json="true"; else blocking_json="false"; fi
 if [ "$exit_code" -eq 0 ]; then passed_json="true"; else passed_json="false"; fi
 
-# Atomic write: temp file + mv to prevent corrupt JSON on crash
+# Atomic write with advisory locking: flock + temp file + mv
+# flock prevents concurrent guards from conflicting on the same directory.
+# Falls back to unlocked write if flock is unavailable (e.g., macOS without flock).
+LOCK_FILE="$GUARDS_DIR/.guard-write.lock"
 tmp_guard=$(mktemp "${GUARDS_DIR}/${GUARD_NAME}.XXXXXX")
 trap 'rm -f "$tmp_guard"' EXIT
-cat > "$tmp_guard" <<JSON_EOF
+
+write_guard_json() {
+    cat > "$tmp_guard" <<JSON_EOF
 {
   "guard": "$escaped_guard_name",
   "command": "$escaped_command",
@@ -71,7 +76,19 @@ cat > "$tmp_guard" <<JSON_EOF
   "override_reason": null
 }
 JSON_EOF
-mv "$tmp_guard" "$GUARDS_DIR/$GUARD_NAME.json"
+    mv "$tmp_guard" "$GUARDS_DIR/$GUARD_NAME.json"
+}
+
+if command -v flock >/dev/null 2>&1; then
+    # Use fd 9 for flock to avoid interfering with stdin/stdout/stderr
+    exec 9>"$LOCK_FILE"
+    flock -w 30 9 || { echo "Error: Failed to acquire lock on $LOCK_FILE" >&2; exit 1; }
+    write_guard_json
+    exec 9>&-
+else
+    # Fallback: no flock available (macOS without homebrew coreutils)
+    write_guard_json
+fi
 
 if [ "$exit_code" -ne 0 ]; then
     if [ "$BLOCKING" = "true" ]; then
