@@ -68,8 +68,8 @@ detect_stack_patterns() {
     local content
     content=$(cat "$project_file")
 
-    # Go ecosystem
-    if printf '%s' "$content" | grep -qi '\bgo\b'; then
+    # Go ecosystem (matches: go, golang, Go, Golang)
+    if printf '%s' "$content" | grep -qiE '\b(go|golang)\b'; then
         STACK_PATH_PATTERNS+=(
             '_templ.go'           # templ generated components
             '.pb.go'              # protobuf generated code
