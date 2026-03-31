@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratchet.dev/schemas/execution.schema.json",
+  "title": "Ratchet Execution Log",
+  "description": "Ratchet execution log — the unified activity ledger for .ratchet/executions/<id>.yaml. Every code change gets logged here, regardless of execution mode.",
+  "type": "object",
+  "required": ["id", "mode", "started"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique execution identifier (e.g., 'schema-correctness-20260331T211404')"
+    },
+    "mode": {
+      "$ref": "#/$defs/execution_mode",
+      "description": "Execution mode — how this code change was produced"
+    },
+    "component": {
+      "type": "string",
+      "description": "Component name this execution targets (must match a component name in workflow.yaml)"
+    },
+    "issue": {
+      "type": ["string", "null"],
+      "description": "Issue reference (e.g., '98' or 'issue-2-1'), or null if not tied to an issue"
+    },
+    "started": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when execution began"
+    },
+    "resolved": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when execution completed, or null if still in progress"
+    },
+    "guard_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/guard_result"
+      },
+      "description": "Results from deterministic guard checks run during this execution"
+    },
+    "promoted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this execution was promoted from solo to debate after a guard failure"
+    },
+    "promotion_reason": {
+      "type": ["string", "null"],
+      "description": "Reason for promotion from solo to debate (e.g., 'guard schema-valid failed'), or null if not promoted"
+    },
+    "debate_id": {
+      "type": ["string", "null"],
+      "description": "Debate ID if this execution used or was promoted to debate mode (references .ratchet/debates/<id>/), or null"
+    },
+    "files_modified": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of file paths created or modified during this execution"
+    },
+    "token_estimate": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Estimated total tokens consumed by this execution, or null if not tracked"
+    }
+  },
+  "$defs": {
+    "execution_mode": {
+      "type": "string",
+      "enum": ["debate", "solo", "quick-fix", "in-session", "promoted"],
+      "description": "Execution mode. debate: full adversarial debate (transcript in .ratchet/debates/). solo: generative + guards, no adversarial. quick-fix: no plan.yaml, single agent + guards (from --quick flag). in-session: inline execution, no subagent (from --here flag). promoted: started as solo, escalated to debate after guard failure."
+    },
+    "guard_result": {
+      "type": "object",
+      "required": ["name", "passed"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Guard name (must match a guard name in workflow.yaml)"
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether the guard check passed (true) or failed (false)"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable explanation of the guard result, especially useful on failure"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time taken to run the guard check in milliseconds"
+        }
+      }
+    }
+  }
+}
