@@ -9,6 +9,15 @@
             "command": "bash /workspace/main/.claude/ratchet-scripts/publish-debate-hook.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /workspace/main/.claude/ratchet-scripts/auto-watch-hook.sh"
+          }
+        ]
       }
     ]
   }

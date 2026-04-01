@@ -75,11 +75,25 @@ Preview what would run without executing anything:
 /ratchet:run --dry-run
 ```
 
+Quick fix — skip the full pipeline for small, well-understood changes:
+
+```
+/ratchet:run --quick "Fix off-by-one in src/parser.ts validateToken loop"
+```
+
+Run in the current session (no worktree isolation — you serve as quality gate):
+
+```
+/ratchet:run --here
+/ratchet:run --here --quick "Add missing null check in utils.ts"
+```
+
 Run the full plan end-to-end without human intervention (halts on human escalation or unrecoverable failures):
 
 ```
 /ratchet:run --unsupervised             # auto-commits locally
 /ratchet:run --unsupervised --auto-pr   # auto-creates PRs per issue
+/ratchet:run --go                       # shorthand for --unsupervised --auto-pr
 ```
 
 ### Existing project
@@ -131,7 +145,7 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 | Command | Description |
 |---------|-------------|
 | `/ratchet:init` | Analyze project, interview human, generate workflow config and agent pairs |
-| `/ratchet:run` | Execute phase-gated debates — the core workflow |
+| `/ratchet:run` | Execute phase-gated debates — the core workflow (flags: `--quick`, `--here`, `--go`, `--dry-run`, `--unsupervised`, `--auto-pr`) |
 | `/ratchet:status` | Milestone and phase progress snapshot |
 | `/ratchet:pair [name]` | Add a new agent pair |
 | `/ratchet:guard` | Manage deterministic checks (list, add, run, override) |
@@ -139,6 +153,7 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 | `/ratchet:verdict [id]` | Human-in-the-loop: cast deciding vote on escalated debate |
 | `/ratchet:score [pair]` | Quality metrics and trends |
 | `/ratchet:tighten [pair\|pr N]` | Analyze all improvement signals and sharpen the system — pair prompts, guards, workflow config |
+| `/ratchet:watch` | Watch active PRs for merge conflicts, CI failures, and review comments |
 
 ## Workflow
 
@@ -154,10 +169,12 @@ Every issue progresses through ordered phases. Phase N must complete before phas
 | **review** | Quality review | Fix issues, improve code | Find bugs, logic errors, convention violations |
 | **harden** | Edge cases & security | Add validation, fix vulnerabilities | Run security scans, test edge cases |
 
-Workflow presets control which phases apply:
-- **tdd**: all 5 phases (plan → test → build → review → harden)
-- **traditional**: skip test phase (plan → build → review → harden)
-- **review-only**: review phase only
+Pipeline presets control which phases apply:
+- **full**: all 5 phases (plan → test → build → review → harden)
+- **standard**: skip test phase (plan → build → review → harden)
+- **review**: review phase only
+- **hotfix**: build → review (skip planning and hardening)
+- **secure**: review → harden (security-focused review)
 
 ### Guards
 
@@ -181,13 +198,35 @@ guards:
     blocking: false    # advisory — logs but doesn't block
 ```
 
+**Rationalization-check guards** — Guards can bundle multiple assertions. The guard passes only if all checks pass:
+
+```yaml
+guards:
+  - name: debate-artifacts-complete
+    type: rationalization-check
+    phase: review
+    blocking: false
+    checks:
+      - assert: "All referenced debate IDs have artifact directories"
+        command: |
+          for id in $(yq -r '.. | .debates[]? // empty' .ratchet/plan.yaml); do
+            [ -d ".ratchet/debates/$id" ] || { echo "MISSING: $id" >&2; exit 1; }
+          done
+      - assert: "Active debates have resolved timestamps"
+        command: |
+          for f in .ratchet/debates/*/meta.json; do
+            resolved=$(jq -r '.resolved // "null"' "$f")
+            [ "$resolved" != "null" ] || { echo "UNRESOLVED: $f" >&2; exit 1; }
+          done
+```
+
 **Generated files guard** — Ratchet includes a built-in pre-commit hook (`scripts/check-generated-files.sh`) that blocks committing build artifacts and runtime state. It detects generated files via path patterns (e.g., `*_templ.go`, `node_modules/`, `dist/`) and content markers (e.g., `// Code generated ... DO NOT EDIT`). The guard is stack-aware — it reads `project.yaml` to infer ecosystem-specific patterns (Go, Node, Python, Rust, JVM). Projects can extend detection via `generated_file_patterns` in `workflow.yaml`. Auto-registered during `/ratchet:init`. Override with `RATCHET_ALLOW_GENERATED=1 git commit ...`.
 
 ### Adaptive Intelligence
 
 Ratchet adapts how much structure to apply based on context:
 
-**Pre-debate guards** — Guards can run before debates start (`timing: pre-debate`), catching lint/format failures before wasting debate cycles. Guards without a timing field default to post-debate (backward compatible).
+**Pre-execution guards** — Guards can run before debates start (`timing: pre-execution`), catching lint/format failures before wasting debate cycles. Guards without a timing field default to `post-execution` (backward compatible).
 
 ```yaml
 guards:
@@ -195,7 +234,7 @@ guards:
     command: "gofmt -l ."
     phase: build
     blocking: true
-    timing: pre-debate    # fails fast — no debates if formatting is broken
+    timing: pre-execution    # fails fast — no debates if formatting is broken
 ```
 
 **Adaptive round budgets** — Pairs can override the global `max_rounds`. Experienced pairs that rarely need more than one round can run lean:
@@ -334,7 +373,7 @@ Guards can declare: requires: [postgres, redis]
 ```
 ```
 
-The `/ratchet:run` skill uses a modular architecture — on-demand modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean.
+The `/ratchet:run` skill uses a modular architecture — mode specs (`modes/quick-fix.md`, `modes/here.md`, `modes/epic-guided.md`, `modes/dry-run.md`) and pipeline modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean (~500 lines, ~6k tokens).
 
 ### Key Agents
 
@@ -351,7 +390,7 @@ The `/ratchet:run` skill uses a modular architecture — on-demand modules (`iss
 ```yaml
 version: 2
 max_rounds: 3
-escalation: human       # human | tiebreaker | both
+escalation: human       # human | tiebreaker | both | none | promote
 max_regressions: 2      # integer (all phases) or object (per-phase)
 pr_scope: issue         # issue | debate | phase | milestone
 
@@ -369,11 +408,18 @@ progress:
 components:
   - name: backend
     scope: "src/api/**"
-    workflow: tdd
+    pipeline: full
+    strategy: debate          # default — generative + adversarial pair
 
   - name: frontend
     scope: "src/ui/**"
-    workflow: traditional
+    pipeline: standard
+
+  - name: schemas
+    scope: "schemas/*.json"
+    pipeline: review
+    strategy: solo            # single agent, no adversarial review
+    promote_on_guard_failure: true  # promote even if guards fail
 
 pairs:
   - name: api-quality
@@ -391,7 +437,7 @@ guards:
     command: "npm run lint"
     phase: build
     blocking: true
-    timing: pre-debate       # pre-debate | post-debate (default)
+    timing: pre-execution       # pre-execution | post-execution (default)
     components: [backend, frontend]
 
   - name: integration-tests
@@ -419,6 +465,7 @@ resources:
 │       ├── generative.md
 │       └── adversarial.md
 ├── debates/             # Debate transcripts
+├── executions/          # Execution logs (per-run metadata and timing)         (.gitignore)
 ├── guards/              # Guard execution results                              (.gitignore)
 ├── reviews/             # Agent performance reviews
 ├── retros/              # Retrospective findings with severity and recurrence  (.gitignore)
