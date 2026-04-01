@@ -900,7 +900,7 @@ For each milestone in the current layer:
 
 **CHECKPOINT**: You are about to execute issue pipelines. Your job is to orchestrate the phase-gated execution for each issue in isolated worktrees. Do NOT write code, fix bugs, or implement features — that work belongs inside the debate-runner agents spawned from Step 5e.
 
-This is the core execution step. The orchestrator launches issue agents in parallel per dependency layer, using the Agent tool's `isolation: "worktree"` for git worktree isolation. This mirrors the milestone parallel pattern in Step 3c — the parent orchestrator spawns, collects, and writes state.
+This is the core execution step. The orchestrator launches issue agents in parallel per dependency layer, using git worktree isolation — either automatic (via the Agent tool's `isolation: "worktree"` for Layer 0 issues) or manual (via `git worktree add` from a dependency's branch for Layer 1+ issues). This mirrors the milestone parallel pattern in Step 3c — the parent orchestrator spawns, collects, and writes state.
 
 #### 4a. Identify Ready Issues
 
@@ -934,7 +934,7 @@ For each dependency layer (from Step 3b), launch all ready issues **in parallel*
 
 **Execution strategy:**
 - **Layer-parallel execution**: All issues in the same dependency layer run concurrently as separate Agent invocations
-- **Worktree isolation**: Each issue agent uses `isolation: "worktree"` on the Agent tool, giving it an isolated copy of the repository
+- **Worktree isolation (dual-path)**: Layer 0 issues use `isolation: "worktree"` on the Agent tool (automatic worktree from `origin/main`). Layer 1+ issues use manually-created worktrees from the dependency's branch (see "Spawning parallel issue agents" below for details).
 - **Agent-per-issue**: Each issue is spawned with `/ratchet:run --issue <ref> --milestone <id>`
 - **Layer synchronization**: Wait for all issues in Layer N to complete before launching Layer N+1
 - **Sequential fallback**: If no issues declare `depends_on`, issues still run in parallel as a single Layer 0. For milestones with only 1 issue, this naturally degrades to sequential.
@@ -1004,9 +1004,63 @@ This runs once per layer, not per issue. All worktrees in the layer share the fe
 
 **Spawning parallel issue agents:**
 
-For each issue in the current ready layer, spawn an Agent with:
-- `isolation`: `"worktree"` — each agent gets its own git worktree automatically
+For each issue in the current ready layer, spawn an Agent using the appropriate isolation strategy based on the issue's dependency layer:
+
+**Layer 0 issues (no dependencies):**
+- `isolation`: `"worktree"` — each agent gets its own git worktree automatically, branching from `origin/main`
 - Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
+
+**Layer 1+ issues (have dependencies):**
+- Do NOT use `isolation: "worktree"` — the Agent tool's automatic worktree branches from `origin/main`, which does not include the dependency's changes
+- Instead, manually create a worktree from the dependency's branch before spawning:
+  ```bash
+  # Resolve the dependency's branch from plan.yaml
+  DEP_REF="<depends_on ref>"
+  DEP_BRANCH=$(yq eval "
+    .epic.milestones[] | select(.id == \"$MS_ID\") |
+    .issues[] | select(.ref == \"$DEP_REF\") | .branch
+  " .ratchet/plan.yaml)
+
+  if [ -z "$DEP_BRANCH" ] || [ "$DEP_BRANCH" = "null" ]; then
+    echo "Warning: Dependency $DEP_REF has no branch recorded. Falling back to origin/main." >&2
+    DEP_BRANCH="origin/main"
+  fi
+
+  # For multiple dependencies, resolve the last-completed dependency's branch:
+  # DEPS=($(yq eval "
+  #   .epic.milestones[] | select(.id == \"$MS_ID\") |
+  #   .issues[] | select(.ref == \"$ISSUE_REF\") | .depends_on[]
+  # " .ratchet/plan.yaml))
+  # LATEST_BRANCH=""
+  # LATEST_TIME=0
+  # for dep in "${DEPS[@]}"; do
+  #   branch=$(yq eval "... | select(.ref == \"$dep\") | .branch" .ratchet/plan.yaml)
+  #   [ -z "$branch" ] || [ "$branch" = "null" ] && continue
+  #   # Use the commit timestamp on the branch as a proxy for completion time
+  #   commit_time=$(git log -1 --format=%ct "$branch" 2>/dev/null || echo 0)
+  #   if [ "$commit_time" -gt "$LATEST_TIME" ]; then
+  #     LATEST_TIME="$commit_time"
+  #     LATEST_BRANCH="$branch"
+  #   fi
+  # done
+  # DEP_BRANCH="${LATEST_BRANCH:-origin/main}"
+
+  # Fetch the dependency branch (it was pushed in Step 4c)
+  git fetch origin "$DEP_BRANCH" --quiet 2>/dev/null || true
+
+  # Create the worktree manually (absolute path required for agent file operations)
+  WORKTREE_PATH="$(pwd)/.claude/worktrees/issue-${ISSUE_REF}"
+  git worktree add "$WORKTREE_PATH" "$DEP_BRANCH" --quiet
+  ```
+- Spawn the Agent WITHOUT `isolation: "worktree"`, passing the worktree path explicitly in the prompt:
+  ```
+  Task: /ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]
+
+  Worktree: <absolute path to manually created worktree>
+  NOTE: You are running in a manually-created worktree based on dependency branch
+  "<dep-branch>". All file operations MUST use the worktree path above.
+  ```
+
 - The issue's `ref` is now the GitHub issue number (if promoted) or the local ref (if promotion failed/skipped). The issue pipeline uses numeric refs directly as `progress_ref` for debate publishing and `Fixes #<ref>` in PR bodies.
 
 **Component strategy detection**: Before spawning each issue agent, resolve the component's `strategy` field from `workflow.yaml`. The strategy determines the execution path at Step 5e inside the issue pipeline:
@@ -1023,9 +1077,10 @@ Promote on guard failure: [true|false]  # solo mode only
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 
 **Branch base resolution for dependent issues:**
-- Layer 0 issues: branch from `origin/main` (freshly fetched above)
-- Layer 1+ issues: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
-- Multiple dependencies: branch from the dependency that finished last
+- **Layer 0 issues**: use `isolation: "worktree"` on the Agent tool — this automatically creates a worktree branching from `origin/main` (freshly fetched above). No manual worktree management needed.
+- **Layer 1+ issues**: the orchestrator manually creates a worktree via `git worktree add` from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes in Step 4c). The issue agent is spawned WITHOUT `isolation: "worktree"` and receives the worktree path in its prompt context.
+- **Multiple dependencies**: resolve the branch of the dependency that completed last (most recent `resolved` timestamp in its debate meta.json, or latest commit timestamp on its branch). Create the worktree from that branch. If the dependency branches have diverged significantly, the build phase will naturally reconcile — the generative agent works from the latest dependency state.
+- **Fallback**: if a dependency's `branch` field is null (dependency completed without code changes), fall back to `origin/main`. Log a warning: `"Dependency <ref> has no branch — falling back to origin/main for worktree base."`
 
 **Layer dispatch presentation:**
 ```
@@ -1071,7 +1126,9 @@ After solo execution completes, update with the outcome:
 
 Always include all milestones, all issues, and the phase breakdown for all active issues in the layer.
 
-**Note on worktree management**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
+**Note on worktree management (dual-path approach)**:
+- **Layer 0 issues**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository branched from `origin/main`. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
+- **Layer 1+ issues**: The orchestrator manually creates a worktree via `git worktree add` from the dependency's branch (see "Branch base resolution" above). The issue agent is spawned WITHOUT `isolation: "worktree"` and receives the worktree path explicitly in its prompt. After the agent completes, the orchestrator is responsible for cleaning up the manually-created worktree in Step 4c. The worktree path follows the convention `.claude/worktrees/issue-<ref>`.
 
 **Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction.
 
@@ -1142,9 +1199,12 @@ After all issue agents in a layer complete, the orchestrator processes results i
    ```
 
 5. **Worktree cleanup**: After committing and pushing, the worktree can be removed. The branch on the remote is the durable deliverable.
-   ```bash
-   git worktree remove "<worktree>" 2>/dev/null || true
-   ```
+   - **Layer 0 issues** (spawned with `isolation: "worktree"`): The Agent tool handles cleanup automatically. No manual action needed.
+   - **Layer 1+ issues** (manually-created worktrees): The orchestrator must clean up explicitly:
+     ```bash
+     git worktree remove "<worktree>" 2>/dev/null || git worktree remove --force "<worktree>" 2>/dev/null || true
+     ```
+   - Always attempt cleanup regardless of issue success/failure — worktrees consume disk space and can cause confusion if left behind.
 
 5. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
 
