@@ -320,70 +320,16 @@ This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries
 
 #### 1c. Orphan Detection
 
-Run the orphan detection script to identify stale state from previous runs (abandoned worktrees, unresolved debates, incomplete executions, stale in-progress issues). Orphan detection is advisory — it never blocks the pipeline.
+Run `bash .claude/ratchet-scripts/check-orphans.sh --ratchet-dir "$RATCHET_DIR"` to identify stale state (abandoned worktrees, unresolved debates, incomplete executions, stale in-progress issues). Advisory only — never blocks the pipeline. If the script is missing, skip with a warning.
 
-```bash
-if [ ! -f .claude/ratchet-scripts/check-orphans.sh ]; then
-  echo "Warning: .claude/ratchet-scripts/check-orphans.sh not found. Skipping orphan detection." >&2
-  ORPHAN_FINDINGS="[]"
-else
-  ORPHAN_FINDINGS=$(bash .claude/ratchet-scripts/check-orphans.sh --ratchet-dir "$RATCHET_DIR" 2>/dev/null || echo "[]")
-fi
-ORPHAN_COUNT=$(printf '%s' "$ORPHAN_FINDINGS" | jq 'length' 2>/dev/null || echo "0")
-```
+Each finding has: `type`, `ref`, `age`, `suggested_action`. For each finding, three actions are available:
+- **Resume** — set the item as current focus or log for pipeline continuation
+- **Abandon** — reset to clean state (reset status to pending, remove worktree/debate/execution artifacts)
+- **Ignore** — skip, take no action
 
-**If findings exist** (`ORPHAN_COUNT > 0`):
+**Supervised mode**: present each finding via `AskUserQuestion` with the three options above.
 
-Parse each finding from the JSON array. Each finding has: `type` (stale_issue, unresolved_debate, orphan_worktree, incomplete_execution), `ref`, `age`, and `suggested_action`.
-
-**In supervised mode**, present each finding via `AskUserQuestion`:
-
-```
-Orphan detected: [type] — [ref] (age: [age])
-[suggested_action]
-```
-
-Options per finding:
-- `"Resume"` — set the referenced item as current focus (for stale issues: set `current_focus` to this issue; for unresolved debates: resume with `/ratchet:debate`; for incomplete executions: re-launch the issue pipeline)
-- `"Abandon"` — reset the item to a clean state (for stale issues: set status back to `pending` and clear `phase_status` progress; for orphan worktrees: remove with `git worktree remove`; for unresolved debates: delete the debate directory; for incomplete executions: remove the execution log)
-- `"Ignore"` — skip this finding, take no action, proceed to the next
-
-**In `--unsupervised` mode**, auto-select based on finding age:
-
-```
-age_hours = parse hours from finding.age (e.g., "36h" → 36, "2d" → 48, "unknown" → 999)
-
-if age_hours > 24:
-    auto-select "Abandon" — stale items are cleaned up automatically
-elif age_hours < 4:
-    auto-select "Resume" — recent items are likely interrupted work worth continuing
-else:
-    auto-select "Ignore" — ambiguous age, leave for human review on next supervised run
-```
-
-For `"unknown"` age, treat as stale (auto-select Abandon in unsupervised mode).
-
-**Abandon actions by finding type:**
-
-| Finding type | Abandon action |
-|---|---|
-| `stale_issue` | `yq eval -i '(.epic.milestones[].issues[] \| select(.ref == "REF")).status = "pending"' .ratchet/plan.yaml` — also reset `phase_status` entries that were `in_progress` back to `pending` |
-| `unresolved_debate` | `rm -rf .ratchet/debates/<debate-id>` |
-| `orphan_worktree` | `git worktree remove .claude/worktrees/<name> 2>/dev/null \|\| git worktree remove --force .claude/worktrees/<name>` |
-| `incomplete_execution` | `rm -f .ratchet/executions/<exec-id>.yaml` |
-
-**Resume actions by finding type:**
-
-| Finding type | Resume action |
-|---|---|
-| `stale_issue` | Set `current_focus` to this issue's ref and milestone — the issue will be picked up in Step 2 |
-| `unresolved_debate` | Log `"Resumable debate: <debate-id>. Will be continued in the issue pipeline."` — the debate-runner handles continuation |
-| `orphan_worktree` | Log `"Worktree <name> retained for manual inspection."` — no automated resume for worktrees |
-| `incomplete_execution` | Log `"Execution <exec-id> retained. Will be re-attempted in the issue pipeline."` |
-
-After processing all findings, continue to the CHECKPOINT below.
-
-**If no findings** (`ORPHAN_COUNT == 0`): continue silently.
+**Unsupervised mode**: auto-select based on `age` — Abandon if >24h or unknown, Resume if <4h, Ignore otherwise.
 
 **CHECKPOINT**: You now understand the project state. Do NOT act on it — do not analyze code, do not plan fixes, do not write implementations. Your next action is Step 2: present choices to the user (or auto-select in unsupervised mode). Then Step 4: launch issue pipelines. The pipelines do the work.
 
@@ -713,90 +659,35 @@ Use `AskUserQuestion` to ask what to build first.
 
 ### Step 3: Set Focus and Build Dependency Graphs
 
-#### 3a. Milestone-Level DAG (parallel milestones)
+#### 3a. Milestone-Level DAG
 
-Check if milestone parallelism is active: **if ANY milestone in plan.yaml has a `depends_on` field → DAG mode**.
+**DAG detection**: if ANY milestone has a `depends_on` field → DAG mode; otherwise → sequential mode.
 
-**DAG mode** — build milestone dependency layers:
-1. **Layer 0**: milestones with `depends_on: []` (or no `depends_on`) whose status is not `done`
-2. **Layer 1**: milestones whose `depends_on` entries are all `done`
-3. **Layer N**: milestones whose dependencies are all in earlier layers
+**DAG mode** — topological sort into layers: Layer 0 = no dependencies (status != done), Layer N = all deps in earlier layers. Proceed to Step 3c.
 
-If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step 3c** to launch them in parallel.
-
-**Sequential mode** (no milestone has `depends_on`) — select a single milestone:
-- If Mode B selected a specific milestone, use that
-- Otherwise, pick the first milestone with `status != done`
-- Set it to `status: in_progress`, record `current_focus` with milestone id and timestamp
-- Proceed to **Step 3b**
+**Sequential mode** — pick the first milestone with `status != done` (or the one Mode B selected). Set `status: in_progress`, record `current_focus`. Proceed to Step 3b.
 
 #### 3b. Issue-Level DAG (within a single milestone)
 
-**Build dependency layers** from the milestone's issues:
-1. **Layer 0**: issues with no `depends_on` (or all dependencies already `done`)
-2. **Layer 1**: issues whose dependencies are all in Layer 0
-3. **Layer N**: issues whose dependencies are all in earlier layers
+Topological sort of milestone's issues into layers (same algorithm as 3a). Issues within the same layer run in parallel.
 
-This produces the execution order. Issues within the same layer run in parallel.
+**[TodoWrite — Initial Plan]**: Write the full plan showing all milestones and issues with current statuses. Use IDs: `m<N>` for milestones, `m<N>-<ref>` for issues.
 
-**[TodoWrite — Initial Plan]**: After building the issue DAG (and milestone DAG in DAG mode), write the initial todo list showing the full plan. Include all milestones and their issues with current statuses:
+**Progress tracking**: If adapter configured and milestone has no `progress_ref`, create one via `create-item.sh`. Store in plan.yaml. Adapter failures never block.
 
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
-])
-```
+**MILESTONE RE-OPENING GUARD**: If milestone has `status: done`, require explicit user confirmation via `AskUserQuestion` before re-opening.
 
-Show all milestones (not just the current one) so the user sees the full roadmap. Mark already-completed milestones/issues as `"completed"`. In DAG mode with parallel milestones (Step 3c), show all ready milestones as `"in_progress"`.
+#### 3c. Execute Milestones (DAG mode)
 
-**Progress tracking**: If a progress adapter is configured (`.ratchet/workflow.yaml` → `progress.adapter`), and this milestone doesn't have a `progress_ref` yet, create a work item:
-```bash
-bash .claude/ratchet-scripts/progress/<adapter>/create-item.sh "<milestone name>" "<milestone description>" "ratchet" "milestone"
-```
-Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. If the adapter fails, log a warning and continue — adapter failures never block debates.
+**No milestone sub-agents.** The orchestrator executes milestones inline to keep the agent chain at 3 levels (orchestrator → debate-runner → gen/adv). Milestone sub-agents would add a 4th level causing chain collapse.
 
-**MILESTONE RE-OPENING GUARD**: If the chosen milestone has `status: done`, do NOT silently re-open it. Instead, use `AskUserQuestion`:
-- Question: "Milestone '[name]' is already marked done (completed [timestamp]). Re-opening it will reset its status. Are you sure?"
-- Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
-- Only set `status: in_progress` if the user explicitly confirms re-opening.
+Process milestone layers sequentially. Within each layer, milestones are processed one at a time; issue parallelism within a milestone is preserved (Step 4b).
 
-#### 3c. Execute Milestones (DAG mode — sequential with parallel issues)
+For each milestone: set `in_progress` → build issue DAG (3b) → execute issues (4) → process results (4c) → milestone completion (8) → check if next layer is unblocked.
 
-**Design decision — no milestone sub-agents.** The orchestrator executes milestones directly instead of spawning milestone-level agents. This keeps the agent chain at 3 levels:
+**All layers done** → epic complete, Step 10. **Milestone halts** → in unsupervised mode, continue with remaining milestones; halted milestone only blocks its dependents.
 
-```
-orchestrator → debate-runner → generative + adversarial
-```
-
-Spawning milestone sub-agents adds a 4th level that causes agent chain collapse — agents at depth 3+ routinely skip the debate framework and write code directly. By running milestones inline, the debate-runner stays at depth 2 where compliance is reliable.
-
-**Milestone execution order (DAG mode):**
-
-Process milestone layers sequentially. Within each layer, all milestones are processed one at a time (the orchestrator handles one milestone's issue DAG before moving to the next). Issue parallelism within a milestone is preserved (Step 4b).
-
-```
-Milestone execution plan:
-  Layer 0: M[id] ([N] issues), M[id] ([N] issues)
-  Layer 1: M[id] ([N] issues) — depends on Layer 0
-  [...]
-```
-
-For each milestone in the current layer:
-1. Set milestone to `status: in_progress` in plan.yaml
-2. Build issue dependency graph (Step 3b)
-3. Execute issue pipelines (Step 4) — issues within the milestone run in parallel via Agent tool
-4. Process issue results (Step 4c)
-5. Run milestone completion (Step 8) if all issues done
-6. Check if any Layer N+1 milestones are now unblocked → continue to next layer
-
-**When all milestones across all layers are done** → epic complete, proceed to Step 10.
-
-**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with remaining milestones in the same layer — a halted milestone only blocks milestones that depend on it.
-
-**Context clearing**: At each milestone boundary, the orchestrator re-reads plan.yaml and workflow.yaml from disk. This prevents accumulated context drift. In unsupervised mode with many milestones, the orchestrator spawns a continuation agent (Step 10) after completing each milestone to get a fresh context window.
+**Context clearing**: At each milestone boundary, re-read plan.yaml and workflow.yaml from disk. In unsupervised mode, spawn a continuation agent (Step 10) for fresh context.
 
 ### Step 4: Execute Issue Pipelines
 
@@ -812,271 +703,41 @@ From the dependency graph built in Step 3b, identify **ready issues** — issues
 
 #### 4b. Execute Issue Pipelines by Dependency Layer
 
-**File overlap check (before launching):**
+**File overlap check**: Before launching, expand each ready issue's scope globs to file lists. If any files appear in multiple issues' scopes → overlap detected. In supervised mode, offer: "Merge into one issue", "Run sequentially", or "Run in parallel anyway". Unsupervised: auto-merge when overlap >50% of either issue's files, otherwise auto-sequentialize.
 
-Before spawning parallel issue agents, check whether issues in the same layer have overlapping file scopes. Overlapping issues produce conflicting changes in parallel worktrees — wasted work.
+**Pre-launch setup** (once per layer):
+1. `git fetch origin main --quiet` — fresh base for worktrees
+2. **Ref promotion**: For each non-numeric ref, create a GitHub issue via `create-issue.sh` (with milestone's `github_issue` as parent). On success: rewrite `ref` and `depends_on` references in plan.yaml. On failure: keep local ref, pipeline degrades gracefully. Sync tracking issue after all promotions.
+3. **Strategy detection**: Resolve each issue's component `strategy` from workflow.yaml (`debate` default, or `solo`). Pass strategy + `promote_on_guard_failure` in agent context.
 
-For each pair of ready issues in the current layer:
-1. Resolve each issue's file scope (from its pairs' `scope` globs in workflow.yaml)
-2. Expand the globs to actual file lists
-3. If any files appear in more than one issue's scope → overlap detected
+**Spawning**: For each ready issue, spawn an Agent with `isolation: "worktree"` and task `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`. Wait for all Layer N agents before launching Layer N+1.
 
-If overlap is detected, use `AskUserQuestion`:
-- Question: "Issues [ref-A] and [ref-B] overlap on [N] files: [file list]. Running them in parallel will likely produce conflicting changes."
-- Options:
-  - `"Merge into one issue (Recommended)"` — combine the issues in plan.yaml (merge titles, pairs, and depends_on), then run as one
-  - `"Run sequentially instead"` — run ref-A first, then ref-B in the next layer (add ref-A to ref-B's depends_on)
-  - `"Run in parallel anyway"` — proceed, accept possible conflicts
+**Branch base**: Layer 0 branches from `origin/main`. Layer 1+ branches from the dependency's `branch` field in plan.yaml. Multiple dependencies: use the last-finished dependency's branch.
 
-In unsupervised mode: auto-select "Merge into one issue" when overlap exceeds 50% of either issue's files, otherwise "Run sequentially instead".
+Issue agents enter Mode S, execute Steps 5a-5h, and return structured completion summaries. **Issue agents do NOT write plan.yaml** — the parent orchestrator is the sole writer.
 
----
+**[TodoWrite — Issue Starts]**: Set layer issues to `"in_progress"`, add phase-level sub-items. Solo mode: label phases with `(solo)` and update with outcome (SOLO PASS/PROMOTED/FAILED). Always include all milestones and issues.
 
-For each dependency layer (from Step 3b), launch all ready issues **in parallel** as separate Agent invocations. This mirrors the milestone parallel pattern in Step 3c.
+**Worktree management**: `isolation: "worktree"` handles creation/cleanup automatically. **Guard singletons**: `flock` serializes across parallel agents with no orchestrator coordination needed.
 
-**Execution strategy:**
-- **Layer-parallel execution**: All issues in the same dependency layer run concurrently as separate Agent invocations
-- **Worktree isolation**: Each issue agent uses `isolation: "worktree"` on the Agent tool, giving it an isolated copy of the repository
-- **Agent-per-issue**: Each issue is spawned with `/ratchet:run --issue <ref> --milestone <id>`
-- **Layer synchronization**: Wait for all issues in Layer N to complete before launching Layer N+1
-- **Sequential fallback**: If no issues declare `depends_on`, issues still run in parallel as a single Layer 0. For milestones with only 1 issue, this naturally degrades to sequential.
+#### 4c. Process Issue Results (after layer completes)
 
-**Parallelism detection** (mirrors milestone DAG detection in Step 3a):
-- All ready issues (from Step 4a) in the same layer are launched simultaneously
-- Issues with unmet `depends_on` wait in later layers
+After all issue agents in a layer complete, process results in batch. **Do NOT fix, debug, or modify anything — just record state and proceed.**
 
-**Issue ref promotion (lazy GitHub issue creation):**
+**For each completed issue** (status `done`):
+1. **Commit + PR**: In the issue's worktree, create branch `ratchet/<milestone-slug>/<issue-ref>`, commit all changes, push. Create PR using body from `skills/run/pr-body.md` (includes `Fixes #<ref>`, debate summary, dependency notes). Skip commit if worktree has no uncommitted changes. Without `--auto-pr`: ask user before creating PR.
+2. **Update plan.yaml** (atomically, in batch): set `status`, `phase_status`, `branch`, `pr`, `files`, `debates` for each issue.
+3. **Sync tracking issue** and **remove worktree** after push.
 
-Before spawning issue agents, promote any non-numeric refs to GitHub issue numbers. This is just-in-time — planning stays offline-capable.
+**Layer progression**: Check if Layer N+1 issues are now unblocked → launch next batch (back to 4b). Report: `"Layer [N] complete: [N]/[total] issues done"`.
 
-For each issue in the current ready layer whose `ref` is NOT already a number:
-1. If the `github-issues` adapter is configured and `gh` is available:
-   ```bash
-   PARENT_ISSUE=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .github_issue // null" .ratchet/plan.yaml)
-   MS_NAME=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .name" .ratchet/plan.yaml)
-   MS_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .description" .ratchet/plan.yaml)
-   ISSUE_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .description // \"\"" .ratchet/plan.yaml)
-   ISSUE_PAIRS=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .pairs | join(\", \")" .ratchet/plan.yaml)
-   ISSUE_FILES=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .files | join(\", \")" .ratchet/plan.yaml)
+**[TodoWrite — Issue Complete]**: Set completed issues to `"completed"` with progress count. Remove phase sub-items. Halted issues stay `"in_progress"` with halt reason in content.
 
-   # Build a rich issue body with context
-   ISSUE_BODY="## Context
+**Halted issues**: Record halt in plan.yaml immediately. Supervised: let user decide (resolve/continue/stop). Unsupervised: continue with remaining issues; halt milestone only if ALL issues blocked.
 
-   Milestone: **${MS_NAME}** — ${MS_DESC}
+**Merge conflicts on existing PRs**: Do NOT resolve directly. Re-launch the issue pipeline in a fresh worktree from current main. The pipeline naturally produces compatible code.
 
-   ## Description
-
-   ${ISSUE_DESC:-$ISSUE_TITLE}
-
-   ## Scope
-
-   **Pairs:** ${ISSUE_PAIRS:-none assigned}
-   **Files:** ${ISSUE_FILES:-to be determined during plan phase}"
-
-   ISSUE_NUM=$(bash .claude/ratchet-scripts/progress/github-issues/create-issue.sh \
-     "$ISSUE_TITLE" "$ISSUE_BODY" \
-     ${PARENT_ISSUE:+--parent "$PARENT_ISSUE"} 2>/dev/null) || true
-   ```
-
-   **Issue descriptions in plan.yaml**: When creating epics and milestones, always include a `description` field on each issue (not just `title`). The description should explain *what* and *why* — enough context for someone reading the GitHub issue to understand the problem and approach without needing plan.yaml.
-2. If creation succeeds: rewrite `ref` to the returned number, update any `depends_on` arrays in the same milestone that referenced the old ref, write plan.yaml
-   ```bash
-   OLD_REF="$ISSUE_REF"
-   NEW_REF="$ISSUE_NUM"
-   # Rewrite ref
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$OLD_REF\")).ref = \"$NEW_REF\"" .ratchet/plan.yaml
-   # Rewrite depends_on references across all issues in this milestone
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[].depends_on) |= map(select(. == \"$OLD_REF\") = \"$NEW_REF\" // .)" .ratchet/plan.yaml
-   ```
-3. If creation fails: keep the local ref. Pipeline runs normally — publishing degrades gracefully (no comments posted, but no crash). The ref gets promoted on the next successful run.
-
-Sync the plan tracking issue after all promotions in the layer:
-```bash
-if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-fi
-```
-
-**Fresh base fetch**: Before spawning any issue agents in a layer, fetch the latest remote state so worktrees branch from the current `origin/main` — not a stale local HEAD:
-```bash
-git fetch origin main --quiet
-```
-This runs once per layer, not per issue. All worktrees in the layer share the fetched ref.
-
-**Spawning parallel issue agents:**
-
-For each issue in the current ready layer, spawn an Agent with:
-- `isolation`: `"worktree"` — each agent gets its own git worktree automatically
-- Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
-- The issue's `ref` is now the GitHub issue number (if promoted) or the local ref (if promotion failed/skipped). The issue pipeline uses numeric refs directly as `progress_ref` for debate publishing and `Fixes #<ref>` in PR bodies.
-
-**Component strategy detection**: Before spawning each issue agent, resolve the component's `strategy` field from `workflow.yaml`. The strategy determines the execution path at Step 5e inside the issue pipeline:
-- `strategy: "debate"` (default) — the issue pipeline spawns debate-runners with generative + adversarial agents
-- `strategy: "solo"` — the issue pipeline spawns a single generative agent directly, with post-execution guards as the quality gate (no adversarial review)
-
-Pass the resolved strategy in the agent context so the issue pipeline can branch at Step 5e without re-reading workflow.yaml:
-```
-Component: [component-name]
-Strategy: [debate|solo]
-Promote on guard failure: [true|false]  # solo mode only
-```
-
-The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
-
-**Branch base resolution for dependent issues:**
-- Layer 0 issues: branch from `origin/main` (freshly fetched above)
-- Layer 1+ issues: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
-- Multiple dependencies: branch from the dependency that finished last
-
-**Layer dispatch presentation:**
-```
-Executing issue dependency layer 0 ([N] issues in parallel):
-  [ref]: [title] — [N] pairs, starting at [phase]
-  [ref]: [title] — [N] pairs, starting at [phase]
-
-[If Layer 1+ exists: "[N] more issues in [N] layers waiting for dependencies"]
-```
-
-After Layer 0 completes, the orchestrator processes results (Step 4c), checks which Layer 1 issues are now unblocked, and launches the next batch.
-
-**[TodoWrite — Issue Starts]**: When launching a layer of issue pipelines, update the todo list: set all issues in the layer to `"in_progress"` and add phase-level items. Include all phases from each issue's workflow:
-
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "in_progress"},
-  {"id": "m2-issue32-plan", "content": "Plan phase", "status": "completed"},
-  {"id": "m2-issue32-build", "content": "Build phase ([pair-name])", "status": "in_progress"},
-  {"id": "m2-issue32-review", "content": "Review phase", "status": "pending"},
-  {"id": "m2-issue32-harden", "content": "Harden phase", "status": "pending"},
-  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
-])
-```
-
-**Solo mode TodoWrite examples**: For issues using `strategy: "solo"`, adapt the content to reflect the single-agent execution (no debate rounds):
-
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue34", "content": "[ref]: [title] (solo)", "status": "in_progress"},
-  {"id": "m2-issue34-build", "content": "Build phase — generative + guards", "status": "in_progress"},
-  {"id": "m2-issue34-review", "content": "Review phase", "status": "pending"}
-])
-```
-
-After solo execution completes, update with the outcome:
-- Pass: `"Build phase — SOLO PASS"` (all guards passed)
-- Promoted: `"Build phase — SOLO PROMOTED"` (guard failed, escalated to debate)
-- Failed: `"Build phase — SOLO FAILED"` (guard failed, no promotion)
-
-Always include all milestones, all issues, and the phase breakdown for all active issues in the layer.
-
-**Note on worktree management**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
-
-**Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction.
-
-**Note on guard singleton resources**: Guards with `singleton: true` resources use `flock` for serialization. When multiple issue agents run in parallel, each agent's guards independently acquire locks via `flock .ratchet/locks/<resource>.lock`. This means singleton-guarded operations serialize across parallel issues automatically — correct behavior, with no orchestrator coordination needed.
-
-[If Layer 1+ exists: "[N] more issues waiting for dependencies"]
-```
-
-#### 4c. Process Issue Results (after issue completes)
-
-After all issue agents in a layer complete, the orchestrator processes results in batch. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
-
-**Processing a layer's results:**
-
-1. **Collect all agent results**: Each issue agent returns a structured completion summary (Step 5h). Read all results from the layer.
-
-2. **Package each completed issue (commit + PR)**: For each issue with status `done`, the orchestrator creates the commit and PR from the issue agent's worktree. This is the orchestrator's job — not the issue agent's — because agents at depth 3+ routinely truncate the protocol and skip packaging.
-
-   For each completed issue with a `worktree` path:
-   ```bash
-   cd "<worktree>"
-
-   # Branch name
-   BRANCH="ratchet/<milestone-slug>/<issue-ref>"
-   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
-
-   # Commit all changes
-   git add -A
-   git commit -m "<issue title>
-
-   Debated by: <pair-names>
-   Verdicts: <verdict summaries>"
-
-   # Push and create PR
-   git push -u origin "$BRANCH"
-   ```
-
-   PR creation uses `gh pr create` with the body from `skills/run/pr-body.md`:
-   - `Fixes #<ref>` when ref is a numeric (promoted) GitHub issue number
-   - Debate summary table from all debates in this issue
-   - Dependency note if `depends_on` references exist
-
-   > **For the PR body construction, read `skills/run/pr-body.md`.**
-
-   Store the branch name and PR URL on the issue in plan.yaml.
-
-   **If the worktree has no uncommitted changes** (agent already committed, or no code was modified): skip the commit step, just check if a branch exists.
-
-   **If `--auto-pr` is not set** (supervised mode): use `AskUserQuestion` before creating the PR:
-   - Question: "Issue [ref] complete. Create PR?"
-   - Options: `"Create PR (Recommended)"`, `"Skip PR — just keep the branch"`, `"View changes first"`
-
-3. **Update plan.yaml in batch**: For each issue in the layer, update the MAIN repo's plan.yaml:
-   - Set `status` (done, blocked, escalated, failed)
-   - Set `phase_status` for all phases
-   - Set `branch` (from the commit step above)
-   - Set `pr` (from the PR creation step above, or null)
-   - Set `files` (list of modified files)
-   - Set `debates` (debate IDs created)
-   - Write all updates atomically — the orchestrator is the sole writer
-
-4. **Sync plan tracking issue** (if github-issues adapter configured):
-   ```bash
-   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-   fi
-   ```
-
-5. **Worktree cleanup**: After committing and pushing, the worktree can be removed. The branch on the remote is the durable deliverable.
-   ```bash
-   git worktree remove "<worktree>" 2>/dev/null || true
-   ```
-
-5. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
-
-6. If newly unblocked issues exist → launch them as the next layer (back to 4b)
-
-7. Report progress after each layer: `"Layer [N] complete: [N]/[total] issues done in milestone [id]"`
-
-**[TodoWrite — Issue Complete]**: After recording the issue result, update the todo list: set the issue item to `"completed"` and update its content to include the progress count (e.g., `"[ref]: [title] (2/4 issues done)"`). Remove the phase sub-items for the completed issue to keep the list concise. If the issue halted, keep its status as `"in_progress"` and append the halt reason in the content (e.g., `"[ref]: [title] -- BLOCKED: guard failure"`). Note: TodoWrite has no `"blocked"` status; `"in_progress"` is the closest approximation for halted issues — the content string communicates the actual state.
-
-**CRITICAL**: This plan.yaml update is not optional. The orchestrator is the authoritative writer for all issue state.
-
-**When all issues across all layers are done** → milestone is complete, proceed to Step 8.
-
-**If an issue pipeline halts (blocked/escalated/failed):**
-- Record the halt status in plan.yaml immediately
-- In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
-  - Options: `"Resolve now"`, `"Continue with remaining issues (Recommended)"`, `"Done for now"`
-- In unsupervised mode: note the halt, continue with remaining issues if possible. A halted issue only blocks issues that depend on it, not unrelated issues. Halt the entire milestone only if all issues are blocked.
-
-**Handling merge conflicts on existing PRs:**
-
-When the orchestrator detects (via `gh pr view`) that an issue's PR has merge conflicts:
-1. Do NOT attempt to resolve the conflict yourself (no rebase, no merge, no code editing)
-2. Re-launch the issue pipeline (`/ratchet:run --issue <ref>`) in a fresh worktree based on the current main branch
-3. The issue pipeline will re-run the build phase, which will naturally produce code that is compatible with the current main branch
-4. The old PR branch is replaced — the pipeline creates a new branch and force-pushes (or creates a new PR)
-
-This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
-
-**IMPORTANT (AGENT GATE enforcement)**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Do NOT spawn any agent with implementation instructions ("implement X", "fix Y", "add Z"). All code changes flow through debate-runners only. See the AGENT GATE section at the top of this document.
+**All layers done** → milestone complete, proceed to Step 8.
 
 ---
 
@@ -1233,95 +894,30 @@ If all pass (or none configured), proceed silently.
 
 After all issues in the milestone are `done`:
 
-**8a. Mark milestone done:**
-- Set milestone `status: done`, record completion timestamp
-- Update `plan.yaml`
-- Sync plan tracking issue:
-  ```bash
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-  fi
-  ```
+**8a. Mark milestone done**: Set `status: done` with completion timestamp in plan.yaml. Sync tracking issue.
 
-**[TodoWrite — Milestone Complete]**: After marking the milestone done, update the todo list: set the milestone item to `"completed"`. Remove all issue/phase sub-items for this milestone to keep the list compact. Update the milestone content to include the summary (e.g., `"M2: [name] — 4/4 issues done"`). If other milestones remain, they retain their current statuses.
+**[TodoWrite — Milestone Complete]**: Set milestone to `"completed"` with summary (e.g., `"M2: [name] — 4/4 issues done"`). Remove issue/phase sub-items.
 
-**8b. Progress tracking:**
-- If adapter configured: update milestone status, close the item
-  ```bash
-  bash .claude/ratchet-scripts/progress/<adapter>/update-status.sh "<progress_ref>" "done"
-  bash .claude/ratchet-scripts/progress/<adapter>/close-item.sh "<progress_ref>"
-  ```
+**8b. Progress tracking**: If adapter configured, update status to "done" and close the item.
 
-**8c. Post-Milestone Analyst Assessment:**
+**8c. Post-Milestone Analyst Assessment**: Spawn read-only analyst agent (`disallowedTools: Write, Edit`) to review debates, scores, and guard results. Produces 3-5 bullet points on pair effectiveness, scope gaps, guard recommendations, and workflow presets. Present via `AskUserQuestion` with options: "Apply recommendations", "Note for later", "Skip".
 
-Spawn the analyst agent (with resolved `analyst` model, defaults to `opus`) for a brief assessment. Agent configuration:
-- `tools`: Read, Grep, Glob, Bash
-- `disallowedTools`: Write, Edit
-
-The post-milestone analyst is **read-only** — it analyzes data and produces recommendations. Any file modifications from recommendations are applied by the orchestrator's parent skill, not the analyst.
-
-The analyst reviews all issue debates, scores, guard results, and any escalation data to produce 3-5 bullet points covering:
-- Pair effectiveness observations
-- Scope coverage gaps
-- Guard recommendations
-- Workflow preset recommendations
-
-Present via `AskUserQuestion`:
-- Question: "Post-milestone assessment for [milestone name]:\n[bullet points]"
-- Options: `"Apply recommendations (Recommended)"`, `"Note for later"`, `"Skip"`
-
-**CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request" within an issue pipeline. Local commits are the default safe action.**
+**CRITICAL: NEVER push to origin/main or force-push. Local commits are the default safe action.**
 
 ### Step 9: Update Scores & Teardown Resources
 
-Score data is computed on-demand by `/ratchet:score` from debate artifacts (`debates/*/meta.json` and `reviews/**/*.json`) and persisted as an exponential moving average in `.ratchet/scores.yaml`. The EMA survives debate archival across epics — no score update step is needed here.
+Score data is computed on-demand by `/ratchet:score` — no update step needed here.
 
-**Resource teardown**: tear down shared resources when no more pipelines need them:
-- **Sequential mode**: after all issue pipelines for the milestone complete
-- **DAG mode**: after ALL milestones across all layers complete (the orchestrator handles teardown after the last milestone)
+**Resource teardown**: Run `stop` commands for all resources in workflow.yaml. Clean up `.ratchet/locks/`. Teardown timing: sequential mode → after milestone completes; DAG mode → after ALL milestones complete. Always tear down regardless of success/failure.
 
-For teardown:
-1. For each resource in `workflow.yaml` that has a `stop` command, run it
-2. Clean up `.ratchet/locks/` directory (remove `resources.json` and any stale lock directories)
-
-Resources are torn down regardless of whether milestones succeeded, halted, or had errors — always clean up.
-
-**Stop PR monitor**: If the PR watch loop was started in Step 1b, stop it now. The run is complete — any new PR issues will be caught on the next `/ratchet:run` invocation or by a manual `/ratchet:watch`.
+**Stop PR monitor** if started in Step 1b.
 
 ### Step 10: Propose Next Focus
 
-**If `--unsupervised`**: Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. The continuation agent inherits the same source-code boundary and plan management authority. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+**Unsupervised**: If work remains and no halt, spawn continuation agent with `/ratchet:run --unsupervised`. If all milestones complete, halt with summary. If halted, present halt summary and stop.
 
-**Otherwise**, use `AskUserQuestion` to let the user choose what to do next.
+**Supervised** — present options via `AskUserQuestion` based on state:
 
-**If the milestone has blocked/escalated issues:**
-- Summary: `"Milestone [name]: [N]/[total] issues complete. [N] blocked/escalated."`
-- Options:
-  - "Resolve escalated debates (/ratchet:verdict)" — if escalated
-  - "View issue status" — show per-issue phase progress
-  - "Re-run to continue (/ratchet:run) (Recommended)" — picks up unblocked issues
-  - "Done for now"
-
-**If milestone complete, more milestones remain:**
-
-**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. At each milestone boundary, re-read state files from disk. In unsupervised mode, the continuation agent (Step 10) starts with fresh context, preventing drift from auto-compaction summaries.
-
-- Summary: `"Milestone [name] complete! [N] issues, [N] PRs created. Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone — all state is persisted to disk."`
-- Options:
-  - "Continue to [next milestone name] (/ratchet:run) (Recommended)" — user re-invokes with fresh context
-  - "View quality metrics"
-  - "View milestone status (/ratchet:status)"
-  - "Done for now"
-
-When the user selects "Continue to [next milestone name]", do NOT continue in the current context. Instead, present: "Run `/ratchet:run` to start [next milestone] with a clean context. All progress is saved."
-
-**If ALL milestones are done:**
-- Summary: `"Epic complete! All [N] milestones finished. Total issues: [N] | Total debates: [N] | Consensus rate: [%]"`
-- Options:
-  - "Create a new epic" — use AskUserQuestion (freeform) to ask what the next body of work is, then create the new epic structure in plan.yaml (new epic name, description, milestones with issues). Use the analyst agent to help scope if the user wants a thorough analysis, or create directly from the user's description for straightforward requests.
-  - "Add a milestone to the current epic" — use AskUserQuestion to gather milestone details, then append to plan.yaml
-  - "Tighten agents from debate lessons (/ratchet:tighten)"
-  - "View detailed quality metrics (/ratchet:score)"
-  - "Review a specific debate (/ratchet:debate)"
-  - "Done for now"
+- **Blocked/escalated issues**: Offer resolve, continue, or stop.
+- **Milestone complete, more remain**: Offer "Continue to [next]" (re-invoke for fresh context), view metrics, or stop. **CONTEXT CLEARING**: At milestone boundaries, re-read all state from disk. Do NOT continue in the current context — instruct user to re-run.
+- **ALL milestones done**: Epic complete summary with options: create new epic, add milestone, tighten, score, review debate, or stop.
