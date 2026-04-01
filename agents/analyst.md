@@ -245,6 +245,13 @@ pairs:
     enabled: true
 
 guards: []
+  # Uncomment to enable stale-base detection (catches missing dependency changes):
+  # - name: stale-base
+  #   command: "bash scripts/check-stale-base.sh --issue \"$RATCHET_ISSUE_REF\" --plan .ratchet/plan.yaml --worktree \"$RATCHET_WORKTREE\""
+  #   phase: review
+  #   blocking: true
+  #   timing: pre-execution
+  #   components: []  # all components
 ```
 
 Read config from `workflow.yaml` (v2 format required).
