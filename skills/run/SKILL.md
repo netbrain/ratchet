@@ -203,13 +203,14 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run --unsupervised --auto-pr    # Same, but auto-create PRs per issue
 /ratchet:run --go                        # Shorthand for --unsupervised --auto-pr
 /ratchet:run --quick "<description>"     # Quick-fix: skip plan, auto-detect scope, single generative pass
+/ratchet:run --no-auto-merge            # Skip auto-merging prerequisite milestone PRs before dependent milestones
 ```
 
 ## Unsupervised Mode
 
 For unsupervised mode behavior, read `skills/run/unsupervised.md`.
 
-Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, `--dry-run`, and `--quick`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
+Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, `--dry-run`, `--quick`, and `--no-auto-merge`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
 
 ## Prerequisites
 - `.ratchet/` must exist with valid config
@@ -785,12 +786,85 @@ Milestone execution plan:
 ```
 
 For each milestone in the current layer:
-1. Set milestone to `status: in_progress` in plan.yaml
-2. Build issue dependency graph (Step 3b)
-3. Execute issue pipelines (Step 4) — issues within the milestone run in parallel via Agent tool
-4. Process issue results (Step 4c)
-5. Run milestone completion (Step 8) if all issues done
-6. Check if any Layer N+1 milestones are now unblocked → continue to next layer
+1. **Auto-merge prerequisite milestone PRs** (skip if `--no-auto-merge` is set):
+   If the milestone has `depends_on` entries, merge unmerged PRs from prerequisite milestones before launching this milestone's issues. This ensures the dependent milestone branches from a main branch that includes all prerequisite work.
+
+   For each prerequisite milestone ID in `depends_on`:
+   a. Collect all PRs from the prerequisite milestone's issues:
+      ```bash
+      PREREQ_PRS=$(yq eval "
+        .epic.milestones[] | select(.id == \"$DEP_MS_ID\") |
+        .issues[].pr | select(. != null)
+      " .ratchet/plan.yaml)
+      ```
+   b. For each PR, check merge status:
+      ```bash
+      PR_STATE=$(gh pr view "$PR_NUM" --json state --jq '.state')
+      ```
+   c. Collect unmerged PRs (state is `OPEN`, not `MERGED` or `CLOSED`):
+      ```bash
+      if [ "$PR_STATE" = "OPEN" ]; then
+        # Check if all CI checks pass (gh pr checks --json returns array of {name, state, ...})
+        CHECKS_JSON=$(gh pr checks "$PR_NUM" --json name,state 2>/dev/null || echo "[]")
+        CHECKS_STATUS=$(echo "$CHECKS_JSON" | jq -r '
+          if length == 0 then "unknown"
+          elif all(.state == "SUCCESS") then "passing"
+          else "failing"
+          end
+        ')
+        UNMERGED_PRS+=("$PR_NUM:$CHECKS_STATUS")
+      fi
+      ```
+
+   d. **If no unmerged PRs** (all prerequisite PRs already merged or no PRs exist): skip to step 2 — no action needed.
+
+   e. **If unmerged PRs exist**:
+
+      **In supervised mode**: present `AskUserQuestion`:
+      ```
+      Milestone [current milestone name] depends on milestone [dep milestone name],
+      which has [N] unmerged PR(s): [PR list with check status].
+
+      Merge them before starting [current milestone name]?
+      ```
+      Options:
+      - `"Merge all passing PRs (Recommended)"` — merge PRs whose CI checks pass
+      - `"Merge all PRs regardless of checks"` — force merge (user takes responsibility)
+      - `"Skip — use stacked branch fallback"` — fall through to Step 4b branch base resolution, which branches from the prerequisite's branch instead of main
+      - `"Abort"` — stop execution
+
+      **In unsupervised mode**: auto-merge PRs if all CI checks pass. If any PR has failing checks, skip auto-merge for that PR and fall through to the stacked branch fallback (Step 4b branch base resolution for dependent issues).
+
+   f. **Merge execution** (for each PR selected for merging):
+      Note: `gh pr merge` is a GitHub API operation (remote merge), NOT a local `git merge`. The TOOL GATE prohibition on `git merge` does not apply — `gh pr merge` is a GitHub CLI operation that the orchestrator is permitted to run (same as `gh pr view`, `gh pr create`).
+      ```bash
+      gh pr merge "$PR_NUM" --merge 2>&1
+      MERGE_EXIT=$?
+      if [ $MERGE_EXIT -ne 0 ]; then
+        echo "Warning: Failed to merge PR #${PR_NUM}" >&2
+        MERGE_FAILURES+=("$PR_NUM")
+      fi
+      ```
+
+   g. **After successful merges**: update the local base so new worktrees branch from the updated main:
+      ```bash
+      git fetch origin main --quiet
+      ```
+
+   h. **On merge failure** (conflicts, failing CI, permission errors): do NOT halt. Log the failure and fall through to the stacked branch fallback — Step 4b's branch base resolution will branch dependent issues from the prerequisite's branch instead of main. This is the existing fallback behavior for Layer 1+ issues.
+
+      ```
+      Warning: Could not merge PR #[N] from prerequisite milestone [dep].
+      Falling through to stacked branch — dependent issues will branch from
+      the prerequisite branch instead of main.
+      ```
+
+2. Set milestone to `status: in_progress` in plan.yaml
+3. Build issue dependency graph (Step 3b)
+4. Execute issue pipelines (Step 4) — issues within the milestone run in parallel via Agent tool
+5. Process issue results (Step 4c)
+6. Run milestone completion (Step 8) if all issues done
+7. Check if any Layer N+1 milestones are now unblocked → continue to next layer
 
 **When all milestones across all layers are done** → epic complete, proceed to Step 10.
 

@@ -15,6 +15,7 @@ When `--unsupervised` is set, the run loop executes the entire plan (all milesto
 - **Step 1a (workspace)**: If at workspace root with no workspace specified, **halt** — unsupervised mode requires an explicit workspace target (`/ratchet:run --unsupervised monitor`). Auto-selecting a workspace is too risky.
 - **Step 1c (orphan detection)**: Auto-select based on finding age: Abandon for stale items (>24h or unknown age), Resume for recent items (<4h), Ignore for ambiguous (4-24h). See Step 1c in SKILL.md for the full decision matrix.
 - **Step 2 (focus)**: Auto-select "Run all ready issues sequentially" for the current milestone. When a milestone completes, auto-advance to the next. In DAG mode, auto-launch all ready milestones in parallel.
+- **Step 3c (auto-merge prerequisite PRs)**: Auto-merge prerequisite milestone PRs if all CI checks pass. If any PR has failing checks, skip that PR and fall through to the stacked branch fallback (Step 4b). If `--no-auto-merge` is set, skip the entire auto-merge step.
 - **Step 4 (issue pipelines)**: Execute all ready issues sequentially inline. Each issue pipeline runs in an isolated worktree, spawning only debate-runner agents.
 - **Step 5-dry (dry-run)**: Dry-run takes precedence — produce the preview (including token and cost estimates), log the estimates to stdout, and stop. No agents are spawned. The `AskUserQuestion` confirmation is skipped (estimates are informational only).
 - **Step 5c (pre-debate guards)**: If a blocking pre-debate guard fails → auto-select "Fix and re-run". The generative agent attempts to fix the issue. If the fix fails after 2 attempts, that issue **halts** (other issues continue).
@@ -82,4 +83,5 @@ Unsupervised run [completed|paused]:
 - `--unsupervised --dry-run`: Dry-run takes precedence (preview only, no execution)
 - `--go --no-cache`: Combines `--go` with `--no-cache` (force re-debate, unsupervised, auto-PR)
 - `--go --all-files`: Combines `--go` with `--all-files` (all pairs, unsupervised, auto-PR)
+- `--unsupervised --no-auto-merge`: Skip auto-merging prerequisite milestone PRs. Dependent milestones will use the stacked branch fallback (branching from prerequisite branches instead of main).
 - `--quick "<description>"`: Compatible with `--unsupervised`. In unsupervised mode, if component auto-detection fails, Mode Q halts with error (no interactive fallback). If a blocking guard fails, Mode Q halts with status `failed` (no retry). Combinable with `--auto-pr` to auto-create a branch and PR from the quick-fix commit.
