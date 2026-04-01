@@ -142,18 +142,40 @@ Workspaces are fully autonomous — they never share pairs, guards, or plans. Th
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/ratchet:init` | Analyze project, interview human, generate workflow config and agent pairs |
-| `/ratchet:run` | Execute phase-gated debates — the core workflow (flags: `--quick`, `--here`, `--go`, `--dry-run`, `--unsupervised`, `--auto-pr`) |
-| `/ratchet:status` | Milestone and phase progress snapshot |
-| `/ratchet:pair [name]` | Add a new agent pair |
-| `/ratchet:guard` | Manage deterministic checks (list, add, run, override) |
-| `/ratchet:debate [id]` | View or continue an ongoing debate |
-| `/ratchet:verdict [id]` | Human-in-the-loop: cast deciding vote on escalated debate |
-| `/ratchet:score [pair]` | Quality metrics and trends |
-| `/ratchet:tighten [pair\|pr N]` | Analyze all improvement signals and sharpen the system — pair prompts, guards, workflow config |
-| `/ratchet:watch` | Watch active PRs for merge conflicts, CI failures, and review comments |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `/ratchet:init` | | Analyze project, interview human, generate workflow config and agent pairs |
+| `/ratchet:run` | `/rr` | Execute phase-gated debates — the core workflow |
+| `/ratchet:status` | `/rrs` | Milestone and phase progress snapshot |
+| `/ratchet:tighten [pair\|pr N]` | `/rrt` | Analyze all improvement signals and sharpen the system |
+| `/ratchet:pair [name]` | | Add a new agent pair |
+| `/ratchet:guard` | | Manage deterministic checks (list, add, run, override) |
+| `/ratchet:debate [id]` | | View or continue an ongoing debate |
+| `/ratchet:verdict [id]` | | Human-in-the-loop: cast deciding vote on escalated debate |
+| `/ratchet:score [pair]` | | Quality metrics and trends |
+| `/ratchet:watch` | | Watch active PRs for merge conflicts, CI failures, and review comments |
+| `/ratchet:sidequest` | | Log discoveries and sidequests during active work |
+| `/ratchet:statusline` | | Configure the Ratchet status line in Claude Code |
+| `/ratchet:update` | | Update Ratchet framework to the latest version |
+
+**`/ratchet:run` flags:**
+
+```
+/ratchet:run                         # Resume from epic — propose next focus
+/ratchet:run [pair-name]             # Run a specific pair against its scoped files
+/ratchet:run [workspace]             # Target a specific workspace
+/ratchet:run --milestone <id>        # Run a single milestone's pipeline
+/ratchet:run --issue <ref>           # Run a single issue's pipeline
+/ratchet:run --all-files             # Run all pairs against all files in scope
+/ratchet:run --no-cache              # Force re-debate even if files haven't changed
+/ratchet:run --no-auto-merge         # Disable auto-merging of prerequisite PRs
+/ratchet:run --dry-run               # Preview what would run without executing
+/ratchet:run --quick "<description>" # Quick-fix: skip plan, single generative pass
+/ratchet:run --here                  # In-session execution, no worktree isolation
+/ratchet:run --unsupervised          # End-to-end without human intervention
+/ratchet:run --auto-pr               # Auto-create PRs per issue
+/ratchet:run --go                    # Shorthand for --unsupervised --auto-pr
+```
 
 ## Workflow
 
@@ -373,7 +395,7 @@ Guards can declare: requires: [postgres, redis]
 ```
 ```
 
-The `/ratchet:run` skill uses a modular architecture — mode specs (`modes/quick-fix.md`, `modes/here.md`, `modes/epic-guided.md`, `modes/dry-run.md`) and pipeline modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean (~500 lines, ~6k tokens).
+The `/ratchet:run` skill uses a modular architecture — mode specs (`modes/quick-fix.md`, `modes/here.md`, `modes/epic-guided.md`, `modes/dry-run.md`) and pipeline modules (`issue-pipeline.md`, `unsupervised.md`, `pr-body.md`, `plan-tracking-format.md`) are loaded only when needed, keeping the base skill lean (~500 lines, ~3k tokens). The full skill with all modules loaded is ~1,500 lines/~7.5k tokens.
 
 ### Key Agents
 
@@ -472,7 +494,8 @@ resources:
 ├── escalations/         # Tiebreaker rulings for precedent lookup              (.gitignore)
 ├── reports/             # Tighten reports and health assessments               (.gitignore)
 ├── progress/            # Local progress tracking (markdown adapter)           (.gitignore)
-└── scores/              # Historical quality metrics (includes fast-path data) (.gitignore)
+├── scores/              # Historical quality metrics (includes fast-path data) (.gitignore)
+└── archive/             # Archived epic and plan history
 ```
 
 ## Progress Tracking
