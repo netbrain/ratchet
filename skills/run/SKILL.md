@@ -227,6 +227,27 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 
 ## Execution Steps
 
+### Conventions
+
+**Sync convention**: After any `plan.yaml` state change, sync the plan tracking issue (non-blocking, warn on failure):
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+fi
+```
+All subsequent references to "Sync plan tracking issue" mean: run the sync convention above.
+
+**yq convention**: Use `yq eval -i` via Bash for all `plan.yaml` mutations. The agent knows yq — concise instructions like "Set issue status to `done` in plan.yaml" are sufficient. One full example for reference (issue ref promotion with depends_on rewrite):
+```bash
+OLD_REF="$ISSUE_REF"
+NEW_REF="$ISSUE_NUM"
+# Rewrite ref
+yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$OLD_REF\")).ref = \"$NEW_REF\"" .ratchet/plan.yaml
+# Rewrite depends_on references across all issues in this milestone
+yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[].depends_on) |= map(select(. == \"$OLD_REF\") = \"$NEW_REF\" // .)" .ratchet/plan.yaml
+```
+
 ### Progress Tracking via TodoWrite
 
 Use `TodoWrite` to give the user a real-time progress checklist during pipeline execution. TodoWrite **replaces** the full list on every call (it is not incremental), so always include all items with their current statuses.
@@ -367,7 +388,7 @@ For `"unknown"` age, treat as stale (auto-select Abandon in unsupervised mode).
 
 | Finding type | Abandon action |
 |---|---|
-| `stale_issue` | `yq eval -i '(.epic.milestones[].issues[] \| select(.ref == "REF")).status = "pending"' .ratchet/plan.yaml` — also reset `phase_status` entries that were `in_progress` back to `pending` |
+| `stale_issue` | Set issue status to `pending` in plan.yaml. Also reset any `phase_status` entries that were `in_progress` back to `pending`. |
 | `unresolved_debate` | `rm -rf .ratchet/debates/<debate-id>` |
 | `orphan_worktree` | `git worktree remove .claude/worktrees/<name> 2>/dev/null \|\| git worktree remove --force .claude/worktrees/<name>` |
 | `incomplete_execution` | `rm -f .ratchet/executions/<exec-id>.yaml` |
@@ -581,13 +602,7 @@ fi
 ```
 This is safe because `/ratchet:score` persists metrics as a moving average in `.ratchet/scores.yaml` (Step 2b of the score skill) — archiving debates does not lose score history.
 
-Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync the tracking issue:
-```bash
-if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-fi
-```
+Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync plan tracking issue.
 
 **Otherwise** (milestones remain):
 
@@ -640,17 +655,8 @@ Options:
 - `retro_type: "skipped-finding"` → present to user for decision (apply now or defer)
 - No `retro_type` with `issue_ref` set (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase
 - No `retro_type` with `issue_ref: null` (manual discovery with no issue context) → cannot process directly, inform user: "This discovery has no linked issue. Promote it to an issue first, or dismiss it." Then re-present the action selector without the "Process now" option.
-- Mark each processed discovery `status: "done"` in `plan.yaml`:
-  ```bash
-  yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"done\"" .ratchet/plan.yaml
-  ```
-- Sync plan tracking issue after discovery status change:
-  ```bash
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-  fi
-  ```
+- Set discovery status to `done` in plan.yaml.
+- Sync plan tracking issue.
 
 **Action: Promote to issue** — converts a discovery into a full plan.yaml issue:
 1. Determine target milestone:
@@ -660,43 +666,14 @@ Options:
 3. Determine pairs:
    - If discovery `pairs` array is non-empty, use those
    - Otherwise, use `AskUserQuestion` to select from available pairs in workflow.yaml
-4. Create the issue entry in plan.yaml:
-   ```bash
-   new_ref="issue-<M>-<N>"
-   yq eval -i "(.epic.milestones[] | select(.id == \"$milestone_id\")).issues += [{
-     \"ref\": \"$new_ref\",
-     \"title\": \"$discovery_title\",
-     \"description\": \"$discovery_description\",
-     \"pairs\": [\"$pair_name\"],
-     \"depends_on\": [],
-     \"phase_status\": {\"plan\": \"pending\", \"test\": \"pending\", \"build\": \"pending\", \"review\": \"pending\", \"harden\": \"pending\"},
-     \"files\": [],
-     \"debates\": [],
-     \"branch\": null,
-     \"pr\": null,
-     \"status\": \"pending\"
-   }])" .ratchet/plan.yaml
-   ```
-5. Update the discovery status and link:
-   ```bash
-   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"promoted\"" .ratchet/plan.yaml
-   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).issue_ref = \"$new_ref\"" .ratchet/plan.yaml
-   ```
-6. Sync plan tracking issue after adding the new issue:
-   ```bash
-   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-   fi
-   ```
+4. Add a new issue entry to the target milestone in plan.yaml with ref `issue-<M>-<N>`, using the discovery title/description, selected pairs, empty depends_on/files/debates, null branch/pr, and all phase_status fields set to `pending`.
+5. Set the discovery's status to `promoted` and `issue_ref` to the new ref in plan.yaml.
+6. Sync plan tracking issue.
 7. Confirm to user: "Discovery promoted to issue [new_ref] in milestone [milestone_id]. Run /ratchet:run to start working on it."
 
 **Action: Dismiss** — marks a discovery as non-actionable:
 1. Use `AskUserQuestion` (freeform): "Reason for dismissal (optional)"
-2. Update plan.yaml:
-   ```bash
-   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"dismissed\"" .ratchet/plan.yaml
-   ```
+2. Set the discovery's status to `dismissed` in plan.yaml.
 3. Confirm: "Discovery [ref] dismissed."
 
 **Action: Skip for now** — no changes, move to next discovery.
@@ -879,24 +856,10 @@ For each issue in the current ready layer whose `ref` is NOT already a number:
    ```
 
    **Issue descriptions in plan.yaml**: When creating epics and milestones, always include a `description` field on each issue (not just `title`). The description should explain *what* and *why* — enough context for someone reading the GitHub issue to understand the problem and approach without needing plan.yaml.
-2. If creation succeeds: rewrite `ref` to the returned number, update any `depends_on` arrays in the same milestone that referenced the old ref, write plan.yaml
-   ```bash
-   OLD_REF="$ISSUE_REF"
-   NEW_REF="$ISSUE_NUM"
-   # Rewrite ref
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$OLD_REF\")).ref = \"$NEW_REF\"" .ratchet/plan.yaml
-   # Rewrite depends_on references across all issues in this milestone
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[].depends_on) |= map(select(. == \"$OLD_REF\") = \"$NEW_REF\" // .)" .ratchet/plan.yaml
-   ```
+2. If creation succeeds: rewrite the issue `ref` to the returned number and update any `depends_on` arrays in the same milestone that referenced the old ref (see the yq convention example in the Conventions section above).
 3. If creation fails: keep the local ref. Pipeline runs normally — publishing degrades gracefully (no comments posted, but no crash). The ref gets promoted on the next successful run.
 
-Sync the plan tracking issue after all promotions in the layer:
-```bash
-if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-fi
-```
+Sync plan tracking issue after all promotions in the layer.
 
 **Fresh base fetch**: Before spawning any issue agents in a layer, fetch the latest remote state so worktrees branch from the current `origin/main` — not a stale local HEAD:
 ```bash
@@ -1035,13 +998,7 @@ After all issue agents in a layer complete, the orchestrator processes results i
    - Set `debates` (debate IDs created)
    - Write all updates atomically — the orchestrator is the sole writer
 
-4. **Sync plan tracking issue** (if github-issues adapter configured):
-   ```bash
-   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-   fi
-   ```
+4. **Sync plan tracking issue.**
 
 5. **Worktree cleanup**: After committing and pushing, the worktree can be removed. The branch on the remote is the durable deliverable.
    ```bash
@@ -1236,13 +1193,7 @@ After all issues in the milestone are `done`:
 **8a. Mark milestone done:**
 - Set milestone `status: done`, record completion timestamp
 - Update `plan.yaml`
-- Sync plan tracking issue:
-  ```bash
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-  fi
-  ```
+- Sync plan tracking issue.
 
 **[TodoWrite — Milestone Complete]**: After marking the milestone done, update the todo list: set the milestone item to `"completed"`. Remove all issue/phase sub-items for this milestone to keep the list compact. Update the milestone content to include the summary (e.g., `"M2: [name] — 4/4 issues done"`). If other milestones remain, they retain their current statuses.
 
