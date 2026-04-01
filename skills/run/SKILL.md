@@ -250,17 +250,17 @@ Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommend
 
 ### Progress Tracking via TodoWrite
 
-Use `TodoWrite` to give the user a real-time progress checklist during pipeline execution. TodoWrite **replaces** the full list on every call (it is not incremental), so always include all items with their current statuses.
+TodoWrite **replaces** the full list on every call — always include all items with current statuses. The orchestrator maintains a running `todo_items` list in memory, mutates it at each of 7 pipeline boundaries (marked **[TodoWrite]** below), and passes the full list to `TodoWrite`.
 
-**ID convention**: Use hierarchical IDs — `m<N>` for milestones, `m<N>-<ref>` for issues, `m<N>-<ref>-<phase>` for phases.
+**Pattern**: `{id: "<hierarchical-id>", content: "<label>", status: "pending|in_progress|completed"}`
 
-**Status values**: `"pending"`, `"in_progress"`, `"completed"`
+| Level | ID format | Example |
+|---|---|---|
+| Milestone | `m<N>` | `m2` |
+| Issue | `m<N>-<ref>` | `m2-issue32` |
+| Phase | `m<N>-<ref>-<phase>` | `m2-issue32-build` |
 
-**Schema note**: The examples below assume a flat list with `id`, `content`, and `status` fields. Verify the actual TodoWrite tool schema in your environment — if it supports nested `children`, you may use hierarchical nesting instead. Adapt the examples accordingly.
-
-**Principle**: Keep items concise — users want a glance, not a wall of text. Include verdict info in completed phases (e.g., `"(ACCEPT R1)"`, `"(CONDITIONAL_ACCEPT R2)"`).
-
-TodoWrite is called at 7 pipeline boundaries (Steps 3b/3c, 4b, 5a, 5e, 5f, 4c, 8). Each callsite below is marked with **[TodoWrite]**. The orchestrator maintains a running `todo_items` list in memory, mutates it at each boundary, and passes the full list to `TodoWrite`.
+Keep items concise. Include verdict info in completed phases (e.g., `"Build phase — ACCEPT R1"`). For solo strategy, suffix with `(solo)` on the issue and use `SOLO PASS/PROMOTED/FAILED` on phases.
 
 ### Step 1: Resolve Workspace and Read Context
 
@@ -491,18 +491,7 @@ If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step
 
 This produces the execution order. Issues within the same layer run in parallel.
 
-**[TodoWrite — Initial Plan]**: After building the issue DAG (and milestone DAG in DAG mode), write the initial todo list showing the full plan. Include all milestones and their issues with current statuses:
-
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
-])
-```
-
-Show all milestones (not just the current one) so the user sees the full roadmap. Mark already-completed milestones/issues as `"completed"`. In DAG mode with parallel milestones (Step 3c), show all ready milestones as `"in_progress"`.
+**[TodoWrite]**: Write initial plan — all milestones and their issues with current statuses. Show the full roadmap; mark completed items `"completed"`, ready milestones `"in_progress"` (DAG mode: all ready milestones).
 
 **Progress tracking**: If a progress adapter is configured (`.ratchet/workflow.yaml` → `progress.adapter`), and this milestone doesn't have a `progress_ref` yet, create a work item:
 ```bash
@@ -747,38 +736,7 @@ Executing issue dependency layer 0 ([N] issues in parallel):
 
 After Layer 0 completes, the orchestrator processes results (Step 4c), checks which Layer 1 issues are now unblocked, and launches the next batch.
 
-**[TodoWrite — Issue Starts]**: When launching a layer of issue pipelines, update the todo list: set all issues in the layer to `"in_progress"` and add phase-level items. Include all phases from each issue's workflow:
-
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue32", "content": "[ref]: [title]", "status": "in_progress"},
-  {"id": "m2-issue32-plan", "content": "Plan phase", "status": "completed"},
-  {"id": "m2-issue32-build", "content": "Build phase ([pair-name])", "status": "in_progress"},
-  {"id": "m2-issue32-review", "content": "Review phase", "status": "pending"},
-  {"id": "m2-issue32-harden", "content": "Harden phase", "status": "pending"},
-  {"id": "m2-issue33", "content": "[ref]: [title]", "status": "pending"},
-  {"id": "m3", "content": "M3: [milestone name]", "status": "pending"}
-])
-```
-
-**Solo mode TodoWrite examples**: For issues using `strategy: "solo"`, adapt the content to reflect the single-agent execution (no debate rounds):
-
-```
-TodoWrite([
-  {"id": "m2", "content": "M2: [milestone name]", "status": "in_progress"},
-  {"id": "m2-issue34", "content": "[ref]: [title] (solo)", "status": "in_progress"},
-  {"id": "m2-issue34-build", "content": "Build phase — generative + guards", "status": "in_progress"},
-  {"id": "m2-issue34-review", "content": "Review phase", "status": "pending"}
-])
-```
-
-After solo execution completes, update with the outcome:
-- Pass: `"Build phase — SOLO PASS"` (all guards passed)
-- Promoted: `"Build phase — SOLO PROMOTED"` (guard failed, escalated to debate)
-- Failed: `"Build phase — SOLO FAILED"` (guard failed, no promotion)
-
-Always include all milestones, all issues, and the phase breakdown for all active issues in the layer.
+**[TodoWrite]**: Set launched issues to `"in_progress"`, add phase-level items with pair names. Include all milestones, all issues, and phase breakdown for active issues.
 
 **Note on worktree management (dual-path approach)**:
 - **Layer 0 issues**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository branched from `origin/main`. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
@@ -866,7 +824,7 @@ After all issue agents in a layer complete, the orchestrator processes results i
 
 7. Report progress after each layer: `"Layer [N] complete: [N]/[total] issues done in milestone [id]"`
 
-**[TodoWrite — Issue Complete]**: After recording the issue result, update the todo list: set the issue item to `"completed"` and update its content to include the progress count (e.g., `"[ref]: [title] (2/4 issues done)"`). Remove the phase sub-items for the completed issue to keep the list concise. If the issue halted, keep its status as `"in_progress"` and append the halt reason in the content (e.g., `"[ref]: [title] -- BLOCKED: guard failure"`). Note: TodoWrite has no `"blocked"` status; `"in_progress"` is the closest approximation for halted issues — the content string communicates the actual state.
+**[TodoWrite]**: Set completed issue to `"completed"` with progress count, remove its phase sub-items. Halted issues stay `"in_progress"` with halt reason in content.
 
 **CRITICAL**: This plan.yaml update is not optional. The orchestrator is the authoritative writer for all issue state.
 
@@ -954,7 +912,7 @@ After all issues in the milestone are `done`:
   fi
   ```
 
-**[TodoWrite — Milestone Complete]**: After marking the milestone done, update the todo list: set the milestone item to `"completed"`. Remove all issue/phase sub-items for this milestone to keep the list compact. Update the milestone content to include the summary (e.g., `"M2: [name] — 4/4 issues done"`). If other milestones remain, they retain their current statuses.
+**[TodoWrite]**: Set milestone to `"completed"` with summary (e.g., `"M2: [name] — 4/4 issues done"`), remove its issue/phase sub-items.
 
 **8b. Progress tracking:**
 - If adapter configured: update milestone status, close the item
