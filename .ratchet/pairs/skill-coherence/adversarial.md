@@ -58,6 +58,8 @@ The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION co
 - [ ] **Data flow completeness**: For input-gathering skills, verify every AskUserQuestion maps to a stored field, no orphan fields. Run: `grep -c 'AskUserQuestion' skills/*/SKILL.md`
 - [ ] **Canonical schema reference**: When unifying a data structure across skills, verify a canonical field list was created FIRST
 - [ ] **Concrete examples required**: Any instruction involving file format manipulation, tool usage, or conditional logic must show concrete examples
+- [ ] **Stale field name sweep after schema renames**: When a schema field is renamed or restructured, grep all SKILL.md files and agent definitions for the old field name in prose, examples, and inline YAML/JSON snippets. Run: `grep -rn 'old_field_name' skills/*/SKILL.md agents/*.md`
+      Source: skill-coherence-20260331T071924 conditional accept (stale field names in explanatory text after schema change)
 
 ## Baseline Validation State (Injected at Spawn Time)
 

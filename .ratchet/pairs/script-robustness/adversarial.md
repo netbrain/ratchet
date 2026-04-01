@@ -91,6 +91,10 @@ The debate-runner appends GUILTY UNTIL PROVEN INNOCENT and WORKTREE ISOLATION co
 **Examples must be runnable:**
 - [ ] Usage examples must be concrete and runnable, not abstract
 
+**Parallel guard contention:**
+- [ ] When reviewing guard execution scripts, verify flock/locking behavior under parallel execution. Test concurrent guard runs do not corrupt shared state. Run: `grep -n 'flock' scripts/**/*.sh`
+      Source: script-robustness-20260331T071459 review suggestion
+
 ## Baseline Validation State (Injected at Spawn Time)
 
 See debate-runner agent definition for baseline injection mechanism and usage rules.

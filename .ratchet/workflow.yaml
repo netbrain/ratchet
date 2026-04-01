@@ -20,18 +20,23 @@ components:
   - name: skills
     scope: "skills/*/SKILL.md"
     pipeline: review
+    strategy: debate
 
   - name: agents
     scope: "agents/*.md"
     pipeline: review
+    strategy: debate
 
   - name: scripts
     scope: "scripts/**/*.sh,install.sh"
     pipeline: review
+    strategy: debate
 
   - name: schemas
     scope: "schemas/*.json"
     pipeline: review
+    strategy: solo
+    promote_on_guard_failure: true
 
 pairs:
   - name: skill-coherence
@@ -63,14 +68,14 @@ guards:
     command: "bash scripts/check-generated-files.sh"
     phase: review
     blocking: true
-    timing: pre-debate
+    timing: pre-execution
     components: [skills, agents, scripts, schemas]
 
   - name: shellcheck
     command: "nix develop --command shellcheck scripts/**/*.sh install.sh"
     phase: review
     blocking: true
-    timing: pre-debate
+    timing: pre-execution
     components: [scripts]
 
   - name: schema-valid
@@ -90,7 +95,7 @@ guards:
       fi
     phase: review
     blocking: true
-    timing: post-debate
+    timing: post-execution
     components: [schemas]
 
   - name: meta-json-valid
@@ -111,5 +116,44 @@ guards:
       exit $failed
     phase: review
     blocking: false
-    timing: post-debate
+    timing: post-execution
+    components: [skills, agents, scripts, schemas]
+
+  - name: debate-artifacts-complete
+    type: rationalization-check
+    phase: review
+    blocking: false
+    timing: post-execution
+    components: [skills, agents, scripts, schemas]
+    checks:
+      - assert: "All referenced debate IDs have artifact directories"
+        command: |
+          missing=0
+          for id in $(yq -r '.. | .debates[]? // empty' .ratchet/plan.yaml 2>/dev/null); do
+            [ -z "$id" ] && continue
+            if [ ! -d ".ratchet/debates/$id" ] && ! find .ratchet/archive -name "$id" -type d 2>/dev/null | grep -q .; then
+              echo "MISSING debate artifacts: $id" >&2; missing=1
+            fi
+          done
+          exit $missing
+      - assert: "Active debates have resolved timestamps"
+        command: |
+          for f in .ratchet/debates/*/meta.json; do
+            [ -f "$f" ] || continue
+            resolved=$(jq -r '.resolved // "null"' "$f")
+            [ "$resolved" != "null" ] || { echo "UNRESOLVED: $f" >&2; exit 1; }
+          done
+
+  - name: plan-valid
+    command: |
+      if [ -f ".ratchet/plan.yaml" ] && [ -f "schemas/plan.schema.json" ]; then
+        if command -v check-jsonschema >/dev/null 2>&1; then
+          yq -o json ".ratchet/plan.yaml" | check-jsonschema --schemafile "schemas/plan.schema.json" -
+        else
+          echo "Warning: check-jsonschema not available, skipping plan validation" >&2
+        fi
+      fi
+    phase: review
+    blocking: false
+    timing: post-execution
     components: [skills, agents, scripts, schemas]

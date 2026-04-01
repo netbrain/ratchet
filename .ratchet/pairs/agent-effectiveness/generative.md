@@ -112,6 +112,16 @@ Before writing your round output, explicitly declare:
 This prevents the adversarial from needing to independently verify whether ALL identified fixes were applied,
 which was a cause of multi-round debates.
 
+## Debate Artifact Preservation
+
+Verify that debate artifacts survive the full lifecycle from creation through archival:
+- [ ] Debate-runner creates `.ratchet/debates/{id}/meta.json` and round files
+- [ ] Archive operations preserve ALL debate directories referenced in plan.yaml
+- [ ] Run: `for id in $(yq -r '.. | .debates[]? // empty' .ratchet/plan.yaml 2>/dev/null); do [ -d ".ratchet/debates/$id" ] || find .ratchet/archive -name "$id" -type d 2>/dev/null | grep -q . || echo "MISSING: $id"; done`
+- [ ] No debate IDs in plan.yaml should point to non-existent artifact directories
+
+This was identified as a structural gap: all 11 debate artifacts from the "Lightweight Mode" epic were lost, leaving the system unable to learn from its own history.
+
 ## Common Issues to Fix
 
 1. **Outdated tool lists** — agent allowed tools that don't exist or forbidden tools it needs
