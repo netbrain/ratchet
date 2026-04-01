@@ -235,6 +235,17 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
     components: []  # all components
   ```
   Present this as: "I'll include the built-in generated-files guard — it prevents committing build artifacts like [stack-specific examples based on project.yaml, e.g., '*_templ.go files' for Go, 'node_modules/' for Node]."
+- **Suggest stale-base guard for projects with issue dependencies**: If the plan uses `depends_on` between issues, suggest the stale-base guard. Present it as a commented-out example that users can enable:
+  ```yaml
+  # Uncomment to enable stale-base detection (catches missing dependency changes):
+  # - name: stale-base
+  #   command: "bash scripts/check-stale-base.sh --issue \"$RATCHET_ISSUE_REF\" --plan .ratchet/plan.yaml --worktree \"$RATCHET_WORKTREE\""
+  #   phase: review
+  #   blocking: true
+  #   timing: pre-execution
+  #   components: []  # all components
+  ```
+  The `$RATCHET_ISSUE_REF` and `$RATCHET_WORKTREE` variables are substituted by the run skill at invocation time with the current issue reference and worktree path. This guard runs before debates start to catch stale-base conditions early — preventing wasted debate cycles on a branch missing dependency changes.
 - **Start from CI**: For each quality gate command discovered in CI/CD pipelines during the codebase scan (Step 2), propose a matching guard. The goal is that every check CI runs should have a corresponding Ratchet guard so debates never produce code that will fail the pipeline. Present these as: "I found these checks in your CI pipeline — I'll mirror them as guards:"
   - Map CI steps to guard properties: lint/format commands → `timing: pre-debate`, `phase: build`, `blocking: true`; test commands → `timing: post-debate`, `phase: build`, `blocking: true`; security scans → `timing: post-debate`, `phase: harden`, `blocking: true`; type checks → `timing: pre-debate`, `phase: build`, `blocking: true`
 - **Then suggest additions**: Based on the stack, suggest guards for checks that CI *doesn't* run but should (e.g., "Your CI doesn't run a security scanner — want to add one as an advisory guard?")
