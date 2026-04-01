@@ -8,17 +8,11 @@
 
 ### Step 5: Issue Pipeline (executed per-issue in isolated worktrees)
 
-This is the phase-gated loop for a single issue. Each issue runs as a separate agent spawned by Step 4b, with its own git worktree via `isolation: "worktree"`.
-
 **Execution context:**
-- Spawned by Step 4b as a parallel Agent invocation (one per issue in the current layer)
-- Runs in an isolated git worktree (provided by `isolation: "worktree"`)
-- Execution strategy depends on the component's `strategy` field:
-  - `debate` (default): spawns debate-runner agents at Step 5e
-  - `solo`: spawns generative agent directly at Step 5e-solo, skipping the debate-runner
-- Returns a structured completion summary (Step 5h) — does NOT write plan.yaml (the parent orchestrator handles that in Step 4c)
-
-The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on the component's `pipeline` preset), then returns control to Step 4c for state persistence.
+- Spawned by Step 4b in an isolated git worktree (one per issue, parallel)
+- Strategy: `debate` (default, spawns debate-runner at 5e) or `solo` (generative agent at 5e-solo)
+- Returns structured completion summary (Step 5h) — does NOT write plan.yaml
+- Phases run sequentially per `pipeline` preset, then returns to Step 4c
 
 #### 5a. Determine Current Phase and Match Pairs
 
@@ -53,65 +47,17 @@ Use `--no-cache` flag to skip this check and force re-debate.
 
 #### Shared Resources
 
-Guards can declare `requires: [resource-name]` referencing shared resources defined in workflow.yaml. Resources are infrastructure dependencies (databases, test servers, etc.) that need provisioning and optionally singleton access.
+Guards can declare `requires: [resource-name]` referencing shared resources defined in workflow.yaml (databases, test servers, etc.).
 
-**Resource lifecycle:**
-1. **Provision** — before a guard runs, start any required resources that aren't already running
-2. **Lock + Run** — if a resource is `singleton: true`, wrap the guard command with `flock` so the lock auto-releases when the command finishes (or crashes)
-3. **Teardown** — after all pipelines complete, run `stop` commands for resources that have them
+**Lifecycle:** Provision (run idempotent `start` command, track in `.ratchet/locks/resources.json`) → Lock + Run (if `singleton: true`, wrap with `flock` on `.ratchet/locks/<resource-name>.lock` — kernel auto-releases on exit/crash) → Teardown (Step 9 runs `stop` commands, removes `.ratchet/locks/`).
 
-**Provisioning**: run the resource's `start` command. Start commands must be idempotent (e.g., `docker compose up -d postgres` is safe to run multiple times). Track started resources in `.ratchet/locks/resources.json`:
-```json
-{"postgres": {"started": true, "pid": "$$", "at": "<ISO>"}}
-```
+**Singleton locking**: `flock` on `.ratchet/locks/<resource-name>.lock`. Multiple singletons: acquire locks in alphabetical order to prevent deadlocks.
 
-**Singleton locking**: uses `flock` — kernel-level file locking in `.ratchet/locks/` (shared across worktrees since they share the same host filesystem). The lock is tied to the file descriptor, so the kernel automatically releases it when the process exits — even on crash or SIGKILL. No stale locks, no timeouts, no cleanup needed.
+#### Guard Execution Pattern
+
+All guard invocations (pre-execution, post-execution, solo mode) use this pattern:
 
 ```bash
-# Create lock file (once, idempotent)
-mkdir -p .ratchet/locks
-touch .ratchet/locks/<resource-name>.lock
-
-# Run the guard command under flock — blocks until lock acquired, auto-releases on exit
-flock .ratchet/locks/<resource-name>.lock bash -c '<guard-command>'
-```
-
-When multiple singleton resources are required, acquire all locks in alphabetical order to prevent deadlocks:
-```bash
-flock .ratchet/locks/db.lock flock .ratchet/locks/playwright.lock bash -c '<guard-command>'
-```
-
-**Example config:**
-```yaml
-resources:
-  - name: postgres
-    start: "docker compose up -d postgres"
-    stop: "docker compose down postgres"
-    singleton: true       # only one pipeline's tests hit the DB at a time
-
-  - name: redis
-    start: "docker compose up -d redis"
-    singleton: false      # shared freely — no locking
-
-guards:
-  - name: integration-tests
-    command: "npm run test:integration"
-    phase: build
-    blocking: true
-    requires: [postgres, redis]    # postgres is flock'd, redis just starts
-```
-
-**Teardown** (Step 9 — after all pipelines complete): for each resource with a `stop` command, run it. Remove `.ratchet/locks/` directory.
-
-#### 5c. Pre-Execution Guards
-
-Run guards where `timing: "pre-execution"` (or the deprecated alias `"pre-debate"`) for the current phase. Guards without a `timing` field are treated as `post-execution` (backward compatible).
-
-**If the guard has `requires`**: provision required resources (run `start` if not already running). For singleton resources, wrap the guard command with `flock` — the lock auto-releases when the command exits.
-
-For each pre-execution guard assigned to the current phase:
-```bash
-# Verify guard script exists before running
 test -f .claude/ratchet-scripts/run-guards.sh \
   || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
 
@@ -121,6 +67,14 @@ bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "
 # With singleton resources (e.g., requires: [postgres]):
 flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
 ```
+
+All subsequent guard steps reference this pattern rather than repeating it.
+
+#### 5c. Pre-Execution Guards
+
+Run guards where `timing: "pre-execution"` (or the deprecated alias `"pre-debate"`) for the current phase. Guards without a `timing` field are treated as `post-execution` (backward compatible).
+
+For each pre-execution guard assigned to the current phase, run the **Guard Execution Pattern** (see Shared Resources section). Provision any `requires` resources first; wrap singletons with `flock`.
 
 - If a **blocking** pre-execution guard fails:
   - **Guilty until proven innocent**: This failure is caused by the current issue's changes unless proven otherwise. Before dismissing as pre-existing, verify on clean master:
@@ -148,11 +102,7 @@ For each matched pair, prepare the context for the execution agent (debate-runne
    - If phase > test: read test file locations
    - Collect any unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: Pair-level overrides take precedence over global. For debate mode, pass resolved `generative`, `adversarial`, and `tiebreaker` models. For solo mode, only `generative` is needed.
-5. **Resolve progress_ref for publish hook** (debate mode only): The issue's `ref` is the canonical identity. If `ref` is numeric (i.e., a promoted GitHub issue number), use it directly as `progress_ref`. If `ref` is a local string (not yet promoted), pass `null` — publishing degrades gracefully.
-   ```
-   progress_ref = ref if ref is numeric, else null
-   ```
-   Pass `progress_ref` to the debate-runner so it writes it into `meta.json` at debate creation (Step 1) — before any round files trigger the publish hook. For solo mode, `progress_ref` is not used (no debate meta.json).
+5. **Resolve progress_ref** (debate mode only): `progress_ref = ref if numeric, else null`. Must be written into `meta.json` at debate creation (before round files trigger the publish hook).
 
 #### 5e. Execute Phase (Strategy Branch)
 
@@ -167,122 +117,26 @@ Both paths converge at **Step 5f** (Phase Gate — Guards and Advance).
 
 #### 5e-solo. Solo Execution (strategy: "solo")
 
-Solo mode skips the debate-runner entirely. A single generative agent executes the phase, then post-execution guards serve as the quality gate.
+A single generative agent executes the phase; post-execution guards serve as the quality gate. Runs in the issue's isolated worktree (same constraints as debate mode).
 
-**Same worktree isolation constraints as debate mode** — the solo agent runs in the issue's isolated worktree (from Step 4b's `isolation: "worktree"`). It may only modify files within the worktree.
+**1. Create execution log** in `.ratchet/executions/<pair-name>-<timestamp>.yaml` with fields: `id`, `mode: solo`, `component`, `issue`, `started`, `resolved: null`, `guard_results: []`, `promoted: false`, `promotion_reason: null`, `debate_id: null`, `files_modified: []`, `token_estimate: null`.
 
-**1. Create execution log entry:**
-```bash
-EXEC_ID="<pair-name>-$(date +%Y%m%dT%H%M%S)"
-mkdir -p .ratchet/executions
-cat > ".ratchet/executions/${EXEC_ID}.yaml" <<EOF
-id: "${EXEC_ID}"
-mode: solo
-component: <component-name>
-issue: "<issue-ref>"
-started: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-resolved: null
-guard_results: []
-promoted: false
-promotion_reason: null
-debate_id: null
-files_modified: []
-token_estimate: null
-EOF
-```
+**2. Spawn generative agent** (resolved `generative` model). Tools: Read, Grep, Glob, Bash, Write, Edit (same as debate-mode generative). Receives: phase, pair definition (`generative.md`), worktree path, milestone/issue context, files in scope, plan/test output if applicable. Includes the "Guilty Until Proven Innocent" principle.
 
-**2. Spawn generative agent directly:**
+**3. Process result:** Collect `files_modified` via `git diff --name-only` (staged + unstaged + untracked). Update execution log with `files_modified` and `resolved` timestamp.
 
-Spawn a single generative agent (using the resolved `generative` model) with the build-phase prompt. The generative agent receives the same context as in debate mode (files in scope, plan/test phase output, etc.) but WITHOUT an adversarial counterpart.
+**4. Run post-execution guards** using the **Guard Execution Pattern**. Record each result in the execution log's `guard_results` array.
 
-**Tool boundaries for solo generative agent:**
-- tools: Read, Grep, Glob, Bash, Write, Edit
-- Same as debate-mode generative agent — the only difference is no adversarial review
+**5. Handle guard results:**
 
-The generative agent receives:
-```
-Execute [phase] for pair [pair-name] (solo mode — no adversarial review).
+| Condition | Action |
+|-----------|--------|
+| All guards pass | Log complete, proceed to Step 5f |
+| Blocking guard fails + `promote_on_guard_failure: true` | Set `promoted: true`, `mode: "promoted"` in log. Fall through to Step 5e-debate for review-only debate on the solo output. Reference `execution_id` in debate `meta.json` |
+| Blocking guard fails + no promotion (default) | Return failure → Step 5h. In supervised mode: AskUserQuestion with fix/override/cancel options |
+| Advisory guard fails | Log and continue |
 
-PRINCIPLE — Guilty Until Proven Innocent:
-  New changes are GUILTY until proven innocent. Test failures on a PR
-  branch are CAUSED by the PR unless definitively proven otherwise.
-
-Pair definition:
-  Generative: .ratchet/pairs/<name>/generative.md
-
-Context:
-  Worktree: [absolute path]
-  Phase: [current phase]
-  Milestone: [id, name, description]
-  Issue: [issue ref]
-  Files in scope: [matched file list]
-  Plan phase output: [path, if phase > plan]
-  Test phase output: [paths, if phase > test]
-```
-
-**3. Process solo result:**
-
-After the generative agent returns, collect `files_modified` from the worktree:
-```bash
-# Capture modified files
-FILES_MODIFIED=$(git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
-```
-
-Update the execution log with `files_modified` and `resolved` timestamp:
-```bash
-yq eval -i ".resolved = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" ".ratchet/executions/${EXEC_ID}.yaml"
-yq eval -i ".files_modified = [$(echo "$FILES_MODIFIED" | sed 's/.*/"&"/' | paste -sd,)]" ".ratchet/executions/${EXEC_ID}.yaml"
-```
-
-**4. Run post-execution guards:**
-
-Run guards where `timing: "post-execution"` (or the deprecated `"post-debate"`, or no timing field) for the current phase. This is the same guard execution as Step 5f, but the outcome handling differs for solo mode:
-
-```bash
-test -f .claude/ratchet-scripts/run-guards.sh \
-  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
-
-bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
-```
-
-Record each guard result in the execution log:
-```bash
-yq eval -i ".guard_results += [{\"name\": \"<guard-name>\", \"passed\": <true|false>, \"reason\": \"<output>\"}]" ".ratchet/executions/${EXEC_ID}.yaml"
-```
-
-**5. Handle guard results (solo-specific branching):**
-
-- **All guards pass** → write execution log as complete, proceed to Step 5f (phase advance):
-  ```
-  Solo execution [EXEC_ID] complete — all guards passed.
-  ```
-
-- **Any blocking guard fails + `promote_on_guard_failure: true`** on the component:
-  - Log the promotion in the execution log:
-    ```bash
-    yq eval -i ".promoted = true" ".ratchet/executions/${EXEC_ID}.yaml"
-    yq eval -i ".promotion_reason = \"guard <guard-name> failed\"" ".ratchet/executions/${EXEC_ID}.yaml"
-    yq eval -i ".mode = \"promoted\"" ".ratchet/executions/${EXEC_ID}.yaml"
-    ```
-  - Log: `"Solo execution promoted to review-only debate: guard [guard-name] failed with promote_on_guard_failure=true"`
-  - **Fall through to Step 5e-debate** — run a review-only debate on the solo agent's output. The debate reviews the already-written code (the generative agent's changes are in the worktree). The debate-runner is spawned with the same context as a normal review-phase debate, plus the guard failure output as additional context.
-  - The debate-runner's `meta.json` should reference the execution log: `"execution_id": "<EXEC_ID>"`
-
-- **Any blocking guard fails + `promote_on_guard_failure: false`** (or not set, default):
-  - Log the failure in the execution log
-  - Return failure — proceed to Step 5h with status `failed`:
-    ```
-    Solo execution [EXEC_ID] failed — blocking guard [guard-name] failed.
-    ```
-  - In supervised mode: use `AskUserQuestion` before returning failure:
-    - Question: "Solo execution guard '[name]' failed: [summary]. No promotion configured."
-    - Options: `"Fix and re-run (Recommended)"`, `"Override guard"`, `"Cancel — skip this phase"`
-
-- **Advisory guard fails** → log and continue (same as debate mode)
-
-**[TodoWrite — Solo Result]**: After processing the solo result, update the phase item's content. For example: `"Build phase — SOLO PASS"` or `"Build phase — SOLO PROMOTED"` or `"Build phase — SOLO FAILED"`.
-
-> **Note:** Solo mode is designed for low-risk, high-confidence changes where adversarial review would be overhead. The `promote_on_guard_failure` flag provides a safety net — if deterministic guards catch a problem, the change is automatically escalated to adversarial review rather than silently failing.
+**[TodoWrite — Solo Result]**: Update phase item content: `"Build phase — SOLO PASS"`, `"SOLO PROMOTED"`, or `"SOLO FAILED"`.
 
 ---
 
@@ -292,11 +146,14 @@ Spawn a **debate-runner** agent for each matched pair. When multiple pairs match
 
 Use `model` set to the resolved `debate_runner` model (defaults to `sonnet`).
 
-**Tool boundaries for the debate-runner agent:**
-- The debate-runner has Write and Edit tools but may ONLY use them for debate artifacts inside `.ratchet/debates/`, `.ratchet/escalations/`, and `.ratchet/reviews/`. It MUST NOT write to any other path — no source code, no tests, no application config.
-- When the debate-runner spawns a **generative agent**, it MUST grant Write and Edit tools (the generative agent is the ONLY role that writes code).
-- When the debate-runner spawns an **adversarial agent**, it MUST NOT grant Write or Edit tools. The adversarial agent is read-only — it reviews, validates, and critiques but never modifies files.
-- When the debate-runner spawns a **tiebreaker agent**, it MUST NOT grant Write or Edit tools. The tiebreaker is read-only — it evaluates arguments and renders a verdict.
+**Tool boundaries:**
+
+| Role | Write/Edit | Scope |
+|------|-----------|-------|
+| Debate-runner | Yes | `.ratchet/{debates,escalations,reviews}/` only |
+| Generative | Yes | Source code, tests, all files |
+| Adversarial | No | Read-only (reviews and critiques) |
+| Tiebreaker | No | Read-only (evaluates and verdicts) |
 
 Each debate-runner receives:
 ```
@@ -347,106 +204,43 @@ Context:
     tiebreaker: [resolved model]
 ```
 
-> **Note:** The `progress_ref` MUST be written into `meta.json` at debate creation (Step 1), before any round files are written. The `publish-debate-hook.sh` PostToolUse hook fires on each round file Write and reads `progress_ref` from meta.json to resolve the GitHub issue to post to. If `progress_ref` is missing at that point, publishing silently fails.
+> **Note:** `progress_ref` must be in `meta.json` before any round files are written — `publish-debate-hook.sh` reads it on each Write to resolve the target GitHub issue.
 
-**If Debate-Runner Cannot Be Spawned**
+**If Debate-Runner Cannot Be Spawned:**
+- **Supervised**: AskUserQuestion with options: `"Wait and retry"`, `"Skip this phase"`, `"Escalate issue for manual resolution"`. Retry: up to 3 attempts with exponential backoff (5s, 10s, 20s).
+- **Unsupervised**: Halt with `blocked` status. Other milestone issues continue; only dependents blocked.
 
-If the Task/Agent tool is unavailable or debate-runner spawning fails (e.g., nesting limits, execution environment constraints):
-
-1. **In supervised mode**: Escalate to human via `AskUserQuestion`:
-   - Question: "Debate-runner unavailable for pair [pair-name] in phase [phase]. How should we proceed?"
-   - Options: `"Wait and retry"`, `"Skip this phase"`, `"Escalate issue for manual resolution"`
-
-2. **In unsupervised mode**: Halt the issue pipeline with status `blocked`:
-   - Reason: "Debate-runner unavailable - quality gate cannot be enforced"
-   - Set issue status to `blocked` in plan.yaml
-   - Other issues in the milestone continue (this issue only blocks its dependents)
-   - Log: "Issue [ref] blocked at phase [phase]: debate-runner tool unavailable. Manual intervention required."
-
-**Retry Logic** (if "Wait and retry" selected):
-- Retry spawning the debate-runner up to 3 times with exponential backoff (5s, 10s, 20s)
-- If all retries fail, escalate to human or halt (depending on mode)
-
-**No Fallback Validation** (debate mode only): When `strategy: "debate"`, the debate-runner is the ONLY acceptable path for quality enforcement. Guards alone are insufficient substitutes for adversarial review. Auto-approval without debate violates the quality contract. For `strategy: "solo"`, guards ARE the quality gate — this is an intentional design choice for low-risk components.
+**No Fallback Validation** (debate mode only): The debate-runner is the ONLY acceptable quality path. No auto-approval without debate. For `strategy: "solo"`, guards ARE the quality gate by design.
 
 #### Handle Debate Results (strategy: "debate" or promoted from solo)
 
 Process each debate-runner result:
 
-- **`verdict: "consensus"` with `verdict_detail: "ACCEPT"` or `verdict_detail: "TRIVIAL_ACCEPT"`**:
-  - Update file-hash cache:
-    ```bash
-    bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>
-    ```
-  - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
+- **`verdict: "consensus"` (ACCEPT, TRIVIAL_ACCEPT, or CONDITIONAL_ACCEPT)**:
+  - Update file-hash cache: `bash .claude/ratchet-scripts/cache-update.sh <pair-name> "<scope-glob>" <debate-id>`
+  - Update issue's `files` array with `files_modified`, append debate ID to `debates`
   - If TRIVIAL_ACCEPT: note `fast_path: true`
-  - Sync plan tracking issue:
-    ```bash
-    if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-      bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-        || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-    fi
-    ```
+  - If CONDITIONAL_ACCEPT: also log `conditions` array in issue metadata for traceability
+  - Sync plan tracking issue (run `sync-plan.sh` if it exists, non-blocking)
 
-- **`verdict: "consensus"` with `verdict_detail: "CONDITIONAL_ACCEPT"`**:
-  - This means the debate-runner resolved conditions internally (generative addressed them, adversarial confirmed in a follow-up round). Treat as consensus with noted conditions:
-    - Update file-hash cache (same as ACCEPT)
-    - Update the issue's `files` array with `files_modified` and append debate ID to `debates`
-    - Log the conditions from the debate result's `conditions` array in the issue's metadata for traceability
-    - Sync plan tracking issue (same as ACCEPT — files/debates updated):
-      ```bash
-      if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-        bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-          || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-      fi
-      ```
+- **`verdict: "escalated"`** (including `escalation_reason: "conditions_unresolved"` when CONDITIONAL_ACCEPT conditions unresolved within max_rounds):
+  - Update issue status in plan.yaml, output early-exit summary (Step 5h), return
 
-- **`verdict: "escalated"` with `escalation_reason: "conditions_unresolved"`**:
-  - CONDITIONAL_ACCEPT conditions were never fully resolved within max_rounds
-  - Follow the same escalation flow as other escalated verdicts (below)
-  - Log: "Debate [id] escalated: CONDITIONAL_ACCEPT conditions unresolved after [N] rounds"
-
-- **`verdict: "escalated"`** (human escalation required):
-  - Update issue status in plan.yaml
-  - Output the early-exit summary (see Step 5h) and return
-
-- **`verdict: "regress"`** (REGRESS):
-  - Handle regression (Step 5g)
+- **`verdict: "regress"`**: Handle regression (Step 5g)
 
 **[TodoWrite — Debate Results]**: After processing each debate result, update the phase item's content to include the verdict. For example: `"Build phase — ACCEPT R1"` or `"Build phase — CONDITIONAL_ACCEPT R2"`. If escalated: `"Build phase — ESCALATED"`. Do not change the phase status yet (that happens in Step 5f).
 
-**IMPORTANT**: Do NOT run debates yourself. For `strategy: "debate"`, the debate-runner is the ONLY path. For `strategy: "solo"`, the generative agent is spawned directly (Step 5e-solo). If the required agent cannot be spawned, halt and escalate rather than compromise quality.
-
-**IMPORTANT**: After processing debate results, proceed through ALL of Step 5f — including commit/PR. Do NOT skip to the next phase without packaging the work.
+**IMPORTANT**: Never run debates yourself — spawn the debate-runner (debate) or generative agent (solo). After processing results, always proceed through all of Step 5f before advancing phases.
 
 #### 5f. Phase Gate — Guards and Advance
 
-**Check results:**
-
-For **debate mode** (`strategy: "debate"`):
-- All consensus → proceed to guards
-- Any escalated → update plan.yaml, output early-exit summary (Step 5h), return
-- Any regress → proceed to Step 5g
-
-For **solo mode** (`strategy: "solo"`):
-- All guards passed → proceed to phase advance (guards already ran in Step 5e-solo)
-- Promoted to debate → debate results are processed as above (consensus/escalated/regress)
-- Failed (no promotion) → output early-exit summary (Step 5h), return
+**Check results:** Debate: all consensus → guards; any escalated → early exit (5h); any regress → 5g. Solo: all guards passed → phase advance; promoted → process as debate; failed → early exit (5h).
 
 **Run post-execution guards:**
 
-> **Solo mode note:** If `strategy: "solo"`, post-execution guards were already run in Step 5e-solo (step 4). Skip guard execution here — only process the results already recorded in the execution log.
+> **Solo mode note:** If `strategy: "solo"`, guards already ran in Step 5e-solo. Skip execution here — only process recorded results.
 
-**If the guard has `requires`**: provision required resources. For singleton resources, wrap with `flock` (same as pre-execution guards).
-
-For each guard where `timing: "post-execution"` (or the deprecated `"post-debate"`, or no timing field) assigned to the current phase:
-```bash
-# Verify guard script exists (same check as pre-execution guards)
-test -f .claude/ratchet-scripts/run-guards.sh \
-  || { echo "Error: run-guards.sh not found. Run install.sh to restore Ratchet scripts." >&2; exit 1; }
-
-bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
-```
+For each post-execution guard (`timing: "post-execution"`, deprecated `"post-debate"`, or no timing field), run the **Guard Execution Pattern**. Provision `requires` resources first; wrap singletons with `flock`.
 
 Guard result storage: `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard-name>.json`
 
@@ -458,24 +252,13 @@ Guard result storage: `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard
 - Auto-advance on fast-path (all TRIVIAL_ACCEPT) without user confirmation
 - If next phase exists → set to `in_progress`, loop back to Step 5a
 - If all phases done → issue is complete
-- Sync plan tracking issue after phase state change:
-  ```bash
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-  fi
-  ```
+- Sync plan tracking issue (run `sync-plan.sh` if it exists, non-blocking)
 
 **[TodoWrite — Phase Complete]**: After marking the phase done, update the todo list: set the phase item to `"completed"`. The content should retain the verdict info from Step 5e (e.g., `"Build phase — ACCEPT R1"` for debate mode, `"Build phase — SOLO PASS"` for solo mode). If advancing to the next phase, Step 5a's TodoWrite will set the next phase to `"in_progress"`.
 
-**Commit and PR creation is the orchestrator's responsibility, not the issue agent's.**
+**Commit/PR is the orchestrator's responsibility** (Step 4c), not the issue agent's. The worktree with uncommitted changes is the deliverable.
 
-The issue agent runs debates and produces code in the worktree. It does NOT commit, push, or create PRs. The worktree branch with uncommitted changes is the deliverable — the orchestrator handles packaging in Step 4c.
-
-**Why:** Agents at depth 3+ routinely truncate the protocol, completing debates but dropping the commit/PR step. Moving packaging to the orchestrator (depth 1) ensures it always happens. The issue agent's only post-execution job is to report results via the completion summary (Step 5h).
-
-**Progress tracking**: If a progress adapter is configured:
-- On phase advancement: add a comment noting the phase completed
+**Progress tracking**: On phase advancement, add a comment via progress adapter (if configured).
 
 #### 5g. Phase Regression
 
@@ -491,62 +274,33 @@ When an adversarial issues REGRESS targeting an earlier phase:
    - Reset the issue's `phase_status` for target phase and later to `pending`
    - Set target phase to `in_progress`
    - Preserve debate history
-   - Sync plan tracking issue (phase_status changed):
-     ```bash
-     if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-       bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-         || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-     fi
-     ```
+   - Sync plan tracking issue (run `sync-plan.sh` if it exists, non-blocking)
    - Loop back to Step 5a
 
 #### 5h. Issue Complete
 
-When all phases are done:
-- Set issue status to `done` in local plan.yaml (worktree copy — useful for crash recovery, but the orchestrator will write the authoritative update in Step 4c)
-**Output a structured completion summary as your final message.** This is critical — the orchestrator parses this to update the main repo's plan.yaml (Step 4c). The worktree is cleaned up after the agent returns, so this output is the only way results survive.
+Set issue status in local plan.yaml (worktree copy — crash recovery; orchestrator writes authoritative update in Step 4c).
+
+**Output a structured completion summary as your final message.** The orchestrator parses this to update plan.yaml (Step 4c). The worktree is cleaned up after return, so this output is the only way results survive.
 
 ```
-Issue [ref] complete:
-  status: done
+Issue [ref] [complete|blocked|escalated|failed]:
+  status: [done|blocked|escalated|failed]
   execution_mode: [debate|solo|promoted]
   phase_status:
-    [phase]: done
-    [phase]: done
-    [phase]: skipped ([reason, e.g. standard pipeline])
+    [phase]: [done|failed|blocked|pending|skipped]
     ...
-  debates: [debate-id-1, debate-id-2, ...]
-  executions: [exec-id-1, ...]
-  files: [file1, file2, ...]
-  worktree: [absolute path to worktree with uncommitted changes]
-```
-
-The `worktree` path is critical — it tells the orchestrator where the uncommitted code lives so it can commit and create a PR in Step 4c. The issue agent does NOT commit or push.
-
-The `execution_mode` field tells the orchestrator how this issue was executed:
-- `debate` — full adversarial debate (default)
-- `solo` — generative + guards, no adversarial review
-- `promoted` — started as solo, escalated to debate after guard failure
-
-The `executions` array lists execution log IDs (from `.ratchet/executions/`). For debate-only pipelines, this is empty. For solo/promoted pipelines, each phase produces an execution log entry.
-
-**If the pipeline exits early** (escalation, guard failure, regression budget exhausted), output:
-
-```
-Issue [ref] [blocked|escalated|failed]:
-  status: [blocked|escalated|failed]
-  execution_mode: [debate|solo|promoted]
-  phase_status:
-    [phase]: done
-    [phase]: [failed|blocked] — [reason for halt]
-    [phase]: pending
-    ...
-  halted_at: [phase]
-  halt_reason: [reason]
+  halted_at: [phase, if early exit]
+  halt_reason: [reason, if early exit]
   debates: [debate-id-1, ...]
   executions: [exec-id-1, ...]
   files: [file1, ...]
-  worktree: [absolute path or "none"]
+  worktree: [absolute path to worktree with uncommitted changes, or "none"]
 ```
 
-This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
+- `worktree` path tells the orchestrator where uncommitted code lives for commit/PR in Step 4c
+- `execution_mode`: `debate` (adversarial), `solo` (generative + guards), `promoted` (solo escalated to debate)
+- `executions`: execution log IDs from `.ratchet/executions/` (empty for debate-only pipelines)
+- Include `halted_at`/`halt_reason` only on early exit (escalation, guard failure, regression budget exhausted)
+
+This summary MUST be the last thing you output.
