@@ -33,162 +33,48 @@ $(git log --oneline -5 2>/dev/null)
 
 # /ratchet:run — Execute Debate
 
-## CRITICAL — You Are an Orchestrator, Not a Solver
+## Boundaries
 
-You do NOT write code. You do NOT fix bugs. You do NOT implement features.
-You do NOT resolve merge conflicts. You do NOT rebase branches.
-You are a workflow orchestrator. Your tools are:
+You are an orchestrator, not a solver. You do NOT write code, fix bugs, implement features, resolve merge conflicts, or rebase branches.
 
-- **Read, Glob, Grep** — to read state files (plan.yaml, workflow.yaml, etc.)
-- **Agent** — to spawn issue pipelines and debate-runners
-- **AskUserQuestion** — to present choices to the user
-- **TodoWrite** — to update the user-visible progress checklist (see "Progress Tracking via TodoWrite" section)
-- **Bash** — for:
-  - Running guard scripts (`bash .claude/ratchet-scripts/...`)
-  - Read-only git commands (`git status`, `git log`, `git branch`, `git diff`)
-  - Read-only GitHub CLI (`gh pr list`, `gh pr view`, `gh issue list`)
-  - **Plan management** via `yq` — modifying `.ratchet/plan.yaml` (see Plan Management Authority below)
+| Rule | Scope | Notes |
+|---|---|---|
+| **Source Code Boundary** | NEVER use Write/Edit on source, test, or config files | Exception: `--here` mode in top-level human-interactive sessions only. Spawned agents CANNOT claim `--here`. Git rebase/merge/cherry-pick blocked even under `--here`. |
+| **TOOL GATE** | Check EVERY Bash command before running | `git rebase/merge/cherry-pick` → STOP, route to issue pipeline (blocked even under `--here`). Write/Edit on source → STOP (except `--here`). Reading source to "understand" a conflict → STOP. |
+| **AGENT GATE** | Check EVERY Agent invocation before spawning | Only 4 valid agent types: (1) Issue pipeline agents (Step 4b), (2) Quick-fix generative agents (Mode Q), (3) Analyst agents (read-only, `disallowedTools: Write, Edit`), (4) Continuation agents (Step 10). NEVER spawn agents with implementation instructions (except Mode Q). No milestone sub-agents — keeps chain at 3 levels. |
+| **Plan Management** | You ARE the authority on `.ratchet/plan.yaml` | CAN modify: epics, milestones, issues, statuses, focus, discoveries, progress_ref, branch, pr, debates, files, regressions, github_issue. CANNOT modify: source code, workflow.yaml, pairs/, debates/. Use `yq eval -i` for plan.yaml changes. |
 
-### Source Code Boundary — NEVER Cross This Line
-
-**NEVER use Write or Edit on source code, test files, or application config.**
-Source code modifications happen ONLY inside debate-runner agents (which delegate
-to generative agents). If you feel the urge to edit a source file, STOP — you
-are breaking out of the framework.
-
-**Exception — `--here` mode (in-session execution):** When `--here` is active in a
-top-level human-interactive session, the orchestrator MAY use Write and Edit on
-source files directly. This carve-out is restricted to top-level sessions only —
-spawned agents (issue pipelines, debate-runners, continuation agents) CANNOT claim
-`--here`. The human invoked `--here` to work interactively in the current session
-without worktree isolation. Git rebase, merge, and cherry-pick remain blocked even
-under `--here`.
-
-**TOOL GATE — check EVERY Bash command before running it:**
-- `git rebase` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
-- `git merge` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
-- `git cherry-pick` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
-- Resolving merge conflicts → STOP. This is code work. **Blocked even under `--here`.**
-- `Write` or `Edit` on source/test/config files → STOP. Route to an issue pipeline.
-  **Exception: ALLOWED under `--here` mode** (top-level human-interactive session only).
-- Reading a source code file to "understand" a conflict → STOP. You're
-  about to start solving. Route to an issue pipeline.
-
-### Plan Management Authority — This IS Your Job
-
-You are the **authoritative owner** of `.ratchet/plan.yaml`. Managing the epic
-roadmap — milestones, issues, discoveries, statuses, focus — is core orchestrator
-work, not "breaking out of the framework."
-
-**You CAN and SHOULD modify `.ratchet/plan.yaml` for:**
-- Creating new epics and milestones (when the user requests it or when the current epic is complete)
-- Adding issues to milestones
-- Updating milestone/issue statuses (`pending` → `in_progress` → `done`)
-- Setting/clearing `current_focus`
-- Promoting/dismissing discoveries
-- Recording `progress_ref`, `branch`, `pr`, `debates`, `files` on issues
-- Recording `github_issue` on milestones (the GitHub issue number this milestone tracks as a parent, e.g., `github_issue: 165`). When the user provides a GitHub issue reference for the milestone, store it as an explicit field — do not bury it in the description string. Child issues are created under this parent at pipeline launch time (Step 4b).
-- Incrementing `regressions` counters
-- Any structural change to the epic roadmap that the user requests
-
-**You CANNOT modify:**
-- Source code, test files, or application configuration (route to debate pipeline)
-- `.ratchet/workflow.yaml` (route to `/ratchet:tighten` or `/ratchet:init`)
-- `.ratchet/pairs/` agent definitions (route to `/ratchet:tighten` or `/ratchet:pair`)
-- `.ratchet/debates/` artifacts (that's the debate-runner's domain)
-
-**Method:** Use `yq eval -i` via Bash for plan.yaml modifications. Use Write
-only if yq is unavailable. Never use Write or Edit on non-plan files.
-
-If a PR has merge conflicts, that is work for the issue pipeline to resolve
-through a debate. The orchestrator's job is to detect the conflict (via
-`gh pr view`) and re-launch the issue pipeline to handle it — not to
-resolve it directly.
+**`--here` mode** bypasses the Agent tool entirely — orchestrator executes directly in-session. Only top-level human-interactive sessions; spawned agents MUST NOT claim it. It is a modifier, not a mode — modifies how the resolved mode executes.
 
 ### GitHub Plan Tracking Issue
 
 > **For the canonical body format, HTML comment metadata rules, and sync helper pattern, read `skills/run/plan-tracking-format.md`.**
->
-> This section covers: the GitHub issue body format with HTML comment metadata,
-> required fields per milestone/issue block, the `ratchet-plan-tracking` sentinel,
-> and the existence-guarded sync helper call pattern.
 
-**AGENT GATE — check EVERY Agent tool invocation before spawning it:**
+### Guilty Until Proven Innocent
 
-The orchestrator may ONLY spawn agents in these four categories:
-
-1. **Issue pipeline agents** (Step 4b) — agents that run a single issue's phase
-   pipeline in an isolated worktree. They spawn debate-runners at Step 5e.
-   The debate-runner is the ONLY valid path for code changes in the standard pipeline.
-2. **Quick-fix generative agents** (Mode Q, Step 2) — a single generative agent
-   spawned for `--quick` mode. Receives the description as prompt with build-phase
-   constraints. Blocking guards serve as the quality gate (no adversarial review).
-   This is the ONLY exception to the debate-runner requirement — justified by
-   Mode Q's narrow scope and mandatory guard gating.
-3. **Analyst agents** (Step 8c) — read-only assessment agents
-   (`disallowedTools: Write, Edit`) that analyze data and produce recommendations.
-   They NEVER modify files.
-4. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
-   inherit the same source-code boundary and plan management authority, and
-   continue the `/ratchet:run` loop.
-
-**No milestone sub-agents.** The orchestrator runs milestones directly (Step 3c)
-to keep the agent chain at 3 levels: orchestrator → debate-runner → gen/adv.
-Spawning milestone-level agents adds a 4th level where chain collapse occurs.
-
-**NEVER spawn an agent with implementation instructions** (except Mode Q). If your
-Agent prompt contains phrases like "implement X", "fix Y", "add Z", "write code for",
-"create the file", or "modify the source" — STOP. You are bypassing the debate
-framework. All implementation work MUST flow through: orchestrator -> debate-runner ->
-generative agent — unless `--quick` mode is active, in which case Mode Q's
-single-agent path applies (Step 2, Mode Q).
-
-**Violation examples (all FORBIDDEN):**
-- `Agent("Implement the AGENT GATE feature in skills/run/SKILL.md")` — direct implementation
-- `Agent("Fix the failing test in src/auth.ts")` — direct bug fix
-- `Agent("Add error handling to the parser module")` — direct code change
-- `Agent("Refactor the database layer")` — direct refactoring
-
-**Correct pattern:**
-- `Agent("Run debate for pair [name] in phase [phase]. ...")` — spawns a debate-runner
-- `Agent("/ratchet:run --issue issue-3 --milestone 2")` with `isolation: "worktree"` — spawns an issue pipeline
-- `Agent("Quick-fix mode — single generative pass. Task: ...")` — spawns a Mode Q generative agent (only when `--quick` is active)
-- `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
-
-**`--here` mode bypasses the Agent tool entirely.** When `--here` is active, the
-orchestrator executes directly in the current session — it does NOT spawn issue
-pipeline agents, debate-runners, or worktree-isolated agents. The human is
-interactively present, providing the quality gate that the debate framework
-normally enforces. `--here` is a modifier, not a mode — it modifies how the
-resolved mode (Mode M, Mode S, Mode Q, etc.) executes. Only top-level
-human-interactive sessions may use `--here`; spawned agents MUST NOT claim it.
-
-Your job is to:
-
-1. **Manage the epic roadmap** — create/modify epics, milestones, and issues in plan.yaml when the user requests it or when the workflow requires it (e.g., epic complete, user wants new work)
-2. Read state (plan.yaml, workflow.yaml)
-3. Build dependency graphs — milestones (if DAG mode) and issues within each milestone
-4. Launch **milestone pipelines** in parallel (DAG mode) or sequentially
-5. Within each milestone, launch **issue pipelines** in parallel (each in an isolated worktree)
-6. Process their results — update plan.yaml with statuses, advance milestones, complete epics
-
-Issue pipelines spawn debate-runner agents. Debate-runners spawn generative
-and adversarial agents. The generative agent writes code. You do none of that —
-but you ARE the authority on plan structure and milestone lifecycle.
+New changes are GUILTY until proven innocent. Test/guard/CI failures on a PR branch are CAUSED by the PR unless definitively proven otherwise (e.g., `git stash && run-test` on clean master). This principle is passed to all spawned agents.
 
 ---
 
-## Foundational Principle — Guilty Until Proven Innocent
+### Allowed Tools
 
-**New changes are GUILTY until proven innocent.** Test failures on a PR branch are CAUSED by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master, not assuming it is unrelated.
+- **Read, Glob, Grep** — read state files
+- **Agent** — spawn issue pipelines and debate-runners
+- **AskUserQuestion** — present choices
+- **TodoWrite** — update progress checklist (see "Progress Tracking via TodoWrite" below)
+- **Bash** — guard scripts, read-only git/gh commands, `yq eval -i` on plan.yaml
 
-This principle applies throughout the issue pipeline:
-- **Guard failures**: A guard failure during an issue pipeline is the issue's fault. Do not dismiss it as "flaky" or "pre-existing" without evidence (e.g., `git stash && run-test` on clean master).
-- **CI failures**: When a PR's CI fails, the PR is guilty. The issue pipeline must fix the failure or provide definitive proof that master has the same failure.
-- **Debate context**: Pass this principle to all spawned agents (debate-runners, generative, adversarial). Every agent must internalize that failures are their responsibility to fix, not dismiss.
-- **Regression analysis**: When processing REGRESS verdicts, the burden is on showing the regression was pre-existing, not on assuming it is.
+Your job is to:
+1. **Manage the epic roadmap** — create/modify epics, milestones, issues in plan.yaml
+2. Read state (plan.yaml, workflow.yaml)
+3. Build dependency graphs — milestones (DAG mode) and issues within each milestone
+4. Launch milestone pipelines (parallel DAG or sequential)
+5. Within each milestone, launch issue pipelines in parallel (each in an isolated worktree)
+6. Process results — update plan.yaml, advance milestones, complete epics
 
-This principle is passed as context to all spawned debate-runner agents (see Step 5d/5e).
+Issue pipelines spawn debate-runners. Debate-runners spawn generative and adversarial agents. The generative agent writes code. You do none of that — but you ARE the authority on plan structure and milestone lifecycle.
+
+If a PR has merge conflicts, re-launch the issue pipeline to handle it — never resolve conflicts directly.
 
 ---
 
@@ -224,6 +110,7 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run --here --issue <ref>       # In-session issue — skip worktree, work on current branch
 /ratchet:run --here --quick "<desc>"    # In-session quick-fix — follows Mode Q auto-commit behavior
 /ratchet:run --here --auto-pr           # In-session with auto-commit + auto-PR (no prompt)
+/ratchet:run --no-auto-merge            # Disable auto-merging of prerequisite PRs
 ```
 
 ## Unsupervised Mode
@@ -247,6 +134,19 @@ If no enabled pairs exist in the workflow config (`workflow.yaml`), inform the u
 Then use `AskUserQuestion` with options: `"Add a pair (/ratchet:pair) (Recommended)"`, `"Cancel"`.
 
 ## Execution Steps
+
+### Sync Convention
+
+**Sync plan tracking issue** — used at multiple pipeline boundaries. The canonical call pattern:
+
+```bash
+if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
+  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
+    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
+fi
+```
+
+All subsequent references to "Sync plan tracking issue." mean: run the above pattern. Non-blocking — failures never halt the pipeline.
 
 ### Progress Tracking via TodoWrite
 
@@ -296,117 +196,40 @@ Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the re
 Build a picture of:
 - Which milestones are **completed** (status: done)
 - Which milestones are **current** (status: in_progress)
-- **Milestone parallelism mode**: if ANY milestone has a `depends_on` field → DAG mode (parallel milestones). Otherwise → sequential mode (backward compatible).
+- **Milestone parallelism mode**: if ANY milestone has a `depends_on` field → DAG mode. Otherwise → sequential mode.
 - In DAG mode: which milestones are **ready** (all dependencies done, status not done)
 - For each relevant milestone: which **issues** exist, their `phase_status`, `depends_on` relationships, and current status
 - Which issues can run in **parallel** (no unmet dependencies) vs which must wait
 - Any unresolved conditions from previous CONDITIONAL_ACCEPT verdicts
 - Which **phases** apply based on component workflows
-- Each component's **strategy** (`debate` or `solo`, default: `debate`) — determines whether issue pipelines spawn debate-runners or a single generative agent (see Step 5e). Read from `components[].strategy` in `workflow.yaml`.
-- Each component's **`promote_on_guard_failure`** flag (default: `false`) — relevant only for `strategy: "solo"` components, controls whether guard failures escalate to debate
+- Each component's **strategy** (`debate` or `solo`, default: `debate`)
+- Each component's **`promote_on_guard_failure`** flag (default: `false`)
 
-If no `plan.yaml` exists, check whether the github-issues adapter is configured:
-```bash
-adapter=$(yq eval '.progress.adapter' .ratchet/workflow.yaml 2>/dev/null)
-if [ "$adapter" = "github-issues" ]; then
-  # Attempt recovery from GitHub tracking issue
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    echo "plan.yaml missing — attempting recovery from GitHub tracking issue..."
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh --recover
-    if [ -f .ratchet/plan.yaml ]; then
-      echo "Recovery successful. Review recovered plan.yaml before continuing."
-    else
-      echo "Recovery attempted but plan.yaml could not be restored. Check the tracking issue manually." >&2
-      echo "What was NOT recoverable: file-level change lists (files: []), debate IDs (debates: [])," >&2
-      echo "  branch names, and PR URLs — these are runtime artifacts not stored in the tracking issue." >&2
-    fi
-  else
-    echo "plan.yaml missing and sync-plan.sh not installed. Skipping epic tracking." >&2
-  fi
-fi
-```
-If recovery fails or adapter is not github-issues, skip epic tracking and fall through to file-based detection.
+If no `plan.yaml` exists, check whether the github-issues adapter is configured. If `progress.adapter` is `github-issues` and `sync-plan.sh` exists, attempt recovery via `bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh --recover`. If recovery fails or adapter is not github-issues, skip epic tracking and fall through to file-based detection.
 
-If `plan.yaml` exists but fails to parse (malformed YAML or missing `epic` key):
-```bash
-yq eval '.epic' .ratchet/plan.yaml > /dev/null 2>&1 \
-  || { echo "Error: .ratchet/plan.yaml is malformed or missing required 'epic' field. Fix it before running." >&2; exit 1; }
-```
+If `plan.yaml` exists but fails to parse (malformed YAML or missing `epic` key), halt with an error.
 
-**Start PR monitor**: If any issues in plan.yaml have non-null `pr` fields, start the PR watch loop to detect merge conflicts and CI failures during the run:
+**Start PR monitor**: If any issues in plan.yaml have non-null `pr` fields, start the PR watch loop:
 ```
 /loop 10m check Ratchet PRs for conflicts and CI failures
 ```
-This runs `/ratchet:watch` logic inline — polling PRs and creating discoveries automatically. The loop is stopped in Step 9 when the run completes. Skip this if no PRs exist yet (first run of a new epic).
+Skip this if no PRs exist yet (first run of a new epic).
 
 #### 1c. Orphan Detection
 
-Run the orphan detection script to identify stale state from previous runs (abandoned worktrees, unresolved debates, incomplete executions, stale in-progress issues). Orphan detection is advisory — it never blocks the pipeline.
+Run `bash .claude/ratchet-scripts/check-orphans.sh --ratchet-dir "$RATCHET_DIR"` to identify stale state (abandoned worktrees, unresolved debates, incomplete executions, stale in-progress issues). Orphan detection is advisory — it never blocks the pipeline.
 
-```bash
-if [ ! -f .claude/ratchet-scripts/check-orphans.sh ]; then
-  echo "Warning: .claude/ratchet-scripts/check-orphans.sh not found. Skipping orphan detection." >&2
-  ORPHAN_FINDINGS="[]"
-else
-  ORPHAN_FINDINGS=$(bash .claude/ratchet-scripts/check-orphans.sh --ratchet-dir "$RATCHET_DIR" 2>/dev/null || echo "[]")
-fi
-ORPHAN_COUNT=$(printf '%s' "$ORPHAN_FINDINGS" | jq 'length' 2>/dev/null || echo "0")
-```
+**If findings exist**: Each finding has `type` (stale_issue, unresolved_debate, orphan_worktree, incomplete_execution), `ref`, `age`, and `suggested_action`.
 
-**If findings exist** (`ORPHAN_COUNT > 0`):
+**In supervised mode**, present each via `AskUserQuestion` with options: `"Resume"`, `"Abandon"`, `"Ignore"`.
 
-Parse each finding from the JSON array. Each finding has: `type` (stale_issue, unresolved_debate, orphan_worktree, incomplete_execution), `ref`, `age`, and `suggested_action`.
+**In unsupervised mode**, auto-select based on age: >24h → Abandon, <4h → Resume, else → Ignore. Unknown age → Abandon.
 
-**In supervised mode**, present each finding via `AskUserQuestion`:
+**Abandon actions**: stale_issue → reset status to pending; unresolved_debate → `rm -rf`; orphan_worktree → `git worktree remove`; incomplete_execution → `rm -f`.
 
-```
-Orphan detected: [type] — [ref] (age: [age])
-[suggested_action]
-```
+**Resume actions**: stale_issue → set as current_focus; others → log for continuation.
 
-Options per finding:
-- `"Resume"` — set the referenced item as current focus (for stale issues: set `current_focus` to this issue; for unresolved debates: resume with `/ratchet:debate`; for incomplete executions: re-launch the issue pipeline)
-- `"Abandon"` — reset the item to a clean state (for stale issues: set status back to `pending` and clear `phase_status` progress; for orphan worktrees: remove with `git worktree remove`; for unresolved debates: delete the debate directory; for incomplete executions: remove the execution log)
-- `"Ignore"` — skip this finding, take no action, proceed to the next
-
-**In `--unsupervised` mode**, auto-select based on finding age:
-
-```
-age_hours = parse hours from finding.age (e.g., "36h" → 36, "2d" → 48, "unknown" → 999)
-
-if age_hours > 24:
-    auto-select "Abandon" — stale items are cleaned up automatically
-elif age_hours < 4:
-    auto-select "Resume" — recent items are likely interrupted work worth continuing
-else:
-    auto-select "Ignore" — ambiguous age, leave for human review on next supervised run
-```
-
-For `"unknown"` age, treat as stale (auto-select Abandon in unsupervised mode).
-
-**Abandon actions by finding type:**
-
-| Finding type | Abandon action |
-|---|---|
-| `stale_issue` | `yq eval -i '(.epic.milestones[].issues[] \| select(.ref == "REF")).status = "pending"' .ratchet/plan.yaml` — also reset `phase_status` entries that were `in_progress` back to `pending` |
-| `unresolved_debate` | `rm -rf .ratchet/debates/<debate-id>` |
-| `orphan_worktree` | `git worktree remove .claude/worktrees/<name> 2>/dev/null \|\| git worktree remove --force .claude/worktrees/<name>` |
-| `incomplete_execution` | `rm -f .ratchet/executions/<exec-id>.yaml` |
-
-**Resume actions by finding type:**
-
-| Finding type | Resume action |
-|---|---|
-| `stale_issue` | Set `current_focus` to this issue's ref and milestone — the issue will be picked up in Step 2 |
-| `unresolved_debate` | Log `"Resumable debate: <debate-id>. Will be continued in the issue pipeline."` — the debate-runner handles continuation |
-| `orphan_worktree` | Log `"Worktree <name> retained for manual inspection."` — no automated resume for worktrees |
-| `incomplete_execution` | Log `"Execution <exec-id> retained. Will be re-attempted in the issue pipeline."` |
-
-After processing all findings, continue to the CHECKPOINT below.
-
-**If no findings** (`ORPHAN_COUNT == 0`): continue silently.
-
-**CHECKPOINT**: You now understand the project state. Do NOT act on it — do not analyze code, do not plan fixes, do not write implementations. Your next action is Step 2: present choices to the user (or auto-select in unsupervised mode). Then Step 4: launch issue pipelines. The pipelines do the work.
+**CHECKPOINT**: You now understand the project state. Do NOT act on it — proceed to Step 2.
 
 ### Step 2: Determine Focus
 
@@ -444,7 +267,6 @@ Not a mode — modifies how the resolved mode executes. No worktree isolation, n
 If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3b** to build the issue dependency graph for this single milestone. Execute Steps 3b → 4 → 8 for this milestone, then proceed to Step 10. This mode is used for focused runs on a single milestone (user-invoked or continuation agents).
 
 #### Mode S: Single-issue pipeline (--issue <ref>)
-
 If `--issue` is set, execute the issue pipeline (Step 5) directly for the specified issue. Used both for manual/supervised runs and as the entry point for parallel issue agents spawned by Step 4b.
 
 #### Mode A: Explicit pair or --all-files
@@ -454,11 +276,7 @@ If the user specified a `[pair-name]` or `--all-files`, use that directly. Skip 
 If all milestones are done, present epic-complete flow (new epic, add milestone, tighten, score). Otherwise, present focus selector with issue status, sidequest processing, and milestone options. For full spec, read `skills/run/modes/epic-guided.md`.
 
 #### Mode C: Changed files (no plan.yaml, git repo exists)
-```bash
-git diff --name-only HEAD 2>/dev/null || git diff --name-only
-git diff --name-only --cached
-```
-Match changed files to pairs by `scope` globs. For each changed file, match against ALL component scopes — not just the first match. Collect pairs from all matching components for the current phase. If a change spans multiple components, present: "This change spans [components]. Running pairs from all matching components."
+Run `git diff --name-only HEAD` and `git diff --name-only --cached`. Match changed files to pairs by `scope` globs. For each changed file, match against ALL component scopes — not just the first match. If a change spans multiple components, present: "This change spans [components]. Running pairs from all matching components."
 
 #### Mode D: Greenfield (no plan.yaml, no code)
 Use `AskUserQuestion` to ask what to build first.
@@ -484,369 +302,127 @@ If multiple milestones are ready (Layer 0 or newly unblocked), proceed to **Step
 
 #### 3b. Issue-Level DAG (within a single milestone)
 
-**Build dependency layers** from the milestone's issues:
-1. **Layer 0**: issues with no `depends_on` (or all dependencies already `done`)
-2. **Layer 1**: issues whose dependencies are all in Layer 0
-3. **Layer N**: issues whose dependencies are all in earlier layers
+Build dependency layers from the milestone's issues (Layer 0 = no unmet deps, Layer N = deps in earlier layers). This produces the execution order. Issues within the same layer run in parallel.
 
-This produces the execution order. Issues within the same layer run in parallel.
+**[TodoWrite]**: Write initial plan — all milestones and their issues with current statuses.
 
-**[TodoWrite]**: Write initial plan — all milestones and their issues with current statuses. Show the full roadmap; mark completed items `"completed"`, ready milestones `"in_progress"` (DAG mode: all ready milestones).
+**Progress tracking**: If a progress adapter is configured and this milestone doesn't have a `progress_ref` yet, create one via `create-item.sh` and store in plan.yaml. Adapter failures never block debates.
 
-**Progress tracking**: If a progress adapter is configured (`.ratchet/workflow.yaml` → `progress.adapter`), and this milestone doesn't have a `progress_ref` yet, create a work item:
-```bash
-bash .claude/ratchet-scripts/progress/<adapter>/create-item.sh "<milestone name>" "<milestone description>" "ratchet" "milestone"
-```
-Store the returned reference in `plan.yaml` as `progress_ref` on the milestone. If the adapter fails, log a warning and continue — adapter failures never block debates.
-
-**MILESTONE RE-OPENING GUARD**: If the chosen milestone has `status: done`, do NOT silently re-open it. Instead, use `AskUserQuestion`:
-- Question: "Milestone '[name]' is already marked done (completed [timestamp]). Re-opening it will reset its status. Are you sure?"
-- Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`
-- Only set `status: in_progress` if the user explicitly confirms re-opening.
+**MILESTONE RE-OPENING GUARD**: If the chosen milestone has `status: done`, use `AskUserQuestion` before re-opening: "Milestone '[name]' is already marked done. Re-opening will reset its status. Are you sure?" Options: `"Re-open milestone"`, `"Pick a different milestone"`, `"Cancel"`.
 
 #### 3c. Execute Milestones (DAG mode — sequential with parallel issues)
 
-**Design decision — no milestone sub-agents.** The orchestrator executes milestones directly instead of spawning milestone-level agents. This keeps the agent chain at 3 levels:
-
-```
-orchestrator → debate-runner → generative + adversarial
-```
-
-Spawning milestone sub-agents adds a 4th level that causes agent chain collapse — agents at depth 3+ routinely skip the debate framework and write code directly. By running milestones inline, the debate-runner stays at depth 2 where compliance is reliable.
+**Design decision — no milestone sub-agents.** The orchestrator executes milestones directly to keep the agent chain at 3 levels (orchestrator → debate-runner → gen/adv). Spawning milestone sub-agents adds a 4th level where chain collapse occurs.
 
 **Milestone execution order (DAG mode):**
 
-Process milestone layers sequentially. Within each layer, all milestones are processed one at a time (the orchestrator handles one milestone's issue DAG before moving to the next). Issue parallelism within a milestone is preserved (Step 4b).
-
-```
-Milestone execution plan:
-  Layer 0: M[id] ([N] issues), M[id] ([N] issues)
-  Layer 1: M[id] ([N] issues) — depends on Layer 0
-  [...]
-```
+Process milestone layers sequentially. Within each layer, milestones are processed one at a time. Issue parallelism within a milestone is preserved (Step 4b).
 
 For each milestone in the current layer:
 1. Set milestone to `status: in_progress` in plan.yaml
-2. Build issue dependency graph (Step 3b)
-3. Execute issue pipelines (Step 4) — issues within the milestone run in parallel via Agent tool
-4. Process issue results (Step 4c)
-5. Run milestone completion (Step 8) if all issues done
-6. Check if any Layer N+1 milestones are now unblocked → continue to next layer
+2. **Pre-launch: auto-merge prerequisite PRs** (dependent milestones only — see below)
+3. Build issue dependency graph (Step 3b)
+4. Execute issue pipelines (Step 4)
+5. Process issue results (Step 4c)
+6. Run milestone completion (Step 8) if all issues done
+7. Check if any Layer N+1 milestones are now unblocked → continue to next layer
+
+**Auto-merge prerequisite PRs**: Before starting a milestone that `depends_on` another milestone, check if the prerequisite milestone has unmerged PRs (from `plan.yaml` issue `.pr` fields). For each unmerged PR:
+
+- **Supervised mode**: Confirm via `AskUserQuestion`: "Prerequisite PR [url] from milestone [name] is unmerged. Merge it?" Options: `"Merge (squash)"`, `"Skip — use stacked branch fallback"`, `"Halt"`.
+- **Unsupervised mode**: Auto-merge via `gh pr merge --squash` if all checks pass.
+- **`--no-auto-merge` flag**: Skip auto-merge entirely, fall through to stacked branch fallback.
+
+If merge succeeds, `git fetch origin main --quiet` to update the base. If merge fails (checks failing, conflicts, permissions), fall through to **stacked branch fallback**.
+
+**Stacked branch fallback**: When auto-merge fails or is skipped, create a temporary integration branch that merges all prerequisite branches:
+
+```bash
+git checkout -b integration/<milestone-slug> origin/main
+for branch in <prerequisite-branches>; do
+  git merge --no-edit "origin/$branch" || { echo "WARN: Cannot integrate $branch — conflicts exist" >&2; break; }
+done
+```
+
+Use this integration branch as the base for dependent milestone's issue worktrees (instead of `origin/main`). Add warnings to spawned issue agents: "You are working on a stacked branch. Your PR will target the integration branch, not main. Prerequisite PRs must merge first."
+
+If integration branch creation fails (conflicting prerequisites), halt the milestone with a clear error.
 
 **When all milestones across all layers are done** → epic complete, proceed to Step 10.
 
-**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with remaining milestones in the same layer — a halted milestone only blocks milestones that depend on it.
+**If a milestone halts**: present the halt reason. In supervised mode, let the user decide. In unsupervised mode, continue with remaining milestones — a halted milestone only blocks milestones that depend on it.
 
-**Context clearing**: At each milestone boundary, the orchestrator re-reads plan.yaml and workflow.yaml from disk. This prevents accumulated context drift. In unsupervised mode with many milestones, the orchestrator spawns a continuation agent (Step 10) after completing each milestone to get a fresh context window.
+**Context clearing**: At each milestone boundary, the orchestrator re-reads plan.yaml and workflow.yaml from disk. In unsupervised mode, spawn a continuation agent (Step 10) after each milestone for a fresh context window.
 
 ### Step 4: Execute Issue Pipelines
 
-**CHECKPOINT**: You are about to execute issue pipelines. Your job is to orchestrate the phase-gated execution for each issue in isolated worktrees. Do NOT write code, fix bugs, or implement features — that work belongs inside the debate-runner agents spawned from Step 5e.
+**CHECKPOINT**: You are about to execute issue pipelines. Do NOT write code, fix bugs, or implement features — that work belongs inside debate-runner agents spawned from Step 5e.
 
-This is the core execution step. The orchestrator launches issue agents in parallel per dependency layer, using git worktree isolation — either automatic (via the Agent tool's `isolation: "worktree"` for Layer 0 issues) or manual (via `git worktree add` from a dependency's branch for Layer 1+ issues). This mirrors the milestone parallel pattern in Step 3c — the parent orchestrator spawns, collects, and writes state.
+This is the core execution step. The orchestrator launches issue agents in parallel per dependency layer, using git worktree isolation — either automatic (via `isolation: "worktree"` for Layer 0) or manual (via `git worktree add` from a dependency's branch for Layer 1+).
 
 #### 4a. Identify Ready Issues
 
-From the dependency graph built in Step 3b, identify **ready issues** — issues whose status is not `done` and whose `depends_on` entries are all `done` (or empty).
+From the dependency graph (Step 3b), identify ready issues — status not `done`, all `depends_on` entries `done` (or empty).
 
-**For explicit pair / --all-files modes:** Skip issue-based execution. Run the specified pairs directly using the single-issue flow (Step 5) without worktree isolation.
+**For explicit pair / --all-files modes:** Skip issue-based execution. Run pairs directly via Step 5 without worktree isolation.
 
 #### 4b. Execute Issue Pipelines by Dependency Layer
 
-**File overlap check (before launching):**
+**File overlap check**: Before spawning parallel agents, check for overlapping file scopes between issues in the same layer. If overlap detected, use `AskUserQuestion` with options: `"Merge into one issue (Recommended)"`, `"Run sequentially instead"`, `"Run in parallel anyway"`. In unsupervised mode: auto-merge when overlap >50%, otherwise run sequentially.
 
-Before spawning parallel issue agents, check whether issues in the same layer have overlapping file scopes. Overlapping issues produce conflicting changes in parallel worktrees — wasted work.
+For each dependency layer, launch all ready issues **in parallel** as separate Agent invocations:
 
-For each pair of ready issues in the current layer:
-1. Resolve each issue's file scope (from its pairs' `scope` globs in workflow.yaml)
-2. Expand the globs to actual file lists
-3. If any files appear in more than one issue's scope → overlap detected
+- **Layer-parallel execution**: All issues in the same layer run concurrently
+- **Layer 0 issues**: Use `isolation: "worktree"` on the Agent tool (automatic worktree from `origin/main`)
+- **Layer 1+ issues**: Manually create worktree from dependency's branch via `git worktree add`, spawn Agent WITHOUT `isolation: "worktree"`, pass worktree path in prompt
+- **Layer synchronization**: Wait for all Layer N issues before launching Layer N+1
 
-If overlap is detected, use `AskUserQuestion`:
-- Question: "Issues [ref-A] and [ref-B] overlap on [N] files: [file list]. Running them in parallel will likely produce conflicting changes."
-- Options:
-  - `"Merge into one issue (Recommended)"` — combine the issues in plan.yaml (merge titles, pairs, and depends_on), then run as one
-  - `"Run sequentially instead"` — run ref-A first, then ref-B in the next layer (add ref-A to ref-B's depends_on)
-  - `"Run in parallel anyway"` — proceed, accept possible conflicts
+**Issue ref promotion (lazy GitHub issue creation):** Before spawning, promote non-numeric refs to GitHub issue numbers via `create-issue.sh` with rich body (milestone context, description, scope). Rewrite `ref` and `depends_on` arrays. Sync plan tracking issue.
 
-In unsupervised mode: auto-select "Merge into one issue" when overlap exceeds 50% of either issue's files, otherwise "Run sequentially instead".
+**Fresh base fetch**: `git fetch origin main --quiet` once per layer before spawning.
 
----
-
-For each dependency layer (from Step 3b), launch all ready issues **in parallel** as separate Agent invocations. This mirrors the milestone parallel pattern in Step 3c.
-
-**Execution strategy:**
-- **Layer-parallel execution**: All issues in the same dependency layer run concurrently as separate Agent invocations
-- **Worktree isolation (dual-path)**: Layer 0 issues use `isolation: "worktree"` on the Agent tool (automatic worktree from `origin/main`). Layer 1+ issues use manually-created worktrees from the dependency's branch (see "Spawning parallel issue agents" below for details).
-- **Agent-per-issue**: Each issue is spawned with `/ratchet:run --issue <ref> --milestone <id>`
-- **Layer synchronization**: Wait for all issues in Layer N to complete before launching Layer N+1
-- **Sequential fallback**: If no issues declare `depends_on`, issues still run in parallel as a single Layer 0. For milestones with only 1 issue, this naturally degrades to sequential.
-
-**Parallelism detection** (mirrors milestone DAG detection in Step 3a):
-- All ready issues (from Step 4a) in the same layer are launched simultaneously
-- Issues with unmet `depends_on` wait in later layers
-
-**Issue ref promotion (lazy GitHub issue creation):**
-
-Before spawning issue agents, promote any non-numeric refs to GitHub issue numbers. This is just-in-time — planning stays offline-capable.
-
-For each issue in the current ready layer whose `ref` is NOT already a number:
-1. If the `github-issues` adapter is configured and `gh` is available:
-   ```bash
-   PARENT_ISSUE=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .github_issue // null" .ratchet/plan.yaml)
-   MS_NAME=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .name" .ratchet/plan.yaml)
-   MS_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .description" .ratchet/plan.yaml)
-   ISSUE_DESC=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .description // \"\"" .ratchet/plan.yaml)
-   ISSUE_PAIRS=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .pairs | join(\", \")" .ratchet/plan.yaml)
-   ISSUE_FILES=$(yq eval ".epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$ISSUE_REF\") | .files | join(\", \")" .ratchet/plan.yaml)
-
-   # Build a rich issue body with context
-   ISSUE_BODY="## Context
-
-   Milestone: **${MS_NAME}** — ${MS_DESC}
-
-   ## Description
-
-   ${ISSUE_DESC:-$ISSUE_TITLE}
-
-   ## Scope
-
-   **Pairs:** ${ISSUE_PAIRS:-none assigned}
-   **Files:** ${ISSUE_FILES:-to be determined during plan phase}"
-
-   ISSUE_NUM=$(bash .claude/ratchet-scripts/progress/github-issues/create-issue.sh \
-     "$ISSUE_TITLE" "$ISSUE_BODY" \
-     ${PARENT_ISSUE:+--parent "$PARENT_ISSUE"} 2>/dev/null) || true
-   ```
-
-   **Issue descriptions in plan.yaml**: When creating epics and milestones, always include a `description` field on each issue (not just `title`). The description should explain *what* and *why* — enough context for someone reading the GitHub issue to understand the problem and approach without needing plan.yaml.
-2. If creation succeeds: rewrite `ref` to the returned number, update any `depends_on` arrays in the same milestone that referenced the old ref, write plan.yaml
-   ```bash
-   OLD_REF="$ISSUE_REF"
-   NEW_REF="$ISSUE_NUM"
-   # Rewrite ref
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[] | select(.ref == \"$OLD_REF\")).ref = \"$NEW_REF\"" .ratchet/plan.yaml
-   # Rewrite depends_on references across all issues in this milestone
-   yq eval -i "(.epic.milestones[] | select(.id == \"$MS_ID\") | .issues[].depends_on) |= map(select(. == \"$OLD_REF\") = \"$NEW_REF\" // .)" .ratchet/plan.yaml
-   ```
-3. If creation fails: keep the local ref. Pipeline runs normally — publishing degrades gracefully (no comments posted, but no crash). The ref gets promoted on the next successful run.
-
-Sync the plan tracking issue after all promotions in the layer:
-```bash
-if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-  bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-    || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-fi
+**Component strategy detection**: Resolve each issue's component `strategy` (`debate` or `solo`) from `workflow.yaml`. Pass to agent context:
 ```
-
-**Fresh base fetch**: Before spawning any issue agents in a layer, fetch the latest remote state so worktrees branch from the current `origin/main` — not a stale local HEAD:
-```bash
-git fetch origin main --quiet
-```
-This runs once per layer, not per issue. All worktrees in the layer share the fetched ref.
-
-**Spawning parallel issue agents:**
-
-For each issue in the current ready layer, spawn an Agent using the appropriate isolation strategy based on the issue's dependency layer:
-
-**Layer 0 issues (no dependencies):**
-- `isolation`: `"worktree"` — each agent gets its own git worktree automatically, branching from `origin/main`
-- Task: `/ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]`
-
-**Layer 1+ issues (have dependencies):**
-- Do NOT use `isolation: "worktree"` — the Agent tool's automatic worktree branches from `origin/main`, which does not include the dependency's changes
-- Instead, manually create a worktree from the dependency's branch before spawning:
-  ```bash
-  # Resolve the dependency's branch from plan.yaml
-  DEP_REF="<depends_on ref>"
-  DEP_BRANCH=$(yq eval "
-    .epic.milestones[] | select(.id == \"$MS_ID\") |
-    .issues[] | select(.ref == \"$DEP_REF\") | .branch
-  " .ratchet/plan.yaml)
-
-  if [ -z "$DEP_BRANCH" ] || [ "$DEP_BRANCH" = "null" ]; then
-    echo "Warning: Dependency $DEP_REF has no branch recorded. Falling back to origin/main." >&2
-    DEP_BRANCH="origin/main"
-  fi
-
-  # For multiple dependencies, resolve the last-completed dependency's branch:
-  # DEPS=($(yq eval "
-  #   .epic.milestones[] | select(.id == \"$MS_ID\") |
-  #   .issues[] | select(.ref == \"$ISSUE_REF\") | .depends_on[]
-  # " .ratchet/plan.yaml))
-  # LATEST_BRANCH=""
-  # LATEST_TIME=0
-  # for dep in "${DEPS[@]}"; do
-  #   branch=$(yq eval "... | select(.ref == \"$dep\") | .branch" .ratchet/plan.yaml)
-  #   [ -z "$branch" ] || [ "$branch" = "null" ] && continue
-  #   # Use the commit timestamp on the branch as a proxy for completion time
-  #   commit_time=$(git log -1 --format=%ct "$branch" 2>/dev/null || echo 0)
-  #   if [ "$commit_time" -gt "$LATEST_TIME" ]; then
-  #     LATEST_TIME="$commit_time"
-  #     LATEST_BRANCH="$branch"
-  #   fi
-  # done
-  # DEP_BRANCH="${LATEST_BRANCH:-origin/main}"
-
-  # Fetch the dependency branch (it was pushed in Step 4c)
-  git fetch origin "$DEP_BRANCH" --quiet 2>/dev/null || true
-
-  # Create the worktree manually (absolute path required for agent file operations)
-  WORKTREE_PATH="$(pwd)/.claude/worktrees/issue-${ISSUE_REF}"
-  git worktree add "$WORKTREE_PATH" "$DEP_BRANCH" --quiet
-  ```
-- Spawn the Agent WITHOUT `isolation: "worktree"`, passing the worktree path explicitly in the prompt:
-  ```
-  Task: /ratchet:run --issue <ref> --milestone <id> [--unsupervised] [--auto-pr] [--no-cache]
-
-  Worktree: <absolute path to manually created worktree>
-  NOTE: You are running in a manually-created worktree based on dependency branch
-  "<dep-branch>". All file operations MUST use the worktree path above.
-  ```
-
-- The issue's `ref` is now the GitHub issue number (if promoted) or the local ref (if promotion failed/skipped). The issue pipeline uses numeric refs directly as `progress_ref` for debate publishing and `Fixes #<ref>` in PR bodies.
-
-**Component strategy detection**: Before spawning each issue agent, resolve the component's `strategy` field from `workflow.yaml`. The strategy determines the execution path at Step 5e inside the issue pipeline:
-- `strategy: "debate"` (default) — the issue pipeline spawns debate-runners with generative + adversarial agents
-- `strategy: "solo"` — the issue pipeline spawns a single generative agent directly, with post-execution guards as the quality gate (no adversarial review)
-
-Pass the resolved strategy in the agent context so the issue pipeline can branch at Step 5e without re-reading workflow.yaml:
-```
-Component: [component-name]
+Component: [name]
 Strategy: [debate|solo]
-Promote on guard failure: [true|false]  # solo mode only
+Promote on guard failure: [true|false]
 ```
 
-The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
+**Issue descriptions in plan.yaml**: Always include a `description` field on each issue — enough context for someone reading the GitHub issue to understand the problem and approach.
 
-**Branch base resolution for dependent issues:**
-- **Layer 0 issues**: use `isolation: "worktree"` on the Agent tool — this automatically creates a worktree branching from `origin/main` (freshly fetched above). No manual worktree management needed.
-- **Layer 1+ issues**: the orchestrator manually creates a worktree via `git worktree add` from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes in Step 4c). The issue agent is spawned WITHOUT `isolation: "worktree"` and receives the worktree path in its prompt context.
-- **Multiple dependencies**: resolve the branch of the dependency that completed last (most recent `resolved` timestamp in its debate meta.json, or latest commit timestamp on its branch). Create the worktree from that branch. If the dependency branches have diverged significantly, the build phase will naturally reconcile — the generative agent works from the latest dependency state.
-- **Fallback**: if a dependency's `branch` field is null (dependency completed without code changes), fall back to `origin/main`. Log a warning: `"Dependency <ref> has no branch — falling back to origin/main for worktree base."`
+The issue agent enters Mode S, executes Steps 5a-5h independently, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 
-**Layer dispatch presentation:**
-```
-Executing issue dependency layer 0 ([N] issues in parallel):
-  [ref]: [title] — [N] pairs, starting at [phase]
-  [ref]: [title] — [N] pairs, starting at [phase]
+**Note on guard singleton resources**: Guards with `singleton: true` use `flock` for serialization. Parallel agents' guards independently acquire locks — correct behavior with no orchestrator coordination needed.
 
-[If Layer 1+ exists: "[N] more issues in [N] layers waiting for dependencies"]
-```
-
-After Layer 0 completes, the orchestrator processes results (Step 4c), checks which Layer 1 issues are now unblocked, and launches the next batch.
-
-**[TodoWrite]**: Set launched issues to `"in_progress"`, add phase-level items with pair names. Include all milestones, all issues, and phase breakdown for active issues.
-
-**Note on worktree management (dual-path approach)**:
-- **Layer 0 issues**: The Agent tool's `isolation: "worktree"` handles worktree creation and cleanup automatically. The issue agent receives an isolated copy of the repository branched from `origin/main`. If the agent makes changes, the worktree path and branch are returned in the result. The orchestrator uses this to record the branch in plan.yaml.
-- **Layer 1+ issues**: The orchestrator manually creates a worktree via `git worktree add` from the dependency's branch (see "Branch base resolution" above). The issue agent is spawned WITHOUT `isolation: "worktree"` and receives the worktree path explicitly in its prompt. After the agent completes, the orchestrator is responsible for cleaning up the manually-created worktree in Step 4c. The worktree path follows the convention `.claude/worktrees/issue-<ref>`.
-
-**Note on plan.yaml write authority**: Issue agents do NOT write plan.yaml. They return structured completion summaries (Step 5h). The parent orchestrator is the sole plan.yaml writer — it collects results from all parallel issue agents in a layer, then writes all updates atomically. This eliminates write contention by construction.
-
-**Note on guard singleton resources**: Guards with `singleton: true` resources use `flock` for serialization. When multiple issue agents run in parallel, each agent's guards independently acquire locks via `flock .ratchet/locks/<resource>.lock`. This means singleton-guarded operations serialize across parallel issues automatically — correct behavior, with no orchestrator coordination needed.
-
-[If Layer 1+ exists: "[N] more issues waiting for dependencies"]
-```
+**[TodoWrite]**: Set launched issues to `"in_progress"`, add phase-level items.
 
 #### 4c. Process Issue Results (after issue completes)
 
-After all issue agents in a layer complete, the orchestrator processes results in batch. **Do NOT fix, debug, or modify anything from the results — just record state and proceed.**
+After all issue agents in a layer complete, process results in batch. **Do NOT fix, debug, or modify anything — just record state and proceed.**
 
-**Processing a layer's results:**
+1. **Collect all agent results** from completion summaries (Step 5h).
 
-1. **Collect all agent results**: Each issue agent returns a structured completion summary (Step 5h). Read all results from the layer.
+2. **Package each completed issue (commit + PR)**: For each `done` issue, create commit and PR from the agent's worktree. Branch name: `ratchet/<milestone-slug>/<issue-ref>`. Commit, push, create PR via `gh pr create` (see `skills/run/pr-body.md` for body format). If `--auto-pr` not set, confirm via `AskUserQuestion`.
 
-2. **Package each completed issue (commit + PR)**: For each issue with status `done`, the orchestrator creates the commit and PR from the issue agent's worktree. This is the orchestrator's job — not the issue agent's — because agents at depth 3+ routinely truncate the protocol and skip packaging.
+3. **GUARD GATE (post-rebase)**: After ANY rebase or conflict resolution in this step, ALL blocking guards for the issue's component MUST run before pushing. Run guards via the component's guard scripts. If any guard fails, the push is blocked — re-launch the issue pipeline to fix. This prevents the gap where rebase agents skip guards (evidence: PR 242 failed linting, PR 199 CI failure). The sequence is: rebase → run ALL guards → push (only if guards pass).
 
-   For each completed issue with a `worktree` path:
-   ```bash
-   cd "<worktree>"
+4. **Update plan.yaml in batch**: For each issue, set `status`, `phase_status`, `branch`, `pr`, `files`, `debates`. Write all updates atomically.
 
-   # Branch name
-   BRANCH="ratchet/<milestone-slug>/<issue-ref>"
-   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
+5. **Sync plan tracking issue.**
 
-   # Commit all changes
-   git add -A
-   git commit -m "<issue title>
+6. **Worktree cleanup**: Layer 0 (automatic via Agent tool). Layer 1+ (manual `git worktree remove`). Always clean up regardless of success/failure.
 
-   Debated by: <pair-names>
-   Verdicts: <verdict summaries>"
+7. Check if Layer N+1 issues are now unblocked → launch next layer (back to 4b).
 
-   # Push and create PR
-   git push -u origin "$BRANCH"
-   ```
+8. Report: `"Layer [N] complete: [N]/[total] issues done in milestone [id]"`
 
-   PR creation uses `gh pr create` with the body from `skills/run/pr-body.md`:
-   - `Fixes #<ref>` when ref is a numeric (promoted) GitHub issue number
-   - Debate summary table from all debates in this issue
-   - Dependency note if `depends_on` references exist
+**[TodoWrite]**: Set completed issues to `"completed"`, halted issues stay `"in_progress"` with halt reason.
 
-   > **For the PR body construction, read `skills/run/pr-body.md`.**
+**When all issues across all layers are done** → milestone complete, proceed to Step 8.
 
-   Store the branch name and PR URL on the issue in plan.yaml.
+**If an issue pipeline halts**: Record halt in plan.yaml. In supervised mode, use `AskUserQuestion` (Resolve/Continue/Done). In unsupervised mode, continue — halted issues only block dependents.
 
-   **If the worktree has no uncommitted changes** (agent already committed, or no code was modified): skip the commit step, just check if a branch exists.
-
-   **If `--auto-pr` is not set** (supervised mode): use `AskUserQuestion` before creating the PR:
-   - Question: "Issue [ref] complete. Create PR?"
-   - Options: `"Create PR (Recommended)"`, `"Skip PR — just keep the branch"`, `"View changes first"`
-
-3. **Update plan.yaml in batch**: For each issue in the layer, update the MAIN repo's plan.yaml:
-   - Set `status` (done, blocked, escalated, failed)
-   - Set `phase_status` for all phases
-   - Set `branch` (from the commit step above)
-   - Set `pr` (from the PR creation step above, or null)
-   - Set `files` (list of modified files)
-   - Set `debates` (debate IDs created)
-   - Write all updates atomically — the orchestrator is the sole writer
-
-4. **Sync plan tracking issue** (if github-issues adapter configured):
-   ```bash
-   if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-     bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-       || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-   fi
-   ```
-
-5. **Worktree cleanup**: After committing and pushing, the worktree can be removed. The branch on the remote is the durable deliverable.
-   - **Layer 0 issues** (spawned with `isolation: "worktree"`): The Agent tool handles cleanup automatically. No manual action needed.
-   - **Layer 1+ issues** (manually-created worktrees): The orchestrator must clean up explicitly:
-     ```bash
-     git worktree remove "<worktree>" 2>/dev/null || git worktree remove --force "<worktree>" 2>/dev/null || true
-     ```
-   - Always attempt cleanup regardless of issue success/failure — worktrees consume disk space and can cause confusion if left behind.
-
-5. Check if any **Layer 1+ issues** are now unblocked (their dependencies just completed)
-
-6. If newly unblocked issues exist → launch them as the next layer (back to 4b)
-
-7. Report progress after each layer: `"Layer [N] complete: [N]/[total] issues done in milestone [id]"`
-
-**[TodoWrite]**: Set completed issue to `"completed"` with progress count, remove its phase sub-items. Halted issues stay `"in_progress"` with halt reason in content.
-
-**CRITICAL**: This plan.yaml update is not optional. The orchestrator is the authoritative writer for all issue state.
-
-**When all issues across all layers are done** → milestone is complete, proceed to Step 8.
-
-**If an issue pipeline halts (blocked/escalated/failed):**
-- Record the halt status in plan.yaml immediately
-- In supervised mode: use `AskUserQuestion` to let the user decide how to proceed
-  - Options: `"Resolve now"`, `"Continue with remaining issues (Recommended)"`, `"Done for now"`
-- In unsupervised mode: note the halt, continue with remaining issues if possible. A halted issue only blocks issues that depend on it, not unrelated issues. Halt the entire milestone only if all issues are blocked.
-
-**Handling merge conflicts on existing PRs:**
-
-When the orchestrator detects (via `gh pr view`) that an issue's PR has merge conflicts:
-1. Do NOT attempt to resolve the conflict yourself (no rebase, no merge, no code editing)
-2. Re-launch the issue pipeline (`/ratchet:run --issue <ref>`) in a fresh worktree based on the current main branch
-3. The issue pipeline will re-run the build phase, which will naturally produce code that is compatible with the current main branch
-4. The old PR branch is replaced — the pipeline creates a new branch and force-pushes (or creates a new PR)
-
-This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
-
-**IMPORTANT (AGENT GATE enforcement)**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Do NOT spawn any agent with implementation instructions ("implement X", "fix Y", "add Z"). All code changes flow through debate-runners only. See the AGENT GATE section at the top of this document.
+**Handling merge conflicts on existing PRs**: Re-launch the issue pipeline in a fresh worktree from current main. The pipeline re-runs from the appropriate phase, producing code compatible with current main. Do NOT resolve conflicts directly.
 
 ---
 
@@ -876,20 +452,13 @@ orchestrator parses in Step 4c.
 
 ### Step 5-dry: Dry-Run Preview
 
-If `--dry-run` is specified, produce a formatted preview with token/cost estimates and stop. No agents spawned, no files modified. For full spec (cost formulas, output format, supervised/unsupervised behavior), read `skills/run/modes/dry-run.md`.
+If `--dry-run` is specified, produce a formatted preview with token/cost estimates and stop. No agents spawned, no files modified. For full spec, read `skills/run/modes/dry-run.md`.
 
 ---
 
 ### Step 6: Static Analysis Pre-Gate
 
-Before launching issue pipelines, run any configured static analysis commands from `project.yaml` on the main working tree.
-
-If any fail:
-- Use `AskUserQuestion`: "Static analysis failed with [N] errors: [summary]. How should we proceed?"
-- Options: `"Fix these before running (Recommended)"`, `"Proceed anyway"`
-- If fix: stop here, let the user fix, then re-run
-
-If all pass (or none configured), proceed silently.
+Before launching issue pipelines, run configured static analysis commands from `project.yaml`. If any fail, use `AskUserQuestion`: "Static analysis failed with [N] errors. How should we proceed?" Options: `"Fix these before running (Recommended)"`, `"Proceed anyway"`.
 
 ---
 
@@ -901,95 +470,44 @@ If all pass (or none configured), proceed silently.
 
 After all issues in the milestone are `done`:
 
-**8a. Mark milestone done:**
-- Set milestone `status: done`, record completion timestamp
-- Update `plan.yaml`
-- Sync plan tracking issue:
-  ```bash
-  if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
-    bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
-      || echo "Warning: plan tracking issue sync failed (non-blocking)" >&2
-  fi
-  ```
+**8a. Mark milestone done:** Set `status: done`, record timestamp, update plan.yaml. Sync plan tracking issue.
 
-**[TodoWrite]**: Set milestone to `"completed"` with summary (e.g., `"M2: [name] — 4/4 issues done"`), remove its issue/phase sub-items.
+**[TodoWrite]**: Set milestone to `"completed"` with summary.
 
-**8b. Progress tracking:**
-- If adapter configured: update milestone status, close the item
-  ```bash
-  bash .claude/ratchet-scripts/progress/<adapter>/update-status.sh "<progress_ref>" "done"
-  bash .claude/ratchet-scripts/progress/<adapter>/close-item.sh "<progress_ref>"
-  ```
+**8b. Progress tracking:** If adapter configured, update status and close the item via `update-status.sh` and `close-item.sh`.
 
 **8c. Post-Milestone Analyst Assessment:**
 
-Spawn the analyst agent (with resolved `analyst` model, defaults to `opus`) for a brief assessment. Agent configuration:
-- `tools`: Read, Grep, Glob, Bash
-- `disallowedTools`: Write, Edit
+Spawn analyst agent (resolved `analyst` model, defaults to `opus`; `disallowedTools: Write, Edit`). The analyst reviews all issue debates, scores, guard results, and escalation data to produce 3-5 bullet points covering pair effectiveness, scope gaps, guard recommendations, and workflow preset recommendations.
 
-The post-milestone analyst is **read-only** — it analyzes data and produces recommendations. Any file modifications from recommendations are applied by the orchestrator's parent skill, not the analyst.
+Present via `AskUserQuestion`: "Post-milestone assessment for [name]:\n[bullets]" Options: `"Apply recommendations (Recommended)"`, `"Note for later"`, `"Skip"`.
 
-The analyst reviews all issue debates, scores, guard results, and any escalation data to produce 3-5 bullet points covering:
-- Pair effectiveness observations
-- Scope coverage gaps
-- Guard recommendations
-- Workflow preset recommendations
-
-Present via `AskUserQuestion`:
-- Question: "Post-milestone assessment for [milestone name]:\n[bullet points]"
-- Options: `"Apply recommendations (Recommended)"`, `"Note for later"`, `"Skip"`
-
-**CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request" within an issue pipeline. Local commits are the default safe action.**
+**CRITICAL: NEVER push to origin/main or force-push. NEVER push unless the user explicitly chose "Create a pull request" within an issue pipeline.**
 
 ### Step 9: Update Scores & Teardown Resources
 
-Score data is computed on-demand by `/ratchet:score` from debate artifacts (`debates/*/meta.json` and `reviews/**/*.json`) and persisted as an exponential moving average in `.ratchet/scores.yaml`. The EMA survives debate archival across epics — no score update step is needed here.
+Score data is computed on-demand by `/ratchet:score` from debate artifacts and persisted as an EMA in `.ratchet/scores.yaml`. No score update step needed here.
 
-**Resource teardown**: tear down shared resources when no more pipelines need them:
-- **Sequential mode**: after all issue pipelines for the milestone complete
-- **DAG mode**: after ALL milestones across all layers complete (the orchestrator handles teardown after the last milestone)
+**Resource teardown**: After all pipelines complete (sequential: after milestone; DAG: after all milestones), run `stop` commands for each resource in `workflow.yaml`, clean up `.ratchet/locks/`. Teardown runs regardless of success/failure.
 
-For teardown:
-1. For each resource in `workflow.yaml` that has a `stop` command, run it
-2. Clean up `.ratchet/locks/` directory (remove `resources.json` and any stale lock directories)
-
-Resources are torn down regardless of whether milestones succeeded, halted, or had errors — always clean up.
-
-**Stop PR monitor**: If the PR watch loop was started in Step 1b, stop it now. The run is complete — any new PR issues will be caught on the next `/ratchet:run` invocation or by a manual `/ratchet:watch`.
+**Stop PR monitor**: If started in Step 1b, stop it now.
 
 ### Step 10: Propose Next Focus
 
-**If `--unsupervised`**: Skip `AskUserQuestion`. If no halt condition was triggered and work remains (more milestones), persist all state to `plan.yaml` and spawn a new agent via the Agent tool with task `/ratchet:run --unsupervised`. The continuation agent inherits the same source-code boundary and plan management authority. If all milestones are complete, halt with the completion summary. If a halt condition was triggered during this iteration, present the halt summary and stop.
+**If `--unsupervised`**: Skip `AskUserQuestion`. If work remains, persist state and spawn continuation agent via Agent tool with `/ratchet:run --unsupervised`. If all milestones complete, halt with summary. If halt condition triggered, present summary and stop.
 
-**Otherwise**, use `AskUserQuestion` to let the user choose what to do next.
+**If milestone has blocked/escalated issues:**
+- Options: "Resolve escalated debates (/ratchet:verdict)", "View issue status", "Re-run (/ratchet:run) (Recommended)", "Done for now"
 
-**If the milestone has blocked/escalated issues:**
-- Summary: `"Milestone [name]: [N]/[total] issues complete. [N] blocked/escalated."`
-- Options:
-  - "Resolve escalated debates (/ratchet:verdict)" — if escalated
-  - "View issue status" — show per-issue phase progress
-  - "Re-run to continue (/ratchet:run) (Recommended)" — picks up unblocked issues
-  - "Done for now"
+**If milestone complete, more remain:**
 
-**If milestone complete, more milestones remain:**
+**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Re-read state files from disk. Continuation agents start fresh.
 
-**CONTEXT CLEARING**: Milestone boundaries are the primary context clearing point. Persisted state (plan.yaml, debate transcripts, pair definitions, scores) is the source of truth — not context memory. At each milestone boundary, re-read state files from disk. In unsupervised mode, the continuation agent (Step 10) starts with fresh context, preventing drift from auto-compaction summaries.
+- Summary: `"Milestone [name] complete! Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone."`
+- Options: "Continue to [next milestone] (/ratchet:run) (Recommended)", "View quality metrics", "View milestone status (/ratchet:status)", "Done for now"
 
-- Summary: `"Milestone [name] complete! [N] issues, [N] PRs created. Epic progress: [completed]/[total] milestones.\n\nStarting fresh context for the next milestone — all state is persisted to disk."`
-- Options:
-  - "Continue to [next milestone name] (/ratchet:run) (Recommended)" — user re-invokes with fresh context
-  - "View quality metrics"
-  - "View milestone status (/ratchet:status)"
-  - "Done for now"
-
-When the user selects "Continue to [next milestone name]", do NOT continue in the current context. Instead, present: "Run `/ratchet:run` to start [next milestone] with a clean context. All progress is saved."
+When the user selects "Continue to [next milestone name]", present: "Run `/ratchet:run` to start [next milestone] with a clean context. All progress is saved."
 
 **If ALL milestones are done:**
 - Summary: `"Epic complete! All [N] milestones finished. Total issues: [N] | Total debates: [N] | Consensus rate: [%]"`
-- Options:
-  - "Create a new epic" — use AskUserQuestion (freeform) to ask what the next body of work is, then create the new epic structure in plan.yaml (new epic name, description, milestones with issues). Use the analyst agent to help scope if the user wants a thorough analysis, or create directly from the user's description for straightforward requests.
-  - "Add a milestone to the current epic" — use AskUserQuestion to gather milestone details, then append to plan.yaml
-  - "Tighten agents from debate lessons (/ratchet:tighten)"
-  - "View detailed quality metrics (/ratchet:score)"
-  - "Review a specific debate (/ratchet:debate)"
-  - "Done for now"
+- Options: "Create a new epic", "Add a milestone to the current epic", "Tighten agents (/ratchet:tighten)", "View metrics (/ratchet:score)", "Review a debate (/ratchet:debate)", "Done for now"
