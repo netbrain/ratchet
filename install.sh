@@ -243,6 +243,73 @@ HOOKJSON
     echo "  Installed PostToolUse hook for debate publishing"
 }
 
+install_auto_watch_hook() {
+    local target="$1"
+    local scripts_dir="$2"
+    local settings_file="$target/settings.json"
+    local hook_script="$scripts_dir/auto-watch-hook.sh"
+
+    # Only install if auto-watch-hook.sh was copied to scripts dir
+    if [ ! -f "$hook_script" ]; then
+        return 0
+    fi
+
+    # Resolve to absolute path so the hook works in worktree-isolated agents.
+    local abs_hook_script
+    abs_hook_script="$(cd "$(dirname "$hook_script")" && pwd)/$(basename "$hook_script")"
+
+    # Build the hook entry — fires on Bash tool use to detect gh pr create
+    local hook_json
+    hook_json=$(cat <<HOOKJSON
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $abs_hook_script"
+          }
+        ]
+      }
+    ]
+  }
+}
+HOOKJSON
+)
+
+    if [ ! -f "$settings_file" ]; then
+        # No settings file — create one with the hook
+        echo "$hook_json" > "$settings_file" || { echo "Error: Failed to write $settings_file" >&2; return 1; }
+    else
+        # Settings file exists — merge hooks if not already present
+        if grep -q "auto-watch-hook" "$settings_file" 2>/dev/null; then
+            return 0  # Already installed
+        fi
+
+        if command -v jq >/dev/null 2>&1; then
+            # Use jq to merge
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq --argjson new "$hook_json" '
+                .hooks.PostToolUse = (.hooks.PostToolUse // []) + $new.hooks.PostToolUse
+            ' "$settings_file" > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$settings_file"
+            rm -f "$tmp_file" 2>/dev/null || true
+        else
+            echo "  Warning: jq not found, skipping settings.json hook merge. Add PostToolUse hook manually." >&2
+            return 0
+        fi
+    fi
+
+    # Track settings.json in git so worktree-isolated agents inherit hooks.
+    if [ "$target" != "$HOME/.claude" ]; then
+        git add "$settings_file" 2>/dev/null || true
+    fi
+
+    echo "  Installed PostToolUse hook for auto-watch on PR creation"
+}
+
 do_install() {
     local target="$1"
     local skip_hooks="$2"
@@ -374,6 +441,9 @@ do_install() {
     # Install PostToolUse hook for debate publish automation
     install_publish_hook "$target" "$scripts_dir"
 
+    # Install PostToolUse hook for auto-watch on PR creation
+    install_auto_watch_hook "$target" "$scripts_dir"
+
     # Gitignore entries + safe untracking (local installs only — global installs
     # target ~/.claude, not the project repo, so there is no project .gitignore)
     if [ "$target" != "$HOME/.claude" ]; then
@@ -478,6 +548,23 @@ with open(path, 'w') as f:
                 echo "  Cleaned settings.json"
             # else: warning already printed by Python, continue silently
             fi
+        fi
+    fi
+
+    # Remove auto-watch PostToolUse hook from settings.json
+    if [ -f "$target/settings.json" ] && grep -q "auto-watch-hook" "$target/settings.json" 2>/dev/null; then
+        if command -v jq >/dev/null 2>&1; then
+            local tmp_file
+            tmp_file="$(mktemp)"
+            jq '
+                if .hooks.PostToolUse then
+                    .hooks.PostToolUse |= [.[] | select(.hooks | all(.command | test("auto-watch-hook") | not))]
+                    | if (.hooks.PostToolUse | length) == 0 then del(.hooks.PostToolUse) else . end
+                    | if (.hooks | length) == 0 then del(.hooks) else . end
+                else . end
+            ' "$target/settings.json" > "$tmp_file" 2>/dev/null && mv "$tmp_file" "$target/settings.json"
+            rm -f "$tmp_file" 2>/dev/null || true
+            echo "  Cleaned auto-watch PostToolUse hook from settings.json"
         fi
     fi
 
