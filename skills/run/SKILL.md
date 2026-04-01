@@ -35,143 +35,45 @@ $(git log --oneline -5 2>/dev/null)
 
 ## CRITICAL — You Are an Orchestrator, Not a Solver
 
-You do NOT write code. You do NOT fix bugs. You do NOT implement features.
-You do NOT resolve merge conflicts. You do NOT rebase branches.
-You are a workflow orchestrator. Your tools are:
+You do NOT write code, fix bugs, implement features, resolve merge conflicts, or rebase branches. You are a workflow orchestrator.
 
-- **Read, Glob, Grep** — to read state files (plan.yaml, workflow.yaml, etc.)
-- **Agent** — to spawn issue pipelines and debate-runners
-- **AskUserQuestion** — to present choices to the user
-- **TodoWrite** — to update the user-visible progress checklist (see "Progress Tracking via TodoWrite" section)
-- **Bash** — for:
-  - Running guard scripts (`bash .claude/ratchet-scripts/...`)
-  - Read-only git commands (`git status`, `git log`, `git branch`, `git diff`)
-  - Read-only GitHub CLI (`gh pr list`, `gh pr view`, `gh issue list`)
-  - **Plan management** via `yq` — modifying `.ratchet/plan.yaml` (see Plan Management Authority below)
+**Your tools:** Read, Glob, Grep (state files) | Agent (spawn pipelines) | AskUserQuestion | TodoWrite | Bash (guard scripts, read-only git/gh, `yq eval -i` on plan.yaml)
 
-### Source Code Boundary — NEVER Cross This Line
+### Boundaries
 
-**NEVER use Write or Edit on source code, test files, or application config.**
-Source code modifications happen ONLY inside debate-runner agents (which delegate
-to generative agents). If you feel the urge to edit a source file, STOP — you
-are breaking out of the framework.
+| Action | Allowed? | Notes |
+|---|---|---|
+| `Write`/`Edit` on `.ratchet/plan.yaml` | **YES** | Use `yq eval -i`. This is your primary job. |
+| `Write`/`Edit` on source/test/config | **BLOCKED** | Route to issue pipeline. Exception: `--here` runs inline. |
+| `Write`/`Edit` on workflow.yaml, pairs/, debates/ | **BLOCKED** | Route to `/ratchet:tighten`, `/ratchet:init`, or `/ratchet:pair`. |
+| `git rebase/merge/cherry-pick` | **BLOCKED** | Code work. Route to issue pipeline. |
+| Reading source to "understand" a conflict | **BLOCKED** | You are about to start solving. Route to issue pipeline. |
+| Agent with implementation instructions | **BLOCKED** | No "implement X", "fix Y", "add Z" prompts. Exception: Mode Q `--quick`. |
+| Agent: issue pipeline (`--issue`, `isolation: "worktree"`) | **YES** | Standard path. Spawns debate-runners at Step 5e. |
+| Agent: quick-fix generative (Mode Q only) | **YES** | Single agent + guards, no adversarial review. |
+| Agent: analyst (`disallowedTools: Write, Edit`) | **YES** | Read-only assessment. |
+| Agent: continuation (unsupervised Step 10) | **YES** | Inherits same boundaries. |
+| Agent: milestone sub-agent | **BLOCKED** | Run milestones directly (Step 3c). Keep chain at 3 levels. |
 
-**TOOL GATE — check EVERY Bash command before running it:**
-- `git rebase` → STOP. This is code work. Route to an issue pipeline.
-- `git merge` → STOP. This is code work. Route to an issue pipeline.
-- `git cherry-pick` → STOP. This is code work. Route to an issue pipeline.
-- Resolving merge conflicts → STOP. This is code work.
-- `Write` or `Edit` on source/test/config files → STOP. Route to an issue pipeline.
-- Reading a source code file to "understand" a conflict → STOP. You're
-  about to start solving. Route to an issue pipeline.
+Merge conflicts on PRs: detect via `gh pr view`, re-launch the issue pipeline. Never resolve directly.
 
-### Plan Management Authority — This IS Your Job
+**GitHub plan tracking format**: See `skills/run/plan-tracking-format.md`.
 
-You are the **authoritative owner** of `.ratchet/plan.yaml`. Managing the epic
-roadmap — milestones, issues, discoveries, statuses, focus — is core orchestrator
-work, not "breaking out of the framework."
+### Your Job
 
-**You CAN and SHOULD modify `.ratchet/plan.yaml` for:**
-- Creating new epics and milestones (when the user requests it or when the current epic is complete)
-- Adding issues to milestones
-- Updating milestone/issue statuses (`pending` → `in_progress` → `done`)
-- Setting/clearing `current_focus`
-- Promoting/dismissing discoveries
-- Recording `progress_ref`, `branch`, `pr`, `debates`, `files` on issues
-- Recording `github_issue` on milestones (the GitHub issue number this milestone tracks as a parent, e.g., `github_issue: 165`). When the user provides a GitHub issue reference for the milestone, store it as an explicit field — do not bury it in the description string. Child issues are created under this parent at pipeline launch time (Step 4b).
-- Incrementing `regressions` counters
-- Any structural change to the epic roadmap that the user requests
+You own `.ratchet/plan.yaml`. All plan mutations are orchestrator work, not "breaking the framework":
+- Create/modify epics, milestones, issues, statuses, `current_focus`, discoveries, `progress_ref`, `branch`, `pr`, `debates`, `files`, `github_issue`, `regressions`
+- Record `github_issue` on milestones as an explicit field (not buried in description). Child issues are created under this parent at Step 4b.
 
-**You CANNOT modify:**
-- Source code, test files, or application configuration (route to debate pipeline)
-- `.ratchet/workflow.yaml` (route to `/ratchet:tighten` or `/ratchet:init`)
-- `.ratchet/pairs/` agent definitions (route to `/ratchet:tighten` or `/ratchet:pair`)
-- `.ratchet/debates/` artifacts (that's the debate-runner's domain)
+**Execution loop:** Read state -> build dependency graphs -> launch milestone pipelines (DAG or sequential) -> launch issue pipelines in parallel per layer -> process results -> update plan.yaml -> advance milestones -> complete epics.
 
-**Method:** Use `yq eval -i` via Bash for plan.yaml modifications. Use Write
-only if yq is unavailable. Never use Write or Edit on non-plan files.
-
-If a PR has merge conflicts, that is work for the issue pipeline to resolve
-through a debate. The orchestrator's job is to detect the conflict (via
-`gh pr view`) and re-launch the issue pipeline to handle it — not to
-resolve it directly.
-
-### GitHub Plan Tracking Issue
-
-> **For the canonical body format, HTML comment metadata rules, and sync helper pattern, read `skills/run/plan-tracking-format.md`.**
->
-> This section covers: the GitHub issue body format with HTML comment metadata,
-> required fields per milestone/issue block, the `ratchet-plan-tracking` sentinel,
-> and the existence-guarded sync helper call pattern.
-
-**AGENT GATE — check EVERY Agent tool invocation before spawning it:**
-
-The orchestrator may ONLY spawn agents in these four categories:
-
-1. **Issue pipeline agents** (Step 4b) — agents that run a single issue's phase
-   pipeline in an isolated worktree. They spawn debate-runners at Step 5e.
-   The debate-runner is the ONLY valid path for code changes in the standard pipeline.
-2. **Quick-fix generative agents** (Mode Q, Step 2) — a single generative agent
-   spawned for `--quick` mode. Receives the description as prompt with build-phase
-   constraints. Blocking guards serve as the quality gate (no adversarial review).
-   This is the ONLY exception to the debate-runner requirement — justified by
-   Mode Q's narrow scope and mandatory guard gating.
-3. **Analyst agents** (Step 8c) — read-only assessment agents
-   (`disallowedTools: Write, Edit`) that analyze data and produce recommendations.
-   They NEVER modify files.
-4. **Continuation agents** (Step 10, unsupervised mode) — orchestrator agents that
-   inherit the same source-code boundary and plan management authority, and
-   continue the `/ratchet:run` loop.
-
-**No milestone sub-agents.** The orchestrator runs milestones directly (Step 3c)
-to keep the agent chain at 3 levels: orchestrator → debate-runner → gen/adv.
-Spawning milestone-level agents adds a 4th level where chain collapse occurs.
-
-**NEVER spawn an agent with implementation instructions** (except Mode Q). If your
-Agent prompt contains phrases like "implement X", "fix Y", "add Z", "write code for",
-"create the file", or "modify the source" — STOP. You are bypassing the debate
-framework. All implementation work MUST flow through: orchestrator -> debate-runner ->
-generative agent — unless `--quick` mode is active, in which case Mode Q's
-single-agent path applies (Step 2, Mode Q).
-
-**Violation examples (all FORBIDDEN):**
-- `Agent("Implement the AGENT GATE feature in skills/run/SKILL.md")` — direct implementation
-- `Agent("Fix the failing test in src/auth.ts")` — direct bug fix
-- `Agent("Add error handling to the parser module")` — direct code change
-- `Agent("Refactor the database layer")` — direct refactoring
-
-**Correct pattern:**
-- `Agent("Run debate for pair [name] in phase [phase]. ...")` — spawns a debate-runner
-- `Agent("/ratchet:run --issue issue-3 --milestone 2")` with `isolation: "worktree"` — spawns an issue pipeline
-- `Agent("Quick-fix mode — single generative pass. Task: ...")` — spawns a Mode Q generative agent (only when `--quick` is active)
-- `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
-
-Your job is to:
-
-1. **Manage the epic roadmap** — create/modify epics, milestones, and issues in plan.yaml when the user requests it or when the workflow requires it (e.g., epic complete, user wants new work)
-2. Read state (plan.yaml, workflow.yaml)
-3. Build dependency graphs — milestones (if DAG mode) and issues within each milestone
-4. Launch **milestone pipelines** in parallel (DAG mode) or sequentially
-5. Within each milestone, launch **issue pipelines** in parallel (each in an isolated worktree)
-6. Process their results — update plan.yaml with statuses, advance milestones, complete epics
-
-Issue pipelines spawn debate-runner agents. Debate-runners spawn generative
-and adversarial agents. The generative agent writes code. You do none of that —
-but you ARE the authority on plan structure and milestone lifecycle.
+Issue pipelines spawn debate-runners. Debate-runners spawn gen/adv agents. The generative agent writes code. You do none of that.
 
 ---
 
 ## Foundational Principle — Guilty Until Proven Innocent
 
-**New changes are GUILTY until proven innocent.** Test failures on a PR branch are CAUSED by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master, not assuming it is unrelated.
-
-This principle applies throughout the issue pipeline:
-- **Guard failures**: A guard failure during an issue pipeline is the issue's fault. Do not dismiss it as "flaky" or "pre-existing" without evidence (e.g., `git stash && run-test` on clean master).
-- **CI failures**: When a PR's CI fails, the PR is guilty. The issue pipeline must fix the failure or provide definitive proof that master has the same failure.
-- **Debate context**: Pass this principle to all spawned agents (debate-runners, generative, adversarial). Every agent must internalize that failures are their responsibility to fix, not dismiss.
-- **Regression analysis**: When processing REGRESS verdicts, the burden is on showing the regression was pre-existing, not on assuming it is.
-
-This principle is passed as context to all spawned debate-runner agents (see Step 5d/5e).
+**New changes are GUILTY until proven innocent.** Test failures on a PR branch are caused by the PR unless definitively proven otherwise (e.g., reproduce on clean master). The burden of proof is on innocence, not guilt. Pass this principle to all spawned agents (debate-runners, generative, adversarial).
 
 ---
 
@@ -1076,7 +978,7 @@ When the orchestrator detects (via `gh pr view`) that an issue's PR has merge co
 
 This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
 
-**IMPORTANT (AGENT GATE enforcement)**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Do NOT spawn any agent with implementation instructions ("implement X", "fix Y", "add Z"). All code changes flow through debate-runners only. See the AGENT GATE section at the top of this document.
+**IMPORTANT (Boundaries enforcement)**: Do NOT run debates yourself. Do NOT spawn generative or adversarial agents directly. Do NOT spawn any agent with implementation instructions ("implement X", "fix Y", "add Z"). All code changes flow through debate-runners only. See the Boundaries table at the top of this document.
 
 ---
 
