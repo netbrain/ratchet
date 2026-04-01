@@ -56,12 +56,21 @@ Source code modifications happen ONLY inside debate-runner agents (which delegat
 to generative agents). If you feel the urge to edit a source file, STOP — you
 are breaking out of the framework.
 
+**Exception — `--here` mode (in-session execution):** When `--here` is active in a
+top-level human-interactive session, the orchestrator MAY use Write and Edit on
+source files directly. This carve-out is restricted to top-level sessions only —
+spawned agents (issue pipelines, debate-runners, continuation agents) CANNOT claim
+`--here`. The human invoked `--here` to work interactively in the current session
+without worktree isolation. Git rebase, merge, and cherry-pick remain blocked even
+under `--here`.
+
 **TOOL GATE — check EVERY Bash command before running it:**
-- `git rebase` → STOP. This is code work. Route to an issue pipeline.
-- `git merge` → STOP. This is code work. Route to an issue pipeline.
-- `git cherry-pick` → STOP. This is code work. Route to an issue pipeline.
-- Resolving merge conflicts → STOP. This is code work.
+- `git rebase` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
+- `git merge` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
+- `git cherry-pick` → STOP. This is code work. Route to an issue pipeline. **Blocked even under `--here`.**
+- Resolving merge conflicts → STOP. This is code work. **Blocked even under `--here`.**
 - `Write` or `Edit` on source/test/config files → STOP. Route to an issue pipeline.
+  **Exception: ALLOWED under `--here` mode** (top-level human-interactive session only).
 - Reading a source code file to "understand" a conflict → STOP. You're
   about to start solving. Route to an issue pipeline.
 
@@ -146,6 +155,14 @@ single-agent path applies (Step 2, Mode Q).
 - `Agent("Quick-fix mode — single generative pass. Task: ...")` — spawns a Mode Q generative agent (only when `--quick` is active)
 - `Agent("Analyze milestone results...")` with `disallowedTools: Write, Edit` — spawns an analyst
 
+**`--here` mode bypasses the Agent tool entirely.** When `--here` is active, the
+orchestrator executes directly in the current session — it does NOT spawn issue
+pipeline agents, debate-runners, or worktree-isolated agents. The human is
+interactively present, providing the quality gate that the debate framework
+normally enforces. `--here` is a modifier, not a mode — it modifies how the
+resolved mode (Mode M, Mode S, Mode Q, etc.) executes. Only top-level
+human-interactive sessions may use `--here`; spawned agents MUST NOT claim it.
+
 Your job is to:
 
 1. **Manage the epic roadmap** — create/modify epics, milestones, and issues in plan.yaml when the user requests it or when the workflow requires it (e.g., epic complete, user wants new work)
@@ -203,13 +220,17 @@ Phases within an issue are ordered and gated: phase N must complete before phase
 /ratchet:run --unsupervised --auto-pr    # Same, but auto-create PRs per issue
 /ratchet:run --go                        # Shorthand for --unsupervised --auto-pr
 /ratchet:run --quick "<description>"     # Quick-fix: skip plan, auto-detect scope, single generative pass
+/ratchet:run --here                     # In-session execution — work directly in the current session, no worktree
+/ratchet:run --here --issue <ref>       # In-session issue — skip worktree, work on current branch
+/ratchet:run --here --quick "<desc>"    # In-session quick-fix — follows Mode Q auto-commit behavior
+/ratchet:run --here --auto-pr           # In-session with auto-commit + auto-PR (no prompt)
 ```
 
 ## Unsupervised Mode
 
 For unsupervised mode behavior, read `skills/run/unsupervised.md`.
 
-Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), and combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, `--dry-run`, and `--quick`. Note: `--go` is shorthand for `--unsupervised --auto-pr`.
+Covers: auto-selection rules for every `AskUserQuestion` step, self-continuation via the Agent tool at milestone boundaries, halt conditions (issue-level and milestone-level), combining `--unsupervised` with `--auto-pr`, `--no-cache`, `--all-files`, `--dry-run`, and `--quick`, and forbidden combinations (`--here --unsupervised`, `--here --go`). Note: `--go` is shorthand for `--unsupervised --auto-pr`.
 
 ## Prerequisites
 - `.ratchet/` must exist with valid config
@@ -389,6 +410,15 @@ After processing all findings, continue to the CHECKPOINT below.
 
 ### Step 2: Determine Focus
 
+**`--here` pre-check (before mode resolution):** If `--here` is present, validate it
+immediately — before evaluating any mode. Check forbidden combinations first:
+`--here --unsupervised` and `--here --go` halt with an error. If valid, set an
+internal `here_mode = true` flag. This flag does NOT change which mode is selected —
+it modifies how the selected mode EXECUTES. Mode resolution proceeds normally
+(Q → M → S → A → B → C → D). After a mode is resolved, the `here_mode` flag
+changes its execution: no worktree isolation, no agent spawning, direct in-session
+work. See the `--here Modifier` section below Mode Q for full details.
+
 There are six modes, checked in order:
 
 #### Mode Q: Quick-fix (--quick "<description>")
@@ -538,6 +568,74 @@ Quick-fix complete:
 ```
 
 Then stop — do not continue to any other step. Mode Q is a terminal path.
+
+#### --here Modifier (in-session execution)
+
+`--here` is a **modifier**, not a mode. It modifies how the resolved mode executes
+by keeping all work in the current session — no worktree isolation, no agent
+spawning. The human is interactively present and serves as the quality gate.
+
+**Restriction:** `--here` is valid ONLY in top-level human-interactive sessions.
+Spawned agents (issue pipelines, debate-runners, continuation agents) MUST NOT
+claim `--here`. If a spawned agent receives `--here`, it MUST ignore the flag
+and execute normally.
+
+**Forbidden combinations:**
+- `--here --unsupervised` → FORBIDDEN. In-session execution requires human presence;
+  unsupervised mode removes it. If both are passed, halt with error:
+  `"--here and --unsupervised are mutually exclusive. --here requires human interaction."`
+- `--here --go` → FORBIDDEN (since `--go` is shorthand for `--unsupervised --auto-pr`).
+  Same error as above.
+
+**Allowed combinations and behavior:**
+- `--here --quick "<desc>"` → Follows Mode Q behavior (single generative pass,
+  auto-commit). The orchestrator executes the generative work directly in the
+  current session instead of spawning a generative agent. Auto-commits on
+  completion (Mode Q behavior).
+- `--here --auto-pr` → Auto-commit all changes and create a PR without prompting.
+  No `AskUserQuestion` for the commit step.
+- `--here --issue <ref>` → Execute the issue's pipeline in the current session
+  on the current branch. Skip worktree creation. Read the issue's phase_status
+  from plan.yaml and execute the current phase directly.
+- `--here` (alone, no other mode flag) → Read plan.yaml normally (Step 1b),
+  determine focus (Step 2), then execute directly in the current session.
+
+**How `--here` modifies execution:**
+
+1. **No worktree isolation**: Work happens on the current branch. No `isolation: "worktree"`
+   on Agent tool calls (because no Agent tool calls are made).
+2. **No agent spawning**: The orchestrator performs the generative work directly.
+   The AGENT GATE is bypassed — the orchestrator MAY use Write and Edit on source
+   files. The Source Code Boundary carve-out applies.
+3. **Guards**: Run guards with `milestone-id=0` and `phase=build` when no
+   milestone/phase context exists (e.g., `--here` alone without `--issue`).
+   When context exists (e.g., `--here --issue <ref>`), use the actual
+   milestone ID and current phase.
+4. **Plan.yaml**: Read normally (Step 1b). Skip only with `--here --quick`
+   (Mode Q skips plan.yaml regardless).
+5. **Commit behavior**:
+   - `--here --quick`: Auto-commit (Mode Q behavior).
+   - `--here --auto-pr`: Auto-commit + auto-PR (no prompt).
+   - `--here` alone: Prompt the user via `AskUserQuestion`:
+     ```
+     Changes complete. What would you like to do?
+     ```
+     Options: `"Commit changes (Recommended)"`, `"Create PR"`, `"Review changes first"`, `"Done — leave uncommitted"`
+6. **Execution log**: Write with `mode: in-session`:
+   ```bash
+   EXEC_ID="in-session-$(date +%Y%m%dT%H%M%S)"
+   mkdir -p .ratchet/executions
+   cat > ".ratchet/executions/${EXEC_ID}.yaml" <<EOF
+   id: "${EXEC_ID}"
+   mode: in-session
+   component: <detected-or-resolved-component>
+   issue: "<issue-ref or null>"
+   started: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   resolved: null
+   guard_results: []
+   files_modified: []
+   EOF
+   ```
 
 #### Mode M: Single-milestone pipeline (--milestone <id>)
 If `--milestone` is set, skip milestone selection. Find the milestone by ID in plan.yaml. Set it to `in_progress` and jump directly to **Step 3b** to build the issue dependency graph for this single milestone. Execute Steps 3b → 4 → 8 for this milestone, then proceed to Step 10. This mode is used for focused runs on a single milestone (user-invoked or continuation agents).

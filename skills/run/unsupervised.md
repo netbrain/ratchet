@@ -83,3 +83,12 @@ Unsupervised run [completed|paused]:
 - `--go --no-cache`: Combines `--go` with `--no-cache` (force re-debate, unsupervised, auto-PR)
 - `--go --all-files`: Combines `--go` with `--all-files` (all pairs, unsupervised, auto-PR)
 - `--quick "<description>"`: Compatible with `--unsupervised`. In unsupervised mode, if component auto-detection fails, Mode Q halts with error (no interactive fallback). If a blocking guard fails, Mode Q halts with status `failed` (no retry). Combinable with `--auto-pr` to auto-create a branch and PR from the quick-fix commit.
+
+## Forbidden Combinations
+
+- **`--here --unsupervised`**: FORBIDDEN. `--here` requires human-interactive presence;
+  `--unsupervised` removes human interaction. These are mutually exclusive by design.
+  If both are passed, halt immediately with error:
+  `"--here and --unsupervised are mutually exclusive. --here requires human interaction."`
+- **`--here --go`**: FORBIDDEN. `--go` is shorthand for `--unsupervised --auto-pr`,
+  so this reduces to the `--here --unsupervised` case above. Same error message.
