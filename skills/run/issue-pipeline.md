@@ -8,17 +8,96 @@
 
 ### Step 5: Issue Pipeline (executed per-issue in isolated worktrees)
 
-This is the phase-gated loop for a single issue. Each issue runs as a separate agent spawned by Step 4b, with its own git worktree via `isolation: "worktree"`.
+This is the phase-gated loop for a single issue. Each issue runs as a separate agent spawned by Step 4b, with its own git worktree.
 
 **Execution context:**
 - Spawned by Step 4b as a parallel Agent invocation (one per issue in the current layer)
-- Runs in an isolated git worktree (provided by `isolation: "worktree"`)
+- **Worktree mode** depends on the issue's dependency layer:
+  - **`isolation: worktree`** (Layer 0) — the Agent tool creates a fresh worktree branching from `origin/main`. The issue pipeline receives an auto-created worktree with no prior issue changes.
+  - **Pre-created worktree** (Layer 1+) — the orchestrator creates the worktree itself, branching from the dependency's `branch` field in plan.yaml (see Step 4b "Branch base resolution"). The worktree path is passed in the agent prompt context. The issue pipeline inherits the dependency's committed changes.
 - Execution strategy depends on the component's `strategy` field:
   - `debate` (default): spawns debate-runner agents at Step 5e
   - `solo`: spawns generative agent directly at Step 5e-solo, skipping the debate-runner
 - Returns a structured completion summary (Step 5h) — does NOT write plan.yaml (the parent orchestrator handles that in Step 4c)
 
 The issue pipeline progresses through phases sequentially (plan → test → build → review → harden, depending on the component's `pipeline` preset), then returns control to Step 4c for state persistence.
+
+#### 5-pre. Worktree Mode Detection and Dependency Validation
+
+Before entering the phase loop, detect the worktree mode and validate the environment.
+
+**1. Detect worktree mode:**
+
+The mode is determined by inspecting the agent prompt context provided by the orchestrator (Step 4b passes these fields when spawning issue agents):
+- If the prompt includes `Worktree mode: isolation` (or no worktree mode field) → **isolation mode** (Layer 0)
+- If the prompt includes `Worktree mode: pre-created` with `Dependency branch: <branch>` and `Dependency files: [...]` → **pre-created mode** (Layer 1+)
+
+> **Note:** These prompt context fields (`Worktree mode`, `Dependency branch`, `Dependency files`) are expected to be set by the orchestrator in Step 4b. See `skills/run/SKILL.md` Step 4b "Branch base resolution" for the orchestrator's spawning template.
+
+Log the detected mode:
+```
+Worktree mode: [isolation|pre-created]
+[If pre-created: "Base branch: <dependency-branch>, Dependencies: <dep-ref-1>, <dep-ref-2>"]
+```
+
+**2. Validate dependency changes (pre-created worktree mode only):**
+
+When running in pre-created worktree mode, verify that the worktree contains the expected dependency changes. The orchestrator passes a `dependency_files` array in the prompt context — these are the files from each dependency's `files` array in plan.yaml.
+
+```bash
+# For each file in the dependency_files array, verify it exists and is modified
+# relative to origin/main (not relative to the dependency branch, since the
+# dependency's changes ARE the branch)
+MISSING_FILES=""
+for dep_file in "${DEPENDENCY_FILES[@]}"; do
+  if [ ! -f "$dep_file" ]; then
+    MISSING_FILES="${MISSING_FILES}  missing: ${dep_file}\n"
+  fi
+done
+
+# Check that dependency files show modifications compared to origin/main
+UNMODIFIED_FILES=""
+for dep_file in "${DEPENDENCY_FILES[@]}"; do
+  if [ -f "$dep_file" ] && git diff origin/main --quiet -- "$dep_file" 2>/dev/null; then
+    UNMODIFIED_FILES="${UNMODIFIED_FILES}  unmodified: ${dep_file}\n"
+  fi
+done
+
+if [ -n "$MISSING_FILES" ] || [ -n "$UNMODIFIED_FILES" ]; then
+  echo "WARNING: Dependency validation failed:" >&2
+  [ -n "$MISSING_FILES" ] && echo -e "Files expected from dependencies but not found:\n$MISSING_FILES" >&2
+  [ -n "$UNMODIFIED_FILES" ] && echo -e "Files expected to be modified by dependencies but unchanged:\n$UNMODIFIED_FILES" >&2
+fi
+```
+
+**Validation outcomes:**
+- **All files present and modified** → proceed normally. Log: `"Dependency validation passed: [N] files verified from [N] dependencies"`
+- **Files missing or unmodified** → the worktree may not have been created from the correct branch. This is a critical error:
+  - In **supervised mode**: use `AskUserQuestion`:
+    - Question: "Dependency validation failed for issue [ref]. Expected files from dependencies [dep-refs] are missing or unmodified. The worktree may not be based on the correct branch."
+    - Options: `"Re-create worktree from correct branch (Recommended)"`, `"Override and proceed anyway"`, `"Cancel this issue"`
+  - In **unsupervised mode**: halt the issue pipeline with status `blocked`:
+    - Reason: `"Dependency validation failed — worktree missing expected changes from [dep-refs]"`
+    - Log: `"Issue [ref] blocked: dependency files not found in worktree. Expected [N] files from [dep-refs], found [N] missing, [N] unmodified."`
+
+**3. Adjust git baseline for "guilty until proven innocent" checks:**
+
+In pre-created worktree mode, the "clean base" for guilt checks is the dependency branch (the branch this worktree was created from), NOT `origin/main`. This affects the guard failure verification in Steps 5c and 5f:
+- **Isolation mode** (Layer 0): clean base = `origin/main` (stash and test against main)
+- **Pre-created mode** (Layer 1+): clean base = the dependency branch tip (the commit the worktree was created from)
+
+Store the base ref for later use:
+```bash
+# Determine the git base for guilt checks
+if [ "$WORKTREE_MODE" = "pre-created" ]; then
+  # The worktree was created from the dependency branch — the initial commit IS the base
+  GUILT_BASE_REF=$(git rev-parse HEAD)  # capture before any issue work begins
+else
+  GUILT_BASE_REF="origin/main"
+fi
+```
+
+This `GUILT_BASE_REF` replaces the implicit `origin/main` assumption in guard failure verification throughout the pipeline.
 
 #### 5a. Determine Current Phase and Match Pairs
 
@@ -123,12 +202,22 @@ flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <m
 ```
 
 - If a **blocking** pre-execution guard fails:
-  - **Guilty until proven innocent**: This failure is caused by the current issue's changes unless proven otherwise. Before dismissing as pre-existing, verify on clean master:
+  - **Guilty until proven innocent**: This failure is caused by the current issue's changes unless proven otherwise. Before dismissing as pre-existing, verify on the clean base (determined in Step 5-pre):
     ```bash
     # In the worktree, stash changes and test on clean base
-    git stash && bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
-    git stash pop
-    # Only if the guard ALSO fails on clean base can the failure be considered pre-existing
+    # GUILT_BASE_REF is set in Step 5-pre:
+    #   - Isolation mode (Layer 0): GUILT_BASE_REF="origin/main"
+    #   - Pre-created mode (Layer 1+): GUILT_BASE_REF=<dependency branch tip>
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git stash
+    git checkout "$GUILT_BASE_REF" 2>/dev/null
+    # Run the guard — capture exit code regardless of pass/fail
+    bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" <blocking>
+    GUARD_EXIT=$?
+    # Always restore: return to branch and pop stash even if guard failed
+    git checkout "$CURRENT_BRANCH" 2>/dev/null
+    git stash pop 2>/dev/null
+    # Only if the guard ALSO fails on clean base (GUARD_EXIT != 0) can the failure be considered pre-existing
     ```
   - Use `AskUserQuestion`: "Pre-execution guard '[name]' failed: [summary]. Execution has NOT started yet."
   - Options: `"Fix and re-run (Recommended)"`, `"Override and proceed"`, `"Cancel — skip this phase"`
@@ -169,7 +258,7 @@ Both paths converge at **Step 5f** (Phase Gate — Guards and Advance).
 
 Solo mode skips the debate-runner entirely. A single generative agent executes the phase, then post-execution guards serve as the quality gate.
 
-**Same worktree isolation constraints as debate mode** — the solo agent runs in the issue's isolated worktree (from Step 4b's `isolation: "worktree"`). It may only modify files within the worktree.
+**Same worktree isolation constraints as debate mode** — the solo agent runs in the issue's worktree (either auto-created via `isolation: "worktree"` for Layer 0, or pre-created by the orchestrator for Layer 1+). It may only modify files within the worktree.
 
 **1. Create execution log entry:**
 ```bash
@@ -510,6 +599,7 @@ When all phases are done:
 Issue [ref] complete:
   status: done
   execution_mode: [debate|solo|promoted]
+  worktree_mode: [isolation|pre-created]
   phase_status:
     [phase]: done
     [phase]: done
@@ -519,6 +609,7 @@ Issue [ref] complete:
   executions: [exec-id-1, ...]
   files: [file1, file2, ...]
   worktree: [absolute path to worktree with uncommitted changes]
+  dependency_validation: [passed|failed|skipped]
 ```
 
 The `worktree` path is critical — it tells the orchestrator where the uncommitted code lives so it can commit and create a PR in Step 4c. The issue agent does NOT commit or push.
@@ -528,6 +619,16 @@ The `execution_mode` field tells the orchestrator how this issue was executed:
 - `solo` — generative + guards, no adversarial review
 - `promoted` — started as solo, escalated to debate after guard failure
 
+The `worktree_mode` field tells the orchestrator which worktree creation path was used:
+- `isolation` — Layer 0, worktree auto-created by Agent tool from `origin/main`
+- `pre-created` — Layer 1+, worktree pre-created by orchestrator from dependency branch
+
+The `dependency_validation` field reports the result of Step 5-pre validation:
+- `passed` — all dependency files found and modified (pre-created mode only)
+- `failed` — some dependency files missing or unmodified (should only appear with `blocked` status)
+- `overridden` — validation failed but user chose "Override and proceed anyway" in supervised mode
+- `skipped` — isolation mode, no dependency validation needed
+
 The `executions` array lists execution log IDs (from `.ratchet/executions/`). For debate-only pipelines, this is empty. For solo/promoted pipelines, each phase produces an execution log entry.
 
 **If the pipeline exits early** (escalation, guard failure, regression budget exhausted), output:
@@ -536,6 +637,7 @@ The `executions` array lists execution log IDs (from `.ratchet/executions/`). Fo
 Issue [ref] [blocked|escalated|failed]:
   status: [blocked|escalated|failed]
   execution_mode: [debate|solo|promoted]
+  worktree_mode: [isolation|pre-created]
   phase_status:
     [phase]: done
     [phase]: [failed|blocked] — [reason for halt]
@@ -547,6 +649,7 @@ Issue [ref] [blocked|escalated|failed]:
   executions: [exec-id-1, ...]
   files: [file1, ...]
   worktree: [absolute path or "none"]
+  dependency_validation: [passed|failed|skipped]
 ```
 
 This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
