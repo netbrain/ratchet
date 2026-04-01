@@ -59,6 +59,7 @@ are breaking out of the framework.
 **TOOL GATE — check EVERY Bash command before running it:**
 - `git rebase` → STOP. This is code work. Route to an issue pipeline.
 - `git merge` → STOP. This is code work. Route to an issue pipeline.
+  - **Exception**: `git merge` in a temporary integration worktree (Step 3c substep h) is permitted. This is automated branch construction with no conflict resolution — if a merge fails, the orchestrator aborts and falls back, it never resolves conflicts.
 - `git cherry-pick` → STOP. This is code work. Route to an issue pipeline.
 - Resolving merge conflicts → STOP. This is code work.
 - `Write` or `Edit` on source/test/config files → STOP. Route to an issue pipeline.
@@ -858,12 +859,88 @@ For each milestone in the current layer:
       git fetch origin main --quiet
       ```
 
-   h. **On merge failure** (conflicts, failing CI, permission errors): do NOT halt. Log the failure and fall through to the stacked branch fallback — Step 4b's branch base resolution will branch dependent issues from the prerequisite's branch instead of main. This is the existing fallback behavior for Layer 1+ issues.
+   h. **On merge failure — stacked branch fallback**: When any prerequisite PR cannot be merged (conflicts, failing CI, permission errors), do NOT halt. Instead, create a temporary integration branch that combines all prerequisite work, so dependent issues can build on top of it.
 
+      **Step 1 — Identify prerequisite branches:**
+      ```bash
+      # Collect branches from all prerequisite milestone issues (merged and unmerged)
+      PREREQ_BRANCHES=()
+      for DEP_MS_ID in $DEPENDS_ON; do
+        BRANCHES=$(yq eval "
+          .epic.milestones[] | select(.id == \"$DEP_MS_ID\") |
+          .issues[] | select(.branch != null) | .branch
+        " .ratchet/plan.yaml)
+        for branch in $BRANCHES; do
+          PREREQ_BRANCHES+=("$branch")
+        done
+      done
+      ```
+
+      **Step 2 — Create integration branch:**
+      ```bash
+      # Base the integration branch on the latest origin/main
+      git fetch origin main --quiet
+      INTEGRATION_BRANCH="ratchet/integrate/m${CURRENT_MS_ID}-prereqs-$(date +%Y%m%dT%H%M%S)"
+      INTEGRATION_WT=".claude/worktrees/integration-m${CURRENT_MS_ID}"
+      git worktree add "$INTEGRATION_WT" \
+        -b "$INTEGRATION_BRANCH" origin/main --quiet
+
+      # Merge each prerequisite branch into the integration worktree
+      # Use git -C to avoid changing the orchestrator's working directory
+      MERGE_OK=true
+      for branch in "${PREREQ_BRANCHES[@]}"; do
+        git fetch origin "$branch" --quiet 2>/dev/null || true
+        if ! git -C "$INTEGRATION_WT" merge "origin/$branch" --no-edit --quiet 2>/dev/null; then
+          echo "Error: Cannot merge prerequisite branch $branch into integration branch." >&2
+          echo "Manual conflict resolution required." >&2
+          MERGE_OK=false
+          git -C "$INTEGRATION_WT" merge --abort 2>/dev/null || true
+          break
+        fi
+      done
+      ```
+
+      **Step 3 — Handle integration result:**
+
+      If `MERGE_OK` is true: push the integration branch and record it for Step 4b:
+      ```bash
+      git push -u origin "$INTEGRATION_BRANCH" --quiet
+      # Record integration branch in plan.yaml for the current milestone
+      yq eval -i "(.epic.milestones[] | select(.id == \"$CURRENT_MS_ID\")).integration_branch = \"$INTEGRATION_BRANCH\"" .ratchet/plan.yaml
+      ```
+
+      If `MERGE_OK` is false (prerequisite branches conflict with each other):
+
+      **In supervised mode**: use `AskUserQuestion`:
+      ```
+      Cannot create integration branch for milestone [name] —
+      prerequisite branches conflict with each other.
+      Conflicting branch: [branch]
+
+      Options:
+      ```
+      - `"Use latest prerequisite branch only"` — select the prerequisite branch whose tip commit has the most recent author date (`git log -1 --format=%aI` for each branch), use it as the base for all issues in this milestone (best-effort, may miss some prerequisite work). Record it as `integration_branch` in plan.yaml.
+      - `"Abort milestone"` — halt this milestone until prerequisites are resolved
+      - `"Continue on main (skip prerequisites)"` — branch from origin/main, accepting that prerequisite work is not included
+
+      **In unsupervised mode**: auto-select "Use latest prerequisite branch only" — best-effort fallback to avoid halting.
+
+      **Step 4 — Clean up integration worktree:**
+      ```bash
+      git worktree remove "$INTEGRATION_WT" 2>/dev/null || true
+      ```
+
+      **Log the fallback:**
       ```
       Warning: Could not merge PR #[N] from prerequisite milestone [dep].
-      Falling through to stacked branch — dependent issues will branch from
-      the prerequisite branch instead of main.
+      Created stacked integration branch: [INTEGRATION_BRANCH]
+      Dependent issues will branch from the integration branch instead of main.
+
+      ⚠ STACKED BRANCH IMPLICATIONS:
+        - PRs from this milestone will show a larger diff (includes prerequisite changes)
+        - PR reviewers should focus on commits specific to this milestone
+        - Once prerequisite PRs merge to main, these PRs should be rebased onto main
+        - If prerequisite PRs change, the integration branch becomes stale
       ```
 
 2. Set milestone to `status: in_progress` in plan.yaml
@@ -1006,9 +1083,44 @@ Promote on guard failure: [true|false]  # solo mode only
 The issue agent enters Mode S, executes Steps 5a-5h independently in its worktree, and returns a structured completion summary (Step 5h). The **parent orchestrator** collects all results and writes plan.yaml — issue agents do NOT write plan.yaml.
 
 **Branch base resolution for dependent issues:**
-- Layer 0 issues: branch from `origin/main` (freshly fetched above)
-- Layer 1+ issues: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
-- Multiple dependencies: branch from the dependency that finished last
+- **Layer 0 issues**: branch from `origin/main` (freshly fetched above)
+- **Layer 1+ issues (within a milestone)**: branch from the dependency's `branch` field in plan.yaml (written by the orchestrator after Layer N-1 completes)
+- **Multiple dependencies**: branch from the dependency that finished last
+- **Cross-milestone dependencies (stacked branch)**: If the current milestone has an `integration_branch` field in plan.yaml (set by Step 3c substep h), ALL issues in this milestone branch from the integration branch instead of `origin/main`:
+  ```bash
+  INTEGRATION=$(yq eval "
+    .epic.milestones[] | select(.id == \"$MS_ID\") |
+    .integration_branch // null
+  " .ratchet/plan.yaml)
+
+  if [ "$INTEGRATION" != "null" ] && [ -n "$INTEGRATION" ]; then
+    BASE_REF="origin/$INTEGRATION"
+  else
+    BASE_REF="origin/main"
+  fi
+  ```
+  Layer 0 issues use `$BASE_REF` as their branch point. Layer 1+ issues still branch from their intra-milestone dependency's branch.
+
+  **Stacked branch warnings for PR creation** (applies in Step 4c when creating PRs):
+  When an issue's base is an integration branch (not `main`), the PR must communicate this:
+  - Set the PR base branch to the integration branch (not `main`):
+    ```bash
+    gh pr create --base "$INTEGRATION_BRANCH" ...
+    ```
+  - Append a warning block to the PR body:
+    ```markdown
+    > **Stacked branch notice**: This PR targets the integration branch
+    > `[INTEGRATION_BRANCH]`, not `main`. It includes prerequisite work
+    > from milestone [dep milestone]. Once the prerequisite PRs are merged
+    > to `main`, this PR's base should be changed to `main` and the branch
+    > rebased.
+    ```
+  - After all prerequisite PRs merge to main, the orchestrator should detect this (via the PR watch loop in Step 1b) and re-target stacked PRs to `main` with a rebase:
+    ```bash
+    # Detected: all prerequisite PRs now merged to main
+    gh pr edit "$PR_NUM" --base main
+    # Re-launch issue pipeline to rebase onto main (normal conflict resolution flow)
+    ```
 
 **Layer dispatch presentation:**
 ```
