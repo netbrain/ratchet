@@ -120,112 +120,33 @@ Task prompt:
 ```
 Analyze all improvement signals for this Ratchet project and produce a prioritized action plan.
 
-Current configuration: [contents of workflow.yaml]
-Project context: [contents of project.yaml]
-Milestone progress: [contents of plan.yaml]
+Context: [contents of workflow.yaml, project.yaml, plan.yaml]
+Signals: [debate meta.json summaries, reviews, retros, escalations, execution logs, pending discoveries]
+[If PR mode: PR analysis for #<number>: CI failures, review comments, merge status]
 
-Signal data:
-  Debate metadata: [summary of debates/*/meta.json — counts, verdicts, rounds]
-  Performance reviews: [contents of reviews/**/*.json]
-  Retro findings: [contents of retros/*.json]
-  Escalation rulings: [contents of escalations/*.json]
-  Execution logs: [summary of executions/*.yaml — mode, guard_results, promoted, token_estimate per component]
-  Pending discoveries: [epic.discoveries with status == "pending"]
-  [If PR mode: PR analysis for #<number>: [CI failures, review comments, merge status]]
+PRINCIPLE: New changes are GUILTY until proven innocent. Check whether agents dismiss failures without proof.
 
-PRINCIPLE — Guilty Until Proven Innocent:
-  New changes are GUILTY until proven innocent. When reviewing CI failures
-  and retro findings, check whether agents are dismissing failures without
-  proof. A healthy workflow holds PRs accountable for their test failures.
+Analyze these 10 dimensions:
 
-Analyze these dimensions:
-
-1. **PR/CI gaps** (if PR mode) — map each failure to a Ratchet gap:
-   - Missing validation command in adversarial prompt
-   - Missing guard at a phase boundary
-   - Missing pair for an uncovered quality dimension
-   - Phase gap (caught too late in the pipeline)
-
-2. **Pair effectiveness** — which pairs add the most/least value?
-   - Fast-path rate: pairs that always TRIVIAL_ACCEPT may be redundant
-   - Escalation rate: pairs that always escalate may need splitting
-   - Round trends: are debates converging faster or slower?
-
-3. **Retro findings by severity** — process critical first:
-   - Present distribution: "[N] critical, [N] major, [N] minor, [N] noise"
-   - Flag recurring findings (those with `related_findings`) as structural
-   - Cross-retro recurrence: if same gap found 2+ times, auto-escalate severity
-
-4. **Escalation patterns** — settled law injection:
-   - If a dispute type has 3+ rulings in the same direction, inject as "settled law"
-     in the adversarial prompt to stop re-litigating settled disputes
-   - **Injection procedure**: When settled law is detected, edit the adversarial
-     prompt file (`.ratchet/pairs/<pair-name>/adversarial.md`) as follows:
-     1. Locate the `### Settled Law (Patterns from Prior Debates)` section. If it does not exist, create it
-        immediately before the last `## ` heading in the file (typically
-        `## Validation Method` or `## Success Criteria`).
-     2. Append a new entry in this format:
-        ```markdown
-        ### Settled Law (Patterns from Prior Debates)
-
-        - [ ] **<dispute type>**: <N> prior rulings consistently found <direction>.
-              Treat as settled — do not re-litigate. Escalations matching this
-              pattern should follow the established precedent unless new evidence
-              contradicts it.
-              Source: escalations/<debate-id-1>.json, <debate-id-2>.json, ...
-        ```
-     3. Each entry becomes a checklist item in the adversarial's review so the
-        adversarial agent checks for the pattern without debating it again.
-     4. If the section already exists, append the new entry to the existing list.
-     5. **Verification**: After editing, confirm the adversarial file still parses
-        as valid markdown and the settled law section appears in the expected location:
-        ```bash
-        grep -c "Settled Law" .ratchet/pairs/<pair-name>/adversarial.md
-        # Expected: 1 (the section heading)
-        ```
-
-5. **Scope coverage gaps** — files modified that fall outside all pair scopes
-
+1. **PR/CI gaps** (PR mode) — map failures to: missing validation cmd, missing guard, missing pair, phase gap
+2. **Pair effectiveness** — fast-path rate (always TRIVIAL_ACCEPT → redundant), escalation rate (always escalate → split), round convergence trends
+3. **Retro severity** — distribution (critical/major/minor/noise), flag recurring findings as structural, auto-escalate if same gap found 2+ times
+4. **Escalation patterns** — if a dispute type has 3+ same-direction rulings, inject as settled law in adversarial prompt (see Settled Law Injection below)
+5. **Scope coverage gaps** — files modified outside all pair scopes
 6. **Guard recommendations** — missing guards, timing adjustments, overly strict guards
-
 7. **Workflow preset recommendations** — should any component switch presets?
+8. **Workflow mode effectiveness** — solo guard failure rate >30% → promote to debate; frequent solo→debate promotions → wrong default; compare token costs solo vs debate
+9. **Over-engineered workflow** — >80% TRIVIAL_ACCEPT → demote to solo; no adversarial pushback in R1 → simplify pipeline; output specific workflow.yaml field changes
+10. **Guilty-until-proven-innocent compliance** — agents dismissing failures without evidence?
 
-8. **Workflow mode effectiveness** — analyze execution logs to evaluate solo vs debate:
-   - Solo guard failure rate per component: if >30% of solo executions fail a
-     blocking guard, recommend promoting that component to `strategy: "debate"`
-   - Promotion frequency: if a component's solo executions are frequently promoted
-     to debate (via `promote_on_guard_failure`), the default mode is wrong —
-     recommend switching the component's `strategy` to `"debate"`
-   - Token cost comparison: compare `token_estimate` across solo vs debate executions
-     for the same component — flag cases where solo + promotion costs more than
-     debate-first would have
-
-9. **Over-engineered workflow detection** — identify components paying for
-   review overhead they don't need:
-   - Pairs with >80% TRIVIAL_ACCEPT verdicts across recent debates: recommend
-     demoting the component to `strategy: "solo"` (guards alone are sufficient)
-   - Components running `full` or `standard` pipeline where tests always pass
-     in round 1 (no adversarial pushback): recommend switching to `standard`
-     or `review` pipeline
-   - Output specific `workflow.yaml` changes: component `pipeline` field,
-     component `strategy` field, pair `enabled` flag
-
-10. **Guilty-until-proven-innocent compliance** — are agents dismissing test
-    failures as "flaky" or "pre-existing" without evidence?
-
-Produce a PRIORITIZED list of actionable improvements, grouped by type:
-  A. Pair prompt changes (add knowledge, sharpen adversarial, settle law)
-  B. New/modified guards
-  C. Workflow config changes (scope, timing, presets, max_rounds, strategy, pipeline)
-  D. New pairs needed
-  E. Pairs to disable/remove
-
-For each improvement, include:
-  - What to change (specific file and content)
-  - Why (evidence from which signal)
-  - Priority (critical / high / medium / low)
-  - Type (prompt-tweak / structural / config-change)
+Output a PRIORITIZED list grouped by: A) Pair prompt changes, B) New/modified guards, C) Workflow config changes, D) New pairs, E) Pairs to disable/remove.
+Per improvement: what to change (file + content), why (evidence), priority (critical/high/medium/low), type (prompt-tweak/structural/config-change).
 ```
+
+**Settled Law Injection**: When 3+ escalation rulings agree on a dispute type, edit `.ratchet/pairs/<pair-name>/adversarial.md`:
+- Find or create a `### Settled Law (Patterns from Prior Debates)` section (before the last `## ` heading)
+- Append: `- [ ] **<dispute type>**: <N> rulings found <direction>. Treat as settled — do not re-litigate. Source: escalations/<ids>.json`
+- Verify: `grep -c "Settled Law" .ratchet/pairs/<pair-name>/adversarial.md` returns 1
 
 **Error handling**: If the analyst agent fails or returns no recommendations:
 > "Analysis could not be completed. This may be due to insufficient data or an internal error."
@@ -246,73 +167,22 @@ The verification agent is **read-only** — it checks claims, it does not fix th
 Task prompt:
 
 ```
-You are an adversarial fact-checker for Ratchet tighten findings. Your job is
-to verify whether the analyst's claims are actually true by checking the
-codebase, running commands, and examining evidence.
+Adversarial fact-checker for tighten findings. For each finding, READ the actual files and RUN commands to verify — do not accept claims at face value (analyst may hallucinate).
 
-For each finding below, verify:
-1. Is the claimed gap REAL? (e.g., is the validation command actually missing
-   from the adversarial prompt, or is the analyst wrong?)
-2. Is the evidence ACCURATE? (e.g., does the CI failure actually exist? Is the
-   file path correct? Does the escalation pattern actually recur?)
-3. Is the proposed fix CORRECT? (e.g., will the suggested edit actually address
-   the gap, or will it break something?)
-4. Is the severity JUSTIFIED? (e.g., is this truly critical, or is it minor?)
+Check per finding: Is the gap real? Is the evidence accurate? Is the fix correct? Is the severity justified?
 
-For each finding, issue one of:
-- CONFIRMED — the claim is verified, evidence checks out
-- DOWNGRADED — the claim has merit but severity is overstated (explain why)
-- REJECTED — the claim is false or unsupported (provide counter-evidence)
-- NEEDS_INFO — cannot verify without additional data (explain what's missing)
+Verdict per finding: CONFIRMED | DOWNGRADED (explain) | REJECTED (counter-evidence) | NEEDS_INFO (what's missing)
 
-PRINCIPLE — verify, don't assume:
-  Do NOT accept claims at face value. Read the actual files. Run the actual
-  commands. Check whether the "missing" thing is truly missing. The analyst
-  may hallucinate file contents, misread pair definitions, or misattribute
-  CI failures.
-
-Findings to verify:
-[analyst's prioritized improvements list]
-
-Current pair definitions:
-[list paths to .ratchet/pairs/*/generative.md and adversarial.md]
-
-Current guards:
-[guards array from workflow.yaml]
+Findings: [analyst's improvements list]
+Pair definitions: [paths to .ratchet/pairs/*/generative.md and adversarial.md]
+Guards: [guards array from workflow.yaml]
 ```
 
-**Processing verification results:**
+**Processing results:** CONFIRMED → keep. DOWNGRADED → adjust severity, append note. REJECTED → remove, log to `.ratchet/reports/verification-rejected.log` (`mkdir -p .ratchet/reports`). NEEDS_INFO → keep as unverified.
 
-For each finding:
-- **CONFIRMED** → keep as-is, present to user
-- **DOWNGRADED** → adjust severity, append verifier's note to the finding
-- **REJECTED** → remove from the findings list, log to `.ratchet/reports/verification-rejected.log` for transparency (create directory first: `mkdir -p .ratchet/reports`):
-  ```
-  [<ISO timestamp>] REJECTED: "[original claim]"
-  Reason: "[verifier's counter-evidence]"
-  ```
-- **NEEDS_INFO** → keep but mark as unverified, present with caveat
+Present summary: `"Verification: [N] checked — [N] confirmed, [N] downgraded, [N] rejected, [N] unverified"`. Only confirmed/downgraded/unverified proceed to Step 4.
 
-Present a brief verification summary before proceeding:
-```
-Verification: [N] findings checked
-  [N] confirmed, [N] downgraded, [N] rejected, [N] unverified
-  [If any rejected: "Rejected: [brief reason for each]"]
-```
-
-Only verified/downgraded/unverified findings proceed to Step 4.
-
-**Error handling**: If the verification agent fails or returns no results:
-- Treat all findings as unverified (NEEDS_INFO)
-- Present to user with caveat: "Verification could not be completed. Findings are unverified."
-- Proceed to Step 4 with all findings marked as unverified.
-
-**Edge case — all findings rejected**: If every finding is rejected by the verifier:
-> "All [N] analyst findings were rejected by verification. No actionable improvements."
-
-Then use `AskUserQuestion` with options: `"Re-run analysis with different signals"`, `"View rejected findings (.ratchet/reports/verification-rejected.log)"`, `"Done for now"`.
-
-Do NOT proceed to Step 4 with an empty findings list.
+**Error handling**: If verifier fails, treat all as NEEDS_INFO and proceed with caveat. If ALL rejected, present options: `"Re-run analysis"`, `"View rejected findings"`, `"Done for now"`. Do NOT proceed to Step 4 with empty list.
 
 ### Step 4: Present Assessment and Apply
 
@@ -338,77 +208,35 @@ Options:
 
 #### Applying improvements
 
-For "Apply improvements" — walk through each improvement by priority:
+For "Apply improvements" — walk through each by priority. Per improvement, `AskUserQuestion`: "[priority] [detail]. Apply?" → Options: `"Apply"`, `"Skip"`, `"Modify"`, `"Stop applying"`.
 
-For each improvement, use `AskUserQuestion` to confirm:
-- Question: "[priority] [improvement detail]. Apply this change?"
-- Options: `"Apply"`, `"Skip"`, `"Modify"`, `"Stop applying"`
+| Change type | Action |
+|---|---|
+| Missing validation cmd | Edit `adversarial.md` to add command |
+| Missing guard | Add to `guards` in `workflow.yaml` |
+| Missing pair | Suggest `/ratchet:pair` |
+| Phase gap | Reassign pair to earlier phase |
+| Settled law | Add patterns to adversarial prompts |
+| Disable/remove pair | Set `enabled: false` or remove |
+| Split pair | Create two narrower pairs |
+| Adjust guard timing | Move between pre/post-debate |
+| Change preset | Switch component workflow preset |
+| Adjust max_rounds | Increase (contentious) / decrease (fast-path) |
+| Sharpen prompts | Add missed-issue knowledge, remove false positives |
 
-Types of changes the analyst applies:
-
-- **Missing validation command** → Edit `.ratchet/pairs/<name>/adversarial.md` to add the command
-- **Missing guard** → Add to `guards` array in `.ratchet/workflow.yaml`
-- **Missing pair** → Suggest running `/ratchet:pair` for the uncovered dimension
-- **Phase gap** → Reassign a pair to an earlier phase
-- **Settled law injection** → Add settled patterns to adversarial prompts
-- **Disable/remove pair** → Set `enabled: false` or remove from workflow.yaml
-- **Split pair** → Create two narrower pairs from one broad pair
-- **Adjust guard timing** → Move guard from post-debate to pre-debate (or vice versa)
-- **Change workflow preset** → Switch a component from tdd to traditional (or vice versa)
-- **Adjust max_rounds** → Increase for contentious pairs, decrease for fast-path pairs
-- **Sharpen prompts** → Add knowledge about commonly missed issues, remove false-positive patterns
-
-For "Apply all automatically" — apply all changes without individual confirmation, then show a summary of what changed.
+For "Apply all automatically" — apply all without confirmation, then show summary.
 
 ### Step 5: Store Results
 
 #### 5a. Retro findings (PR/CI mode)
 
-When improvements originated from PR analysis, store findings for future reference:
+When improvements originated from PR analysis, write to `.ratchet/retros/<timestamp>.json` with fields: `timestamp`, `source` ("pr"), `source_ref` (PR number), and `findings[]` — each finding has `type` (missing_validation|missing_guard|missing_pair|phase_gap), `description`, `evidence`, `fix_applied` (or null), `severity` (critical|major|minor|noise), `related_findings[]`.
 
-Write to `.ratchet/retros/<timestamp>.json`:
-```json
-{
-  "timestamp": "<ISO timestamp>",
-  "source": "pr",
-  "source_ref": "<PR number>",
-  "findings": [
-    {
-      "type": "missing_validation|missing_guard|missing_pair|phase_gap",
-      "description": "what was missed",
-      "evidence": "CI output or review comment",
-      "fix_applied": "what was changed, or null if skipped",
-      "severity": "critical|major|minor|noise",
-      "related_findings": ["<timestamp>:<index>"]
-    }
-  ]
-}
-```
-
-**Cross-retro recurrence check**: Before storing, scan existing `.ratchet/retros/*.json` for findings with the same `type` and a similar `description`. If 2+ prior matches exist:
-- Auto-escalate severity one level (noise -> minor -> major -> critical; critical stays critical)
-- Populate `related_findings` with references to the matching prior findings
-- Present: "This is the Nth time this gap was found. Escalating from [old severity] to [new severity]."
+**Cross-retro recurrence**: Before storing, scan existing retros for same `type` + similar `description`. If 2+ prior matches: auto-escalate severity one level, populate `related_findings`, present "Nth occurrence — escalating from [old] to [new]."
 
 #### 5b. Create sidequests for skipped findings
 
-For any finding with severity `major` or `critical` where `fix_applied` is null (user chose to skip), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` so it surfaces as actionable work in future runs:
-```bash
-if [ -f .ratchet/plan.yaml ]; then
-  yq eval -i ".epic.discoveries += [{
-    \"ref\": \"discovery-tighten-$(date +%s)\",
-    \"title\": \"Address tighten finding: $description\",
-    \"description\": \"Tighten finding (skipped): $description. Evidence: $evidence\",
-    \"source\": \"tighten-$timestamp\",
-    \"created_at\": \"$(date -Iseconds)\",
-    \"severity\": \"$severity\",
-    \"retro_type\": \"skipped-finding\",
-    \"status\": \"pending\",
-    \"issue_ref\": null,
-    \"affected_scope\": null
-  }]" .ratchet/plan.yaml
-fi
-```
+For any skipped finding with severity `major` or `critical` (`fix_applied` is null), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` via `yq eval -i`. Fields: `ref` (discovery-tighten-TIMESTAMP), `title`, `description` (include evidence), `source`, `created_at`, `severity`, `retro_type: "skipped-finding"`, `status: "pending"`.
 
 #### 5c. Analyst summary
 
@@ -459,27 +287,13 @@ Then use `AskUserQuestion`:
   - `"Commit and push"` — commit, then push to the current branch
   - `"Don't persist yet"` — leave changes unstaged for manual review
 
-**Commit**: Stage only `.ratchet/` files that were modified (pair defs, workflow.yaml, reports, retros). Do NOT stage source code or unrelated files.
-```bash
-git add .ratchet/pairs/ .ratchet/workflow.yaml .ratchet/reports/ .ratchet/retros/ .ratchet/scores.yaml 2>/dev/null
-git add .ratchet/plan.yaml 2>/dev/null  # discoveries may have been updated
-git commit -m "Tighten: [summary]"
-```
+Stage only `.ratchet/` files (pairs, workflow.yaml, reports, retros, scores.yaml, plan.yaml). Do NOT stage source code.
 
-**Commit and push**: Same as above, then `git push`.
+- **Commit**: `git add .ratchet/... && git commit -m "Tighten: [summary]"`
+- **Commit and push**: same + `git push`
+- **Commit and create PR**: branch `ratchet/tighten-<timestamp>`, commit, push, `gh pr create`
 
-**Commit and create PR**: Branch, commit, push, and open PR:
-```bash
-BRANCH="ratchet/tighten-$(date +%Y%m%dT%H%M%SZ)"
-git checkout -b "$BRANCH"
-git add .ratchet/pairs/ .ratchet/workflow.yaml .ratchet/reports/ .ratchet/retros/ .ratchet/scores.yaml 2>/dev/null
-git add .ratchet/plan.yaml 2>/dev/null
-git commit -m "Tighten: [summary]"
-git push -u origin "$BRANCH"
-gh pr create --title "Tighten: [summary]" --body "Applied [N] improvements from tighten analysis."
-```
-
-If no files were changed (all improvements skipped), skip this step entirely.
+If no files changed (all skipped), skip this step.
 
 ### Step 8: Next Steps
 
