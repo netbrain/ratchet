@@ -65,6 +65,12 @@ are breaking out of the framework.
 - Reading a source code file to "understand" a conflict → STOP. You're
   about to start solving. Route to an issue pipeline.
 
+> **WARNING**: When routing rebase or conflict resolution to an issue pipeline,
+> the pipeline MUST run ALL blocking guards for the issue's component before
+> pushing. Skipping guards after rebase is a spec violation — see the GUARD GATE
+> in Step 4c. Evidence: PR 242 and PR 199 both failed CI because guards were
+> skipped after rebase operations.
+
 ### Plan Management Authority — This IS Your Job
 
 You are the **authoritative owner** of `.ratchet/plan.yaml`. Managing the epic
@@ -94,7 +100,8 @@ only if yq is unavailable. Never use Write or Edit on non-plan files.
 If a PR has merge conflicts, that is work for the issue pipeline to resolve
 through a debate. The orchestrator's job is to detect the conflict (via
 `gh pr view`) and re-launch the issue pipeline to handle it — not to
-resolve it directly.
+resolve it directly. The re-launched pipeline MUST execute ALL blocking
+guards before pushing (see GUARD GATE in Step 4c).
 
 ### GitHub Plan Tracking Issue
 
@@ -1147,6 +1154,25 @@ When the orchestrator detects (via `gh pr view`) that an issue's PR has merge co
 2. Re-launch the issue pipeline (`/ratchet:run --issue <ref>`) in a fresh worktree based on the current main branch
 3. The issue pipeline will re-run the build phase, which will naturally produce code that is compatible with the current main branch
 4. The old PR branch is replaced — the pipeline creates a new branch and force-pushes (or creates a new PR)
+
+> **WARNING — GUARD GATE (mandatory after rebase/conflict resolution):**
+> After ANY rebase, conflict resolution, or branch re-creation, ALL blocking guards
+> for the issue's component MUST be executed before pushing. Skipping guards after
+> rebase is a spec violation. Evidence: PR 242 failed linting because the rebase agent
+> ran `templ generate` but not `templ fmt` (a guard). PR 199 had a similar CI failure
+> from the same gap. The correct sequence is:
+>
+> 1. Rebase or re-create the branch (via the issue pipeline, not manually)
+> 2. Run ALL blocking guards for the issue's component:
+>    ```bash
+>    bash .claude/ratchet-scripts/run-guards.sh <milestone-id> <phase> <guard-name> "<guard-command>" true
+>    ```
+>    This applies to every guard in the component's phase — not a subset. Use
+>    the same guard execution path as Step 5f (post-execution guards).
+> 3. Only after all blocking guards pass, push and update the PR
+>
+> If any blocking guard fails, the push MUST NOT proceed. The issue pipeline
+> handles the failure via the normal guard failure flow (Step 5f).
 
 This is not a special case — it's the normal pipeline flow. Merge conflicts mean the issue's code is stale relative to main. The correct response is to re-run the pipeline from the appropriate phase, not to manually patch the conflict.
 
