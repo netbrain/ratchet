@@ -140,11 +140,11 @@ Analyze these 10 dimensions:
 10. **Guilty-until-proven-innocent compliance** — agents dismissing failures without evidence?
 
 11. **Token efficiency (caveman-compress)** — only when `caveman.enabled` is true in workflow.yaml:
+   - Read compression rules from `caveman/compress-rules.md` in the repo root
    - Review pair definitions (`.ratchet/pairs/*/generative.md` and `adversarial.md`) for verbosity
-   - Apply caveman compression to the markdown body below the YAML frontmatter `---` delimiter
+   - Apply the compress rules to the markdown body below the YAML frontmatter `---` delimiter
    - Use the pair's corresponding role intensity (generative pairs use `caveman.intensity.generative`, adversarial pairs use `caveman.intensity.adversarial`) — if the role intensity is `off`, skip that file
-   - **Preserve unchanged**: YAML frontmatter, all code blocks, file paths, command examples, JSON/YAML schemas, tool declarations, verdict keywords
-   - **Compress**: narrative prose, explanatory text, rationale sections, verbose instructions
+   - Follow the **Remove**, **Preserve EXACTLY**, **Preserve Structure**, and **Compress** sections from `caveman/compress-rules.md`
    - Before compressing, create backups: copy `generative.md` to `generative.original.md` (and same for adversarial)
    - Present the before/after diff to the user via `AskUserQuestion` before applying:
      - Question: "Caveman-compress pair definitions? Estimated token savings: ~[N]% per pair."

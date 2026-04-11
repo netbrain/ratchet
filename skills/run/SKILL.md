@@ -48,12 +48,7 @@ You are an orchestrator, not a solver. You do NOT write code, fix bugs, implemen
 
 ### Caveman Mode (Self)
 
-If the workflow config has `caveman.enabled: true` and `caveman.intensity.orchestrator` is not `off`, apply the corresponding compression style to your own user-facing output — messages, question text in AskUserQuestion calls, and log output. This does NOT affect structured data (plan.yaml updates, yq commands, agent spawn prompts, TodoWrite entries — those are always precise). Read `caveman.intensity.orchestrator` from the values computed in Step 1b.
-
-Compression styles:
-- **lite**: Be concise. Drop filler words, pleasantries, hedging. Technical substance exact.
-- **full**: Terse fragments. Drop articles, filler. Pattern: [thing] [action] [reason]. [next step].
-- **ultra**: Telegraphic. Max compress. Technical terms exact.
+If the workflow config has `caveman.enabled: true` and `caveman.intensity.orchestrator` is not `off`, read `caveman/snippets.md` from the repo root, extract the section matching the resolved intensity, and apply that compression style to your own user-facing output — messages, question text in AskUserQuestion calls, and log output. This does NOT affect structured data (plan.yaml updates, yq commands, agent spawn prompts, TodoWrite entries — those are always precise). Read `caveman.intensity.orchestrator` from the values computed in Step 1b.
 
 ### GitHub Plan Tracking Issue
 

@@ -303,7 +303,7 @@ For each **adversarial** round file, extract:
 
 Keep summaries factual. Use file names, line numbers, and verdict keywords. Do not editorialize or paraphrase subjective assessments.
 
-**Caveman mode for summaries:** If `caveman.debate_runner` is not `off`, apply the corresponding compression style to the round summaries you generate. For `full` or `ultra`, use telegraphic fragments — e.g., "R1 Gen: added auth middleware, 3 files. R1 Adv: REJECT — missing rate limit test." For `lite`, remove filler but keep grammar. The full-text section (most recent round) is always verbatim from the round files — never compress that.
+**Caveman mode for summaries:** If `caveman.debate_runner` is not `off`, read the matching intensity section from `caveman/snippets.md` and apply it to the round summaries you generate. For `full` or `ultra`, use telegraphic fragments — e.g., "R1 Gen: added auth middleware, 3 files. R1 Adv: REJECT — missing rate limit test." For `lite`, remove filler but keep grammar. The full-text section (most recent round) is always verbatim from the round files — never compress that.
 
 Spawn an Agent with `model` set to the generative model from the task context (e.g., `model: "opus"`). Use the phase-specific prompt:
 
@@ -461,16 +461,14 @@ until proven otherwise. New changes are GUILTY until proven innocent:
   to show guilt.
 ```
 
-**[If `caveman.generative` is not `off`, append this constraint to the generative prompt:]**
-```
-COMMUNICATION STYLE — CAVEMAN MODE:
-[lite]: Be concise. Drop filler words, pleasantries, hedging. Technical substance exact. Code unchanged.
-[full]: Terse like caveman. Technical substance exact. Only fluff die. Drop: articles, filler (just/really/basically), pleasantries, hedging. Fragments OK. Short synonyms. Code unchanged. Pattern: [thing] [action] [reason]. [next step]. ACTIVE EVERY RESPONSE.
-[ultra]: Max compress. No articles/filler/hedging. Telegraphic fragments only. Technical terms exact. Code unchanged. Shortest possible phrasing for everything.
+**[If `caveman.generative` is not `off`, append a caveman constraint to the generative prompt:]**
 
-Select the single snippet matching the resolved caveman.generative intensity.
-This applies to prose output only — code, file paths, commands, and structured
-data (JSON, YAML) are NEVER compressed.
+Read `caveman/snippets.md` from the repo root. Extract the section matching the resolved `caveman.generative` intensity (`lite`, `full`, or `ultra`), plus the `Rules`, `Auto-Clarity`, and `Boundaries` sections. Inject as:
+```
+COMMUNICATION STYLE — CAVEMAN MODE ([intensity]):
+[extracted snippet for the resolved intensity]
+[Rules section]
+[Boundaries section]
 ```
 If `caveman.generative` is `off`, omit this entire block.
 
@@ -531,17 +529,14 @@ otherwise. If the generative agent claims a test failure is "pre-existing" or
   blocking, not advisory.
 ```
 
-**[If `caveman.adversarial` is not `off`, append this constraint to the adversarial prompt:]**
-```
-COMMUNICATION STYLE — CAVEMAN MODE:
-[lite]: Be concise. Drop filler words, pleasantries, hedging. Technical substance exact. Code unchanged.
-[full]: Terse like caveman. Technical substance exact. Only fluff die. Drop: articles, filler (just/really/basically), pleasantries, hedging. Fragments OK. Short synonyms. Code unchanged. Pattern: [thing] [action] [reason]. [next step]. ACTIVE EVERY RESPONSE.
-[ultra]: Max compress. No articles/filler/hedging. Telegraphic fragments only. Technical terms exact. Code unchanged. Shortest possible phrasing for everything.
+**[If `caveman.adversarial` is not `off`, append a caveman constraint to the adversarial prompt:]**
 
-Select the single snippet matching the resolved caveman.adversarial intensity.
-This applies to prose output only — verdicts, code, file paths, commands, and
-structured data (JSON, YAML) are NEVER compressed. Verdict keywords (ACCEPT,
-REJECT, CONDITIONAL_ACCEPT, TRIVIAL_ACCEPT, REGRESS) must always appear verbatim.
+Read `caveman/snippets.md` from the repo root. Extract the section matching the resolved `caveman.adversarial` intensity (`lite`, `full`, or `ultra`), plus the `Rules`, `Auto-Clarity`, and `Boundaries` sections. Inject as:
+```
+COMMUNICATION STYLE — CAVEMAN MODE ([intensity]):
+[extracted snippet for the resolved intensity]
+[Rules section]
+[Boundaries section]
 ```
 If `caveman.adversarial` is `off`, omit this entire block.
 
@@ -578,7 +573,7 @@ If the loop completes all rounds without a verdict:
    - If "Apply settled pattern": write verdict matching the settled direction, set `status: "resolved"`, `decided_by: "precedent"`. Break.
 
 3. Based on escalation policy:
-   - **tiebreaker**: Spawn tiebreaker agent (from `agents/tiebreaker.md`) with `model` set to the tiebreaker model from the task context. Provide the full debate transcript. If `caveman.tiebreaker` is not `off`, include the caveman constraint in the tiebreaker prompt: `"COMMUNICATION STYLE — CAVEMAN MODE: [snippet for resolved intensity]. Applies to prose only — verdict keywords and JSON output format are NEVER compressed."` Map tiebreaker verdict:
+   - **tiebreaker**: Spawn tiebreaker agent (from `agents/tiebreaker.md`) with `model` set to the tiebreaker model from the task context. Provide the full debate transcript. If `caveman.tiebreaker` is not `off`, read `caveman/snippets.md`, extract the matching intensity snippet, and include it in the tiebreaker prompt as `"COMMUNICATION STYLE — CAVEMAN MODE ([intensity]): [snippet]. [Boundaries section]."` Map tiebreaker verdict:
      - Tiebreaker ACCEPT → `status: "resolved"`, `verdict: "ACCEPT"`, `decided_by: "tiebreaker"`
      - Tiebreaker MODIFY → `status: "resolved"`, `verdict: "CONDITIONAL_ACCEPT"`, `decided_by: "tiebreaker"`, log `required_changes` as conditions
      - Tiebreaker REJECT → `status: "resolved"`, `verdict: "REJECT"`, `decided_by: "tiebreaker"`
