@@ -46,6 +46,15 @@ You are an orchestrator, not a solver. You do NOT write code, fix bugs, implemen
 
 **`--here` mode** bypasses the Agent tool entirely — orchestrator executes directly in-session. Only top-level human-interactive sessions; spawned agents MUST NOT claim it. It is a modifier, not a mode — modifies how the resolved mode executes.
 
+### Caveman Mode (Self)
+
+If the workflow config has `caveman.enabled: true` and `caveman.intensity.orchestrator` is not `off`, apply the corresponding compression style to your own user-facing output — messages, question text in AskUserQuestion calls, and log output. This does NOT affect structured data (plan.yaml updates, yq commands, agent spawn prompts, TodoWrite entries — those are always precise). Read `caveman.intensity.orchestrator` from the values computed in Step 1b.
+
+Compression styles:
+- **lite**: Be concise. Drop filler words, pleasantries, hedging. Technical substance exact.
+- **full**: Terse fragments. Drop articles, filler. Pattern: [thing] [action] [reason]. [next step].
+- **ultra**: Telegraphic. Max compress. Technical terms exact.
+
 ### GitHub Plan Tracking Issue
 
 > **For the canonical body format, HTML comment metadata rules, and sync helper pattern, read `skills/run/plan-tracking-format.md`.**
@@ -184,7 +193,7 @@ Determine which `.ratchet/` directory to use:
      ```
      Options: one per workspace name, plus `"Done for now"`
 4. **Workspace selected** → set the effective `.ratchet/` path to `<workspace-path>/.ratchet/` and prepend `<workspace-path>/` to all file operations for the rest of this run
-5. **Inherit policy from root**: Read the root `workflow.yaml` for shared policy fields (`models`, `escalation`, `max_rounds`, `max_regressions`, `pr_scope`). The workspace's own `workflow.yaml` overrides these per-field (not all-or-nothing — e.g., a workspace can override just `models.adversarial` and inherit everything else)
+5. **Inherit policy from root**: Read the root `workflow.yaml` for shared policy fields (`models`, `escalation`, `max_rounds`, `max_regressions`, `pr_scope`, `caveman`). The workspace's own `workflow.yaml` overrides these per-field (not all-or-nothing — e.g., a workspace can override just `models.adversarial` or `caveman.intensity.generative` and inherit everything else)
 6. **No `workspaces` key** → single-project mode, use `.ratchet/` as-is (no change from current behavior)
 
 #### 1b. Read State
@@ -192,6 +201,25 @@ Determine which `.ratchet/` directory to use:
 Read `plan.yaml` (if it exists), `project.yaml`, and `workflow.yaml` from the resolved `.ratchet/` directory.
 
 **`publish_debates` note**: Debate round publishing is handled by the `publish-debate-hook.sh` PostToolUse hook, not by the orchestrator or debate-runner. The hook reads `publish_debates` and `adapter` directly from `workflow.yaml`. No orchestrator-side validation or passing of publish config is needed.
+
+**Caveman config resolution**: After reading `workflow.yaml`, extract per-role caveman intensities:
+```bash
+caveman_enabled=$(yq eval '.caveman.enabled // false' .ratchet/workflow.yaml)
+if [ "$caveman_enabled" = "true" ]; then
+  caveman_generative=$(yq eval '.caveman.intensity.generative // "full"' .ratchet/workflow.yaml)
+  caveman_adversarial=$(yq eval '.caveman.intensity.adversarial // "full"' .ratchet/workflow.yaml)
+  caveman_tiebreaker=$(yq eval '.caveman.intensity.tiebreaker // "full"' .ratchet/workflow.yaml)
+  caveman_orchestrator=$(yq eval '.caveman.intensity.orchestrator // "full"' .ratchet/workflow.yaml)
+  caveman_debate_runner=$(yq eval '.caveman.intensity.debate_runner // "full"' .ratchet/workflow.yaml)
+else
+  caveman_generative=off
+  caveman_adversarial=off
+  caveman_tiebreaker=off
+  caveman_orchestrator=off
+  caveman_debate_runner=off
+fi
+```
+These resolved values are used when spawning issue pipelines (Step 5) and for the orchestrator's own output style.
 
 Build a picture of:
 - Which milestones are **completed** (status: done)

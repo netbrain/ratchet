@@ -12,6 +12,15 @@ models:
   generative: opus
   adversarial: sonnet
 
+caveman:
+  enabled: true
+  intensity:
+    generative: full
+    adversarial: full
+    tiebreaker: full
+    orchestrator: full
+    debate_runner: full
+
 progress:
   adapter: github-issues
   publish_debates: per-round

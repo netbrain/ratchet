@@ -265,7 +265,19 @@ Don't present all pairs at once for rubber-stamping. Walk through them — the u
 
 Skip this step entirely if the adapter selected in Step 6e is anything other than `github-issues` (i.e., `none` or `markdown`).
 
-**6g. Final review** — only after walking through each area, present the complete config for approval:
+**6g. Token reduction (caveman mode):** Use `AskUserQuestion`:
+- Question: "Enable caveman mode? Reduces agent output tokens by ~65% through terse communication — same code quality, less prose. Per-role intensity is configurable after setup."
+- Options:
+  - `"Yes — recommended defaults (Recommended)"` — sets `caveman.enabled: true` with defaults: generative=full, adversarial=full, tiebreaker=full, orchestrator=full, debate_runner=full
+  - `"Yes — let me configure per-role intensities"` — follow up with per-role selection (see below)
+  - `"No — full verbosity"` — omits the caveman section from workflow.yaml
+
+If "let me configure": for each role (`generative`, `adversarial`, `tiebreaker`, `orchestrator`, `debate_runner`), use `AskUserQuestion`:
+- Question: "[role] agent intensity?"
+- Options: `"off"`, `"lite"`, `"full"`, `"ultra"`
+- Include a `(Recommended)` marker on `"full"` for each role
+
+**6h. Final review** — only after walking through each area, present the complete config for approval:
 - Question: "[full formatted config]. Everything look right?"
 - Options: `"Approve (Recommended)"`, `"Modify [section]"`, `"Start over"`
 
@@ -372,6 +384,15 @@ progress:
   # WARNING: If publish_debates is non-false and adapter is not github-issues,
   # ratchet:run will emit a warning and treat it as false.
 
+# caveman:                        # Token reduction (~65% output savings)
+#   enabled: true
+#   intensity:
+#     generative: full
+#     adversarial: full
+#     tiebreaker: full
+#     orchestrator: full
+#     debate_runner: full
+
 components:
   - name: <component-name>
     scope: "<file-glob>"
@@ -403,6 +424,34 @@ Example when user chose `none` or any adapter other than `github-issues`:
 ```yaml
 progress:
   adapter: none
+```
+
+**`caveman` field generation rule:** When writing `.ratchet/workflow.yaml`, apply this logic:
+- If the user selected "Yes" (either defaults or custom) in Step 6g: write the `caveman:` block with `enabled: true` and the resolved per-role intensities.
+- If the user selected "No": omit the `caveman` section entirely (absence equals disabled).
+
+Example when user chose recommended defaults:
+```yaml
+caveman:
+  enabled: true
+  intensity:
+    generative: full
+    adversarial: full
+    tiebreaker: full
+    orchestrator: full
+    debate_runner: full
+```
+
+Example when user chose custom intensities:
+```yaml
+caveman:
+  enabled: true
+  intensity:
+    generative: lite
+    adversarial: full
+    tiebreaker: full
+    orchestrator: off
+    debate_runner: ultra
 ```
 
 Create the `.ratchet/` directory structure:

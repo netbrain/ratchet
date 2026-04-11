@@ -139,7 +139,22 @@ Analyze these 10 dimensions:
 9. **Over-engineered workflow** — >80% TRIVIAL_ACCEPT → demote to solo; no adversarial pushback in R1 → simplify pipeline; output specific workflow.yaml field changes
 10. **Guilty-until-proven-innocent compliance** — agents dismissing failures without evidence?
 
-Output a PRIORITIZED list grouped by: A) Pair prompt changes, B) New/modified guards, C) Workflow config changes, D) New pairs, E) Pairs to disable/remove.
+11. **Token efficiency (caveman-compress)** — only when `caveman.enabled` is true in workflow.yaml:
+   - Review pair definitions (`.ratchet/pairs/*/generative.md` and `adversarial.md`) for verbosity
+   - Apply caveman compression to the markdown body below the YAML frontmatter `---` delimiter
+   - Use the pair's corresponding role intensity (generative pairs use `caveman.intensity.generative`, adversarial pairs use `caveman.intensity.adversarial`) — if the role intensity is `off`, skip that file
+   - **Preserve unchanged**: YAML frontmatter, all code blocks, file paths, command examples, JSON/YAML schemas, tool declarations, verdict keywords
+   - **Compress**: narrative prose, explanatory text, rationale sections, verbose instructions
+   - Before compressing, create backups: copy `generative.md` to `generative.original.md` (and same for adversarial)
+   - Present the before/after diff to the user via `AskUserQuestion` before applying:
+     - Question: "Caveman-compress pair definitions? Estimated token savings: ~[N]% per pair."
+     - Options: `"Apply all (Recommended)"`, `"Review each pair individually"`, `"Skip compression"`
+   - **Reversibility**: If the user later disables caveman (`caveman.enabled: false`), offer to restore originals:
+     - Check for `.original.md` files alongside pair definitions
+     - Question: "Caveman is disabled. Restore original (uncompressed) pair definitions?"
+     - Options: `"Restore originals (Recommended)"`, `"Keep compressed versions"`, `"Skip"`
+
+Output a PRIORITIZED list grouped by: A) Pair prompt changes, B) New/modified guards, C) Workflow config changes, D) New pairs, E) Pairs to disable/remove, F) Token efficiency (caveman-compress recommendations).
 Per improvement: what to change (file + content), why (evidence), priority (critical/high/medium/low), type (prompt-tweak/structural/config-change).
 ```
 

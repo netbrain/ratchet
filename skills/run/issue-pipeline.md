@@ -39,6 +39,62 @@ flock .ratchet/locks/postgres.lock bash .claude/ratchet-scripts/run-guards.sh <m
 For multiple singleton resources, acquire locks in alphabetical order to prevent deadlocks:
 ```bash
 flock .ratchet/locks/db.lock flock .ratchet/locks/playwright.lock bash -c '<guard-command>'
+
+Each debate-runner receives:
+```
+Run debate for pair [pair-name] in phase [phase].
+
+ROLE BOUNDARY — You are a debate-runner, NOT a solver:
+  You orchestrate debate rounds between generative and adversarial agents.
+  You may use Write/Edit ONLY for debate artifacts in .ratchet/debates/,
+  .ratchet/escalations/, and .ratchet/reviews/. You NEVER modify source
+  code, tests, or application config. Your tools are: Read, Write, Edit,
+  Agent, AskUserQuestion — with Write/Edit gated to .ratchet/ paths only.
+
+  When spawning agents, enforce these tool boundaries:
+    Generative agent: tools = Read, Grep, Glob, Bash, Write, Edit
+    Adversarial agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+    Tiebreaker agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
+
+  If you feel the urge to edit source code or tests, STOP — spawn the generative agent instead.
+
+PRINCIPLE — Guilty Until Proven Innocent:
+  New changes are GUILTY until proven innocent. Test failures on a PR
+  branch are CAUSED by the PR unless definitively proven otherwise.
+  The burden of proof is on demonstrating the failure exists on master,
+  not assuming it is unrelated. If a test fails, fix it — do not dismiss
+  it without running the same test on a clean master checkout as evidence.
+
+Pair definitions:
+  Generative: .ratchet/pairs/<name>/generative.md
+  Adversarial: .ratchet/pairs/<name>/adversarial.md
+
+Context:
+  Worktree: [absolute path to issue worktree, e.g. /workspace/main/.ratchet/worktrees/issue-43]
+  Phase: [current phase]
+  Milestone: [id, name, description]
+  Issue: [issue ref]
+  Files in scope: [matched file list]
+  Max rounds: [resolved value]
+  Escalation policy: [from workflow.yaml]
+  Escalation precedents: [summary or "none"]
+  Plan phase output: [path, if phase > plan]
+  Test phase output: [paths, if phase > test]
+  Previous debate context: [unresolved conditions, if any]
+  Models:
+    generative: [resolved model]
+    adversarial: [resolved model]
+    tiebreaker: [resolved model]
+  Publish:
+    publish_debates: [false | per-round | summary, or null if adapter is none]
+    progress_ref: [issue-level progress_ref — the GitHub issue for THIS issue, or null]
+    adapter: [adapter name from workflow.yaml, or null if adapter is none]
+  Caveman:
+    generative: [off|lite|full|ultra]
+    adversarial: [off|lite|full|ultra]
+    tiebreaker: [off|lite|full|ultra]
+    debate_runner: [off|lite|full|ultra]
+```
 ```
 
 #### Guilt Verification Pattern
@@ -132,6 +188,10 @@ For each matched pair:
 3. **Gather phase context**: plan output (if phase > plan), test locations (if phase > test), unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: pair-level overrides over global. Debate needs `generative`, `adversarial`, `tiebreaker`. Solo needs only `generative`.
 5. **Resolve `progress_ref`** (debate only): use `ref` if numeric, else `null`. Pass to debate-runner for `meta.json` at creation (before round files trigger publish hook).
+6. **Resolve caveman config**: Read from the values already computed in Step 1b:
+   - If `caveman_enabled` is `true`, pass the per-role intensities (`caveman_generative`, `caveman_adversarial`, `caveman_tiebreaker`, `caveman_debate_runner`)
+   - If `caveman_enabled` is `false` (or absent), pass all roles as `off`
+   - The `orchestrator` intensity is NOT passed to the debate-runner — it governs the run skill's own behavior
 
 #### 5e. Execute Phase (Strategy Branch)
 

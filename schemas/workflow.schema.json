@@ -125,6 +125,50 @@
         "$ref": "#/$defs/resource"
       },
       "description": "Shared resources that guards may need exclusive access to (databases, test servers, etc.)"
+    },
+    "caveman": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable caveman token reduction for agent outputs. When false or absent, all agents run with normal verbosity."
+        },
+        "intensity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "generative": {
+              "$ref": "#/$defs/caveman_intensity",
+              "default": "full",
+              "description": "Generative agent verbosity — code output is unaffected, only prose is compressed"
+            },
+            "adversarial": {
+              "$ref": "#/$defs/caveman_intensity",
+              "default": "full",
+              "description": "Adversarial agent verbosity — verdict keywords and structured findings are protected"
+            },
+            "tiebreaker": {
+              "$ref": "#/$defs/caveman_intensity",
+              "default": "full",
+              "description": "Tiebreaker agent verbosity — verdict JSON format is protected"
+            },
+            "orchestrator": {
+              "$ref": "#/$defs/caveman_intensity",
+              "default": "full",
+              "description": "Orchestrator (/ratchet:run) verbosity — structured data (plan.yaml, yq commands) unaffected"
+            },
+            "debate_runner": {
+              "$ref": "#/$defs/caveman_intensity",
+              "default": "full",
+              "description": "Debate-runner protocol verbosity — prompt construction and meta.json unaffected"
+            }
+          },
+          "description": "Per-role intensity overrides. Roles not specified use their defaults."
+        }
+      },
+      "description": "Caveman token reduction — reduces output tokens by ~65% through terse communication patterns. Per-role intensity control allows preserving verbosity where it matters (user-facing, code proposals) while compressing machine-consumed protocol output."
     }
   },
   "$defs": {
@@ -361,6 +405,11 @@
           "description": "Resources this guard needs (must match resource names). Singleton resources are locked before running and released after."
         }
       }
+    },
+    "caveman_intensity": {
+      "type": "string",
+      "enum": ["off", "lite", "full", "ultra"],
+      "description": "Caveman compression intensity — off (normal verbosity), lite (professional terseness, grammar intact), full (telegraphic fragments, articles dropped), ultra (maximum compression)"
     },
     "resource": {
       "type": "object",
