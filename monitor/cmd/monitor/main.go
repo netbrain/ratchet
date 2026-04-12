@@ -82,13 +82,19 @@ func main() {
 
 	// Create the enrichment pipeline instead of a direct watcher->broker pipe.
 	pipe := pipeline.New(w, broker, dir)
+
+	// Create the file-backed data source for API handlers, wrapped with cache.
+	fileds := datasource.NewFileDataSource(dir)
+	ds := datasource.NewCachedDataSource(fileds)
+
+	// Connect pipeline events to cache invalidation so file changes
+	// immediately clear stale cached data.
+	pipe.SetCacheInvalidator(ds)
+
 	go pipe.Run(ctx)
 
 	// Run the watcher event loop.
 	go w.Run(ctx)
-
-	// Create the file-backed data source for API handlers.
-	ds := datasource.NewFileDataSource(dir)
 
 	// Prepare embedded filesystems for templates and static assets.
 	templatesFS, err := fs.Sub(monitor.TemplatesFS, "templates")

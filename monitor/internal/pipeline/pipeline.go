@@ -17,6 +17,13 @@ import (
 	"github.com/netbrain/ratchet-monitor/internal/watcher"
 )
 
+// CacheInvalidator is called by the pipeline to invalidate cached data
+// when file-system events are observed. This is typically implemented by
+// the CachedDataSource.
+type CacheInvalidator interface {
+	Invalidate(path string)
+}
+
 // Pipeline reads watcher events, classifies them, parses the corresponding
 // file, and publishes enriched events to the SSE broker.
 type Pipeline struct {
@@ -24,6 +31,7 @@ type Pipeline struct {
 	broker     *sse.Broker
 	rootDir    string
 	classifier *classifier.Classifier
+	cache      CacheInvalidator // optional; nil means no cache invalidation
 }
 
 // New creates a Pipeline that reads from w, enriches events using files
@@ -37,6 +45,12 @@ func New(w *watcher.Watcher, b *sse.Broker, rootDir string) *Pipeline {
 	}
 }
 
+// SetCacheInvalidator registers a cache invalidator that will be called
+// on each file-system event before the enriched event is published.
+func (p *Pipeline) SetCacheInvalidator(c CacheInvalidator) {
+	p.cache = c
+}
+
 // Run processes watcher events until ctx is cancelled or the watcher
 // channel closes.
 func (p *Pipeline) Run(ctx context.Context) {
@@ -47,6 +61,11 @@ func (p *Pipeline) Run(ctx context.Context) {
 		case ev, ok := <-p.watcher.Events():
 			if !ok {
 				return
+			}
+			// Invalidate cached data before publishing the enriched event
+			// so that any API request triggered by the SSE event sees fresh data.
+			if p.cache != nil {
+				p.cache.Invalidate(ev.Path)
 			}
 			enriched := p.enrich(ev)
 			p.broker.Publish(enriched)
