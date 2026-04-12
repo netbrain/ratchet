@@ -277,7 +277,7 @@
     },
     "pair": {
       "type": "object",
-      "required": ["name", "component", "scope", "enabled"],
+      "required": ["name", "component", "scope"],
       "additionalProperties": false,
       "properties": {
         "name": {

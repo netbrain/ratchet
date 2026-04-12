@@ -43,8 +43,20 @@ if [ -z "${RATCHET_SKIP_VERDICT_CHECK:-}" ]; then
             fi
         fi
 
+        # Cross-platform ISO 8601 to epoch conversion
+        # date -d is GNU-only; macOS (BSD date) uses -j -f instead.
+        iso_to_epoch() {
+            local iso="$1"
+            # Try GNU date first
+            local result
+            result=$(date -d "$iso" +%s 2>/dev/null) && { echo "$result"; return; }
+            # Try BSD date (macOS)
+            result=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null) && { echo "$result"; return; }
+            echo "0"
+        }
+
         VERDICT_OK=false
-        for meta_file in $(ls -t .ratchet/debates/*/meta.json 2>/dev/null); do
+        for meta_file in .ratchet/debates/*/meta.json; do
             [ -f "$meta_file" ] || continue
 
             # Extract verdict
@@ -58,7 +70,7 @@ if [ -z "${RATCHET_SKIP_VERDICT_CHECK:-}" ]; then
             # meta.json stores ISO 8601: "started": "2026-03-28T14:30:00Z"
             started_iso=$(sed -n 's/.*"started"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta_file" | head -1)
             if [ -n "$started_iso" ]; then
-                started_epoch=$(date -d "$started_iso" +%s 2>/dev/null || echo "0")
+                started_epoch=$(iso_to_epoch "$started_iso")
             else
                 started_epoch=0
             fi

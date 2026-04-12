@@ -1,7 +1,7 @@
 ---
 name: debate-runner
 description: Debate orchestrator — creates debate directories, spawns generative/adversarial pairs, manages rounds until verdict
-tools: Read, Write, Edit, Agent, AskUserQuestion, TodoWrite
+tools: Read, Glob, Write, Edit, Agent, AskUserQuestion, TodoWrite
 disallowedTools: []
 ---
 
@@ -184,23 +184,31 @@ Returned to caller:
 Before any debate work, validate the environment:
 
 **Worktree check** (if a `Worktree` path was provided in the task context):
-```bash
-if [ ! -d "<worktree-path>" ]; then
-  echo "ERROR: Worktree path does not exist: <worktree-path>" >&2
-  echo "The worktree may have been cleaned up or never created." >&2
-  echo "Re-run the orchestrator to create a fresh worktree." >&2
-  exit 1
-fi
-if [ ! -w "<worktree-path>" ]; then
-  echo "ERROR: Worktree path is not writable: <worktree-path>" >&2
-  echo "Check filesystem permissions." >&2
-  exit 1
-fi
+
+Use the `Glob` tool to verify the worktree path exists. Since `Bash` is not in the debate-runner's tool list, perform an equivalent check using the git sentinel file that always exists in a valid worktree. If the sentinel Read fails or Glob returns no results, fail immediately:
+
+```
+Logic equivalent (use Glob/Read, not Bash):
+  Read("<worktree-path>/.git/HEAD"):
+    → If Read succeeds: worktree exists and is accessible. Proceed.
+    → If Read fails (file not found): worktree does not exist or is not a git worktree.
+      ERROR: Worktree path does not exist: <worktree-path>
+      The worktree may have been cleaned up or never created.
+      Re-run the orchestrator to create a fresh worktree.
+      STOP — do not create debate directory, write meta.json, or spawn any agents.
+    → If Read fails (permission denied): worktree is not readable/writable.
+      ERROR: Worktree path is not accessible: <worktree-path>
+      Check filesystem permissions.
+      STOP.
+
+Note: Do NOT use Glob("<worktree-path>/*") — an empty-but-valid worktree would
+produce no Glob results, causing a false rejection. The .git/HEAD sentinel is
+always present in any valid git worktree, including freshly created ones.
 ```
 
 If the worktree path does not exist or is not writable, **fail immediately** — do not create the debate directory, write meta.json, or spawn any agents. Return an error to the caller with the message above. No debate artifacts are created on pre-flight failure.
 
-**Pair definition check**: Verify both `.ratchet/pairs/<name>/generative.md` and `.ratchet/pairs/<name>/adversarial.md` exist (this is also covered in Error Handling below, but checking here prevents wasted work).
+**Pair definition check**: Verify both `.ratchet/pairs/<name>/generative.md` and `.ratchet/pairs/<name>/adversarial.md` exist using the `Glob` tool (this is also covered in Error Handling below, but checking here prevents wasted work).
 
 ### 1. Create Debate Directory
 

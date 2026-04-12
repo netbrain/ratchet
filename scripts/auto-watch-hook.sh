@@ -87,7 +87,7 @@ mkdir -p "$LOCK_DIR" || {
 #   1. Prevents duplicate watch-start requests
 #   2. Stores the timestamp of the request for staleness detection
 echo "$$" > "$LOCK_FILE"
-echo "watch_requested_at=$(date -Iseconds)" >> "$LOCK_FILE"
+echo "watch_requested_at=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> "$LOCK_FILE"
 echo "trigger_command=$(echo "$COMMAND" | head -c 200)" >> "$LOCK_FILE"
 
 echo "Info: auto-watch-hook: PR created successfully — watch loop start requested (lock: $LOCK_FILE)" >&2

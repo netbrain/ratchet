@@ -190,7 +190,7 @@ Guard results are stored as JSON in `.ratchet/guards/<milestone-id>/<issue-ref>/
 }
 ```
 
-These fields are produced by `scripts/run-guards.sh`. When a guard is overridden (via the `override` subcommand), the following fields are patched onto the existing JSON — the original fields are preserved:
+These fields are produced by `.claude/ratchet-scripts/run-guards.sh`. When a guard is overridden (via the `override` subcommand), the following fields are patched onto the existing JSON — the original fields are preserved:
 
 ```json
 {

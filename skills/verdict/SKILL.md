@@ -155,7 +155,7 @@ fi
 Run the score update script:
 ```bash
 test -f .claude/ratchet-scripts/update-scores.sh \
-  || { echo "Error: update-scores.sh not found. Scores not updated." >&2; }
+  || { echo "Error: update-scores.sh not found. Scores not updated." >&2; exit 1; }
 bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 ```
 

@@ -381,7 +381,7 @@ do_install() {
     echo "  Installed command aliases (rr, rrs, rrt)"
 
     # Install agents alongside commands
-    if [ -d "$SCRIPT_DIR/agents" ] && ls "$SCRIPT_DIR"/agents/*.md >/dev/null 2>&1; then
+    if [ -d "$SCRIPT_DIR/agents" ] && compgen -G "$SCRIPT_DIR/agents/*.md" >/dev/null 2>&1; then
         mkdir -p "$commands_dir/agents" || die "Failed to create agents directory: $commands_dir/agents"
         for agent_file in "$SCRIPT_DIR"/agents/*.md; do
             local agent_name
@@ -396,7 +396,7 @@ do_install() {
     fi
 
     # Copy scripts
-    if [ -d "$SCRIPT_DIR/scripts" ] && ls "$SCRIPT_DIR"/scripts/*.sh >/dev/null 2>&1; then
+    if [ -d "$SCRIPT_DIR/scripts" ] && compgen -G "$SCRIPT_DIR/scripts/*.sh" >/dev/null 2>&1; then
         mkdir -p "$scripts_dir" || die "Failed to create scripts directory: $scripts_dir"
         cp "$SCRIPT_DIR"/scripts/*.sh "$scripts_dir/" || die "Failed to copy script files"
         chmod +x "$scripts_dir"/*.sh || die "Failed to set script permissions"
@@ -417,7 +417,7 @@ do_install() {
 
     # Copy schemas
     local schemas_dir="$target/ratchet-schemas"
-    if [ -d "$SCRIPT_DIR/schemas" ] && ls "$SCRIPT_DIR"/schemas/*.json >/dev/null 2>&1; then
+    if [ -d "$SCRIPT_DIR/schemas" ] && compgen -G "$SCRIPT_DIR/schemas/*.json" >/dev/null 2>&1; then
         if [ -d "$schemas_dir" ]; then
             chmod -R u+w "$schemas_dir" 2>/dev/null || true
             rm -rf "$schemas_dir"
@@ -428,7 +428,7 @@ do_install() {
     fi
 
     # Copy statusline scripts
-    if [ -d "$SCRIPT_DIR/statusline" ] && ls "$SCRIPT_DIR"/statusline/*.sh >/dev/null 2>&1; then
+    if [ -d "$SCRIPT_DIR/statusline" ] && compgen -G "$SCRIPT_DIR/statusline/*.sh" >/dev/null 2>&1; then
         for statusline_file in "$SCRIPT_DIR"/statusline/*.sh; do
             local basename_file
             basename_file="$(basename "$statusline_file")"
@@ -504,13 +504,15 @@ do_uninstall() {
     fi
 
     # Remove statusline scripts
+    local removed_statusline=false
     for statusline_pattern in "$target"/statusline-*.sh; do
         if [ -f "$statusline_pattern" ]; then
             chmod u+w "$statusline_pattern" 2>/dev/null || true
             rm -f "$statusline_pattern"
+            removed_statusline=true
         fi
     done
-    if ls "$target"/statusline-*.sh >/dev/null 2>&1; then
+    if [ "$removed_statusline" = "true" ]; then
         echo "  Removed statusline scripts"
     fi
 

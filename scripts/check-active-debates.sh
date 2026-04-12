@@ -35,7 +35,7 @@ done
 if [ ${#active_debates[@]} -gt 0 ]; then
     echo ""
     echo "Ratchet: ${#active_debates[@]} unresolved debate(s):"
-    for debate in "${active_debates[@]}"; do
+    for debate in "${active_debates[@]+"${active_debates[@]}"}"; do
         echo "  → $debate"
     done
     echo ""
