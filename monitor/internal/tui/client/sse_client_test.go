@@ -375,10 +375,7 @@ func TestSSEClientExponentialBackoff(t *testing.T) {
 
 	// Wait for at least 4 connections.
 	deadline := time.After(8 * time.Second)
-	for {
-		if connectCount.Load() >= 4 {
-			break
-		}
+	for connectCount.Load() < 4 {
 		select {
 		case <-deadline:
 			t.Fatalf("only got %d connections, expected >= 4", connectCount.Load())
