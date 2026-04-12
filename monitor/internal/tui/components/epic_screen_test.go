@@ -402,9 +402,9 @@ func TestEpicScreenRenderLayerSeparator(t *testing.T) {
 
 	el := es.Render(nil)
 	text := collectAllText(el)
-	// M2 is in Layer 1; a separator row "Layer 1" should appear between M1 and M2
-	if !strings.Contains(text, "Layer 1") {
-		t.Fatalf("expected layer separator 'Layer 1' in output, got: %q", text)
+	// M2 is in Layer 1; a separator row "L1" should appear between M1 and M2
+	if !strings.Contains(text, "── L1 ──") {
+		t.Fatalf("expected layer separator '── L1 ──' in output, got: %q", text)
 	}
 	// Connector symbol │ should appear in the separator
 	if !strings.Contains(text, "│") {
@@ -440,8 +440,8 @@ func TestEpicScreenNoLayerSeparatorSameLayer(t *testing.T) {
 	el := es.Render(nil)
 	text := collectAllText(el)
 	// No milestone is in a higher layer, so no layer separator row should appear.
-	// Separators use the format "── Layer N ──"; the header line uses "Layer 0" but not "── Layer".
-	if strings.Contains(text, "── Layer") {
+	// Separators use the format "── LN ──"; the header line uses "L0" but not "── L".
+	if strings.Contains(text, "── L1") || strings.Contains(text, "── L2") {
 		t.Fatalf("expected no layer separator row when all milestones share layer 0, got: %q", text)
 	}
 }
@@ -465,4 +465,153 @@ func TestEpicScreenRenderNoBlockedWhenDepDone(t *testing.T) {
 	if strings.Contains(text, "BLOCKED") {
 		t.Fatalf("expected no 'BLOCKED' when dep is done, got: %q", text)
 	}
+}
+
+// --- 20. DAG layer label in rendered output ---
+
+func TestEpicScreenRenderDAGLayerLabels(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// Layer column should show L0 and L1
+	if !strings.Contains(text, "L0") {
+		t.Fatalf("expected 'L0' layer label in output, got: %q", text)
+	}
+	if !strings.Contains(text, "L1") {
+		t.Fatalf("expected 'L1' layer label in output, got: %q", text)
+	}
+}
+
+// --- 21. DAG layer arrow indicator ---
+
+func TestEpicScreenRenderDAGArrowIndicator(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M2 has deps and is layer 1 -> should show "L1↑"
+	if !strings.Contains(text, "L1↑") {
+		t.Fatalf("expected 'L1↑' dependency arrow in output, got: %q", text)
+	}
+}
+
+// --- 22. DAG box-drawing prefix in rendered output ---
+
+func TestEpicScreenRenderDAGBoxDrawingPrefix(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// M1 is root in a DAG -> should have ┌─ prefix
+	if !strings.Contains(text, "┌─") {
+		t.Fatalf("expected '┌─' box-drawing prefix for root milestone, got: %q", text)
+	}
+	// M2 is last in last layer -> should have └─ prefix
+	if !strings.Contains(text, "└─") {
+		t.Fatalf("expected '└─' box-drawing prefix for leaf milestone, got: %q", text)
+	}
+}
+
+// --- 23. DAG summary line shows "DAG arrows" when deps exist ---
+
+func TestEpicScreenRenderDAGSummaryWithDeps(t *testing.T) {
+	store := testStoreWithEpicAndIssues()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	if !strings.Contains(text, "DAG arrows show dependencies") {
+		t.Fatalf("expected DAG arrows info in summary, got: %q", text)
+	}
+}
+
+func TestEpicScreenRenderDAGSummaryNoDeps(t *testing.T) {
+	store := testStoreWithEpic()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	if strings.Contains(text, "DAG arrows show dependencies") {
+		t.Fatalf("should not show DAG arrows info when no deps, got: %q", text)
+	}
+}
+
+// --- 24. Diamond DAG rendering ---
+
+func TestEpicScreenRenderDiamondDAG(t *testing.T) {
+	s := state.NewStore()
+	s.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name:        "diamond-test",
+			Description: "Diamond dependency pattern",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "Lint compliance", Status: "done", PhaseStatus: map[string]string{"plan": "done"}},
+				{ID: 2, Name: "Test coverage", Status: "done", DependsOn: []int{1}, PhaseStatus: map[string]string{"plan": "done"}},
+				{ID: 3, Name: "ViewModel arch", Status: "done", DependsOn: []int{1}, PhaseStatus: map[string]string{"plan": "done"}},
+				{ID: 5, Name: "API enhancements", Status: "done", DependsOn: []int{1}, PhaseStatus: map[string]string{"plan": "done"}},
+				{ID: 4, Name: "TUI features", Status: "in_progress", DependsOn: []int{2, 3, 5}, PhaseStatus: map[string]string{"plan": "in_progress"}},
+			},
+		},
+	})
+	es := NewEpicScreen(s)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+
+	// All milestone names should appear
+	for _, name := range []string{"Lint compliance", "Test coverage", "ViewModel arch", "API enhancements", "TUI features"} {
+		if !strings.Contains(text, name) {
+			t.Errorf("expected milestone %q in output", name)
+		}
+	}
+
+	// Layer labels should appear
+	if !strings.Contains(text, "L0") {
+		t.Error("expected L0 layer label")
+	}
+	if !strings.Contains(text, "L1") {
+		t.Error("expected L1 layer label")
+	}
+	if !strings.Contains(text, "L2") {
+		t.Error("expected L2 layer label")
+	}
+
+	// Box-drawing connectors
+	if !strings.Contains(text, "┌─") {
+		t.Error("expected ┌─ for root milestone")
+	}
+	if !strings.Contains(text, "├─") {
+		t.Error("expected ├─ for middle milestones")
+	}
+	if !strings.Contains(text, "└─") {
+		t.Error("expected └─ for leaf milestone")
+	}
+
+	// Layer separators
+	if !strings.Contains(text, "── L1 ──") {
+		t.Error("expected layer separator for L1")
+	}
+	if !strings.Contains(text, "── L2 ──") {
+		t.Error("expected layer separator for L2")
+	}
+}
+
+// --- 25. No DAG connectors for flat milestone list ---
+
+func TestEpicScreenRenderFlatListNoConnectors(t *testing.T) {
+	store := testStoreWithEpic()
+	es := NewEpicScreen(store)
+
+	el := es.Render(nil)
+	text := collectAllText(el)
+	// No box-drawing connectors should appear for flat list
+	if strings.Contains(text, "┌─") {
+		t.Fatalf("should not have ┌─ in flat list, got: %q", text)
+	}
+	// └─ should also not appear (only DAG prefix, not issue tree)
+	// Note: ├─ is used by issue tree connectors, so skip checking that
 }
