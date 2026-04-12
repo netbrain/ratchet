@@ -761,3 +761,129 @@ func TestBroker_SubscribeFromBeyondNewest(t *testing.T) {
 	default:
 	}
 }
+
+// --- Functional option tests ---
+
+func TestNewBroker_DefaultBufferSize(t *testing.T) {
+	b := NewBroker()
+	defer b.Close()
+
+	if got := b.BufferSize(); got != DefaultBufferSize {
+		t.Errorf("default buffer size: got %d, want %d", got, DefaultBufferSize)
+	}
+}
+
+func TestNewBroker_WithBufferSize(t *testing.T) {
+	b := NewBroker(WithBufferSize(256))
+	defer b.Close()
+
+	if got := b.BufferSize(); got != 256 {
+		t.Errorf("buffer size: got %d, want 256", got)
+	}
+}
+
+func TestNewBroker_WithBufferSizeClampMin(t *testing.T) {
+	b := NewBroker(WithBufferSize(1))
+	defer b.Close()
+
+	if got := b.BufferSize(); got != MinBufferSize {
+		t.Errorf("buffer size: got %d, want %d (MinBufferSize)", got, MinBufferSize)
+	}
+}
+
+func TestNewBroker_WithBufferSizeClampMax(t *testing.T) {
+	b := NewBroker(WithBufferSize(999999))
+	defer b.Close()
+
+	if got := b.BufferSize(); got != MaxBufferSize {
+		t.Errorf("buffer size: got %d, want %d (MaxBufferSize)", got, MaxBufferSize)
+	}
+}
+
+func TestNewBroker_WithBufferSizeBoundaries(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"below min", MinBufferSize - 1, MinBufferSize},
+		{"at min", MinBufferSize, MinBufferSize},
+		{"mid range", 512, 512},
+		{"at max", MaxBufferSize, MaxBufferSize},
+		{"above max", MaxBufferSize + 1, MaxBufferSize},
+		{"zero", 0, MinBufferSize},
+		{"negative", -100, MinBufferSize},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := NewBroker(WithBufferSize(tt.in))
+			defer b.Close()
+			if got := b.BufferSize(); got != tt.want {
+				t.Errorf("WithBufferSize(%d): got %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewBroker_WithBufferSizeRingBehavior(t *testing.T) {
+	// Use a small custom buffer and verify eviction works correctly.
+	b := NewBroker(WithBufferSize(64))
+	defer b.Close()
+
+	// Publish more events than the buffer can hold.
+	for i := uint64(1); i <= 100; i++ {
+		b.Publish(events.Event{ID: i, Type: events.FileCreated, Path: "x"})
+	}
+
+	// Buffer should hold events 37..100 (last 64).
+	sub, err := b.SubscribeFrom(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Unsubscribe()
+
+	first := true
+	count := 0
+	for {
+		select {
+		case ev := <-sub.Events():
+			if first {
+				if ev.ID != 37 {
+					t.Errorf("first buffered event ID: got %d, want 37", ev.ID)
+				}
+				first = false
+			}
+			count++
+		default:
+			goto done
+		}
+	}
+done:
+	if count != 64 {
+		t.Errorf("buffered event count: got %d, want 64", count)
+	}
+}
+
+func TestNewBroker_BackwardCompatNoArgs(t *testing.T) {
+	// Verify zero-arg NewBroker still works and produces a functional broker.
+	b := NewBroker()
+	defer b.Close()
+
+	sub, err := b.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer sub.Unsubscribe()
+
+	ev := events.Event{ID: 1, Type: events.FileCreated, Path: "test"}
+	b.Publish(ev)
+
+	select {
+	case got := <-sub.Events():
+		if got.ID != 1 {
+			t.Errorf("event ID: got %d, want 1", got.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}
