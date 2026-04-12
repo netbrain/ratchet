@@ -44,7 +44,7 @@ func main() {
 		slog.Error("failed to create tui app", "error", err)
 		os.Exit(1)
 	}
-	defer tuiApp.Close()
+	defer func() { _ = tuiApp.Close() }()
 
 	// Wire SSE-driven re-rendering: store changes trigger TUI re-render.
 	app.SetOnUpdate(func() {
