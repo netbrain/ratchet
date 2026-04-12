@@ -898,16 +898,30 @@ func TestDAGPrefix(t *testing.T) {
 	vm := views.NewEpicViewModel(store)
 	ms := vm.Milestones()
 
-	// M1 has no deps -> "  "
+	// M1 has no deps but DAG exists -> "┌─" (first in layer 0 with DAG structure)
 	prefix0 := vm.DAGPrefix(ms[0])
-	if prefix0 != "  " {
-		t.Errorf("DAGPrefix for root = %q, want \"  \"", prefix0)
+	if prefix0 != "┌─" {
+		t.Errorf("DAGPrefix for root in DAG = %q, want \"┌─\"", prefix0)
 	}
 
-	// M2 depends on M1 -> "└─"
+	// M2 depends on M1, last in last layer -> "└─"
 	prefix1 := vm.DAGPrefix(ms[1])
 	if prefix1 != "└─" {
 		t.Errorf("DAGPrefix for dependent = %q, want \"└─\"", prefix1)
+	}
+}
+
+func TestDAGPrefixNoDeps(t *testing.T) {
+	// When no DAG structure at all (all milestones in layer 0), prefix is "  "
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	for _, m := range ms {
+		prefix := vm.DAGPrefix(m)
+		if prefix != "  " {
+			t.Errorf("DAGPrefix for milestone %q with no DAG = %q, want \"  \"", m.Name, prefix)
+		}
 	}
 }
 
@@ -982,5 +996,432 @@ func TestIsBlockedDoneMilestoneNotBlocked(t *testing.T) {
 	// M2 is "done" — should never show as blocked even though dep M1 is not done
 	if vm.IsBlocked(ms[1]) {
 		t.Error("done milestone should not be blocked even if dep is not done")
+	}
+}
+
+// ── DAG Layer Computation ─────────────────────────────────────────────────
+
+func TestDAGLayerNoDependencies(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "A", Status: "pending"},
+				{ID: 2, Name: "B", Status: "pending"},
+				{ID: 3, Name: "C", Status: "pending"},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	for _, m := range ms {
+		if m.Layer != 0 {
+			t.Errorf("milestone %q Layer = %d, want 0 (no deps)", m.Name, m.Layer)
+		}
+	}
+	if vm.MaxLayer() != 0 {
+		t.Errorf("MaxLayer = %d, want 0", vm.MaxLayer())
+	}
+}
+
+func TestDAGLayerLinearChain(t *testing.T) {
+	// M1 -> M2 -> M3 -> M4: linear dependency chain
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "in_progress", DependsOn: []int{2}},
+				{ID: 4, Name: "M4", Status: "pending", DependsOn: []int{3}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	expectedLayers := []int{0, 1, 2, 3}
+	for i, m := range ms {
+		if m.Layer != expectedLayers[i] {
+			t.Errorf("milestone %q Layer = %d, want %d", m.Name, m.Layer, expectedLayers[i])
+		}
+	}
+	if vm.MaxLayer() != 3 {
+		t.Errorf("MaxLayer = %d, want 3", vm.MaxLayer())
+	}
+}
+
+func TestDAGLayerDiamondPattern(t *testing.T) {
+	// Diamond: M1 -> M2, M1 -> M3, M2+M3 -> M4
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "done", DependsOn: []int{1}},
+				{ID: 4, Name: "M4", Status: "pending", DependsOn: []int{2, 3}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1=L0, M2=L1, M3=L1, M4=L2
+	if ms[0].Layer != 0 {
+		t.Errorf("M1 Layer = %d, want 0", ms[0].Layer)
+	}
+	if ms[1].Layer != 1 {
+		t.Errorf("M2 Layer = %d, want 1", ms[1].Layer)
+	}
+	if ms[2].Layer != 1 {
+		t.Errorf("M3 Layer = %d, want 1", ms[2].Layer)
+	}
+	if ms[3].Layer != 2 {
+		t.Errorf("M4 Layer = %d, want 2", ms[3].Layer)
+	}
+	if vm.MaxLayer() != 2 {
+		t.Errorf("MaxLayer = %d, want 2", vm.MaxLayer())
+	}
+}
+
+func TestDAGLayerCircularDepsHandled(t *testing.T) {
+	// Circular: M1 -> M2 -> M1 (should not infinite loop; unresolvable nodes stay at layer 0)
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "pending", DependsOn: []int{2}},
+				{ID: 2, Name: "M2", Status: "pending", DependsOn: []int{1}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// Both milestones are in a cycle; calculateDAGLayers breaks the cycle by
+	// leaving them unassigned (layer 0 is the default for the map).
+	// The key test is that this does not hang or panic.
+	if len(ms) != 2 {
+		t.Fatalf("expected 2 milestones, got %d", len(ms))
+	}
+}
+
+func TestDAGLayerMissingDepID(t *testing.T) {
+	// M2 depends on ID 99 which doesn't exist — should not panic
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "pending", DependsOn: []int{99}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1 has no deps -> L0
+	if ms[0].Layer != 0 {
+		t.Errorf("M1 Layer = %d, want 0", ms[0].Layer)
+	}
+	// M2 depends on nonexistent 99: unresolvable, stays at default (0)
+	// The important thing is no panic.
+	if len(ms) != 2 {
+		t.Fatalf("expected 2 milestones, got %d", len(ms))
+	}
+}
+
+func TestDAGLayerParallelRoots(t *testing.T) {
+	// Two parallel roots, both converge to one milestone
+	// M1 (L0), M2 (L0) -> M3 (L1)
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done"},
+				{ID: 3, Name: "M3", Status: "pending", DependsOn: []int{1, 2}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	if ms[0].Layer != 0 {
+		t.Errorf("M1 Layer = %d, want 0", ms[0].Layer)
+	}
+	if ms[1].Layer != 0 {
+		t.Errorf("M2 Layer = %d, want 0", ms[1].Layer)
+	}
+	if ms[2].Layer != 1 {
+		t.Errorf("M3 Layer = %d, want 1", ms[2].Layer)
+	}
+}
+
+// ── DAGLayout ────────────────────────────────────────────────────────────
+
+func TestDAGLayoutOrdersByLayer(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "done", DependsOn: []int{1}},
+				{ID: 4, Name: "M4", Status: "pending", DependsOn: []int{2, 3}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	layout := vm.DAGLayout()
+
+	if len(layout) != 4 {
+		t.Fatalf("expected 4 layout entries, got %d", len(layout))
+	}
+
+	// Verify layer ordering: L0, L1, L1, L2
+	expectedLayers := []int{0, 1, 1, 2}
+	for i, entry := range layout {
+		if entry.Layer != expectedLayers[i] {
+			t.Errorf("layout[%d].Layer = %d, want %d", i, entry.Layer, expectedLayers[i])
+		}
+	}
+
+	// First in layer flags
+	if !layout[0].IsFirstInLayer {
+		t.Error("layout[0] should be first in layer 0")
+	}
+	if !layout[1].IsFirstInLayer {
+		t.Error("layout[1] should be first in layer 1")
+	}
+	if layout[2].IsFirstInLayer {
+		t.Error("layout[2] should NOT be first in layer 1")
+	}
+	if !layout[3].IsFirstInLayer {
+		t.Error("layout[3] should be first in layer 2")
+	}
+
+	// Last in layer flags
+	if !layout[0].IsLastInLayer {
+		t.Error("layout[0] should be last in layer 0 (only item)")
+	}
+	if layout[1].IsLastInLayer {
+		t.Error("layout[1] should NOT be last in layer 1")
+	}
+	if !layout[2].IsLastInLayer {
+		t.Error("layout[2] should be last in layer 1")
+	}
+	if !layout[3].IsLastInLayer {
+		t.Error("layout[3] should be last in layer 2")
+	}
+
+	// IsLastLayer flags
+	if layout[0].IsLastLayer {
+		t.Error("layout[0] should NOT be in last layer")
+	}
+	if layout[1].IsLastLayer {
+		t.Error("layout[1] should NOT be in last layer")
+	}
+	if layout[2].IsLastLayer {
+		t.Error("layout[2] should NOT be in last layer")
+	}
+	if !layout[3].IsLastLayer {
+		t.Error("layout[3] should be in last layer")
+	}
+}
+
+func TestDAGLayoutNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.DAGLayout() != nil {
+		t.Error("nil receiver DAGLayout should return nil")
+	}
+}
+
+func TestDAGLayoutEmpty(t *testing.T) {
+	store := state.NewStore()
+	vm := views.NewEpicViewModel(store)
+	if vm.DAGLayout() != nil {
+		t.Error("empty plan DAGLayout should return nil")
+	}
+}
+
+func TestDAGLayoutFlatList(t *testing.T) {
+	// All milestones in layer 0
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	layout := vm.DAGLayout()
+
+	if len(layout) != 4 {
+		t.Fatalf("expected 4 layout entries, got %d", len(layout))
+	}
+	for i, entry := range layout {
+		if entry.Layer != 0 {
+			t.Errorf("layout[%d].Layer = %d, want 0", i, entry.Layer)
+		}
+	}
+}
+
+// ── HasDAG ─────────────────────────────────────────────────────────────
+
+func TestHasDAGTrue(t *testing.T) {
+	store := seedEpicStoreWithIssues()
+	vm := views.NewEpicViewModel(store)
+	if !vm.HasDAG() {
+		t.Error("HasDAG should be true when milestones have dependencies")
+	}
+}
+
+func TestHasDAGFalse(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+	if vm.HasDAG() {
+		t.Error("HasDAG should be false when no milestones have dependencies")
+	}
+}
+
+func TestHasDAGNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.HasDAG() {
+		t.Error("nil receiver HasDAG should return false")
+	}
+}
+
+// ── DAGLayerLabel ──────────────────────────────────────────────────────
+
+func TestDAGLayerLabel(t *testing.T) {
+	store := seedEpicStore()
+	vm := views.NewEpicViewModel(store)
+
+	tests := []struct {
+		layer int
+		want  string
+	}{
+		{0, "L0"},
+		{1, "L1"},
+		{2, "L2"},
+		{10, "L10"},
+	}
+	for _, tt := range tests {
+		got := vm.DAGLayerLabel(tt.layer)
+		if got != tt.want {
+			t.Errorf("DAGLayerLabel(%d) = %q, want %q", tt.layer, got, tt.want)
+		}
+	}
+}
+
+func TestDAGLayerLabelNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.DAGLayerLabel(0) != "" {
+		t.Error("nil receiver DAGLayerLabel should return empty string")
+	}
+}
+
+// ── DAGPrefix with various topologies ──────────────────────────────────
+
+func TestDAGPrefixLinearChain(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "pending", DependsOn: []int{2}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1: layer 0, first and only in layer, not last layer -> ┌─
+	if p := vm.DAGPrefix(ms[0]); p != "┌─" {
+		t.Errorf("M1 prefix = %q, want \"┌─\"", p)
+	}
+	// M2: layer 1, middle layer -> ├─
+	if p := vm.DAGPrefix(ms[1]); p != "├─" {
+		t.Errorf("M2 prefix = %q, want \"├─\"", p)
+	}
+	// M3: layer 2, last layer last item -> └─
+	if p := vm.DAGPrefix(ms[2]); p != "└─" {
+		t.Errorf("M3 prefix = %q, want \"└─\"", p)
+	}
+}
+
+func TestDAGPrefixDiamondPattern(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "done", DependsOn: []int{1}},
+				{ID: 4, Name: "M4", Status: "pending", DependsOn: []int{2, 3}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	ms := vm.Milestones()
+
+	// M1: layer 0, root -> ┌─
+	if p := vm.DAGPrefix(ms[0]); p != "┌─" {
+		t.Errorf("M1 prefix = %q, want \"┌─\"", p)
+	}
+	// M2: layer 1, first of two in layer -> ├─
+	if p := vm.DAGPrefix(ms[1]); p != "├─" {
+		t.Errorf("M2 prefix = %q, want \"├─\"", p)
+	}
+	// M3: layer 1, last in non-last layer -> ├─
+	if p := vm.DAGPrefix(ms[2]); p != "├─" {
+		t.Errorf("M3 prefix = %q, want \"├─\"", p)
+	}
+	// M4: layer 2, last in last layer -> └─
+	if p := vm.DAGPrefix(ms[3]); p != "└─" {
+		t.Errorf("M4 prefix = %q, want \"└─\"", p)
+	}
+}
+
+// ── MilestonesByLayer ──────────────────────────────────────────────────
+
+func TestMilestonesByLayer(t *testing.T) {
+	store := state.NewStore()
+	store.SetPlan(client.Plan{
+		Epic: client.EpicConfig{
+			Name: "test",
+			Milestones: []client.Milestone{
+				{ID: 1, Name: "M1", Status: "done"},
+				{ID: 2, Name: "M2", Status: "done", DependsOn: []int{1}},
+				{ID: 3, Name: "M3", Status: "done", DependsOn: []int{1}},
+				{ID: 4, Name: "M4", Status: "pending", DependsOn: []int{2, 3}},
+			},
+		},
+	})
+	vm := views.NewEpicViewModel(store)
+	byLayer := vm.MilestonesByLayer()
+
+	if len(byLayer[0]) != 1 {
+		t.Errorf("layer 0: expected 1 milestone, got %d", len(byLayer[0]))
+	}
+	if len(byLayer[1]) != 2 {
+		t.Errorf("layer 1: expected 2 milestones, got %d", len(byLayer[1]))
+	}
+	if len(byLayer[2]) != 1 {
+		t.Errorf("layer 2: expected 1 milestone, got %d", len(byLayer[2]))
+	}
+}
+
+func TestMilestonesByLayerNilReceiver(t *testing.T) {
+	var vm *views.EpicViewModel
+	if vm.MilestonesByLayer() != nil {
+		t.Error("nil receiver MilestonesByLayer should return nil")
 	}
 }

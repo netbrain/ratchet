@@ -301,15 +301,105 @@ func (vm *EpicViewModel) DAGConnectors() []DAGConnector {
 }
 
 // DAGPrefix returns a visual prefix string for a milestone indicating its DAG relationships.
-// Uses box-drawing characters to show dependency structure.
+// Uses box-drawing characters to show dependency structure:
+//   - "┌─" for the first milestone in a layer group
+//   - "├─" for middle milestones in a layer group
+//   - "└─" for the last milestone in the last layer, or the last in a group with more layers below
+//   - "│ " for continuation when there are more items below (not applicable here — used in connectors)
 func (vm *EpicViewModel) DAGPrefix(m MilestoneStatus) string {
 	if vm == nil {
 		return ""
 	}
-	if len(m.DependsOn) == 0 {
-		return "  " // root node, no connector
+	maxLayer := vm.MaxLayer()
+	if maxLayer <= 0 {
+		// No DAG structure (all layer 0 or single layer) — no connectors needed
+		return "  "
 	}
-	return "└─" // dependent node
+
+	// Count milestones in this layer and find position
+	posInLayer := 0
+	countInLayer := 0
+	for _, ms := range vm.milestones {
+		if ms.Layer == m.Layer {
+			if ms.ID == m.ID {
+				posInLayer = countInLayer
+			}
+			countInLayer++
+		}
+	}
+
+	isLastLayer := m.Layer == maxLayer
+	isFirstInLayer := posInLayer == 0
+	isLastInLayer := posInLayer == countInLayer-1
+
+	if isLastLayer && isLastInLayer {
+		return "└─"
+	}
+	if isFirstInLayer && m.Layer == 0 {
+		return "┌─"
+	}
+	if isLastInLayer && !isLastLayer {
+		return "├─"
+	}
+	return "├─"
+}
+
+// DAGLayerLabel returns the layer label string for a given layer number (e.g., "L0", "L1").
+func (vm *EpicViewModel) DAGLayerLabel(layer int) string {
+	if vm == nil {
+		return ""
+	}
+	return fmt.Sprintf("L%d", layer)
+}
+
+// DAGLayout returns milestones sorted by layer for rendering, along with
+// metadata about where layer boundaries occur. This is the primary method
+// for rendering the DAG visualization.
+// Returns nil if there are no milestones.
+func (vm *EpicViewModel) DAGLayout() []DAGLayoutEntry {
+	if vm == nil || len(vm.milestones) == 0 {
+		return nil
+	}
+
+	maxLayer := vm.MaxLayer()
+	var layout []DAGLayoutEntry
+
+	for layer := 0; layer <= maxLayer; layer++ {
+		var layerMilestones []MilestoneStatus
+		for _, m := range vm.milestones {
+			if m.Layer == layer {
+				layerMilestones = append(layerMilestones, m)
+			}
+		}
+		for i, m := range layerMilestones {
+			layout = append(layout, DAGLayoutEntry{
+				Milestone:    m,
+				Layer:        layer,
+				IsFirstInLayer: i == 0,
+				IsLastInLayer:  i == len(layerMilestones)-1,
+				IsLastLayer:    layer == maxLayer,
+			})
+		}
+	}
+
+	return layout
+}
+
+// DAGLayoutEntry describes a single milestone's position in the DAG layout.
+type DAGLayoutEntry struct {
+	Milestone      MilestoneStatus
+	Layer          int
+	IsFirstInLayer bool
+	IsLastInLayer  bool
+	IsLastLayer    bool
+}
+
+// HasDAG returns true if the milestone graph has any dependency structure (more than one layer).
+func (vm *EpicViewModel) HasDAG() bool {
+	if vm == nil {
+		return false
+	}
+	return vm.MaxLayer() > 0
 }
 
 // IsBlocked returns true if the milestone has unmet dependencies (any dep not "done").

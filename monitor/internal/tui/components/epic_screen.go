@@ -111,8 +111,12 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 
 	// DAG layer summary
 	maxLayer := es.vm.MaxLayer()
+	hasDAG := es.vm.HasDAG()
 	if maxLayer >= 0 {
-		layerText := fmt.Sprintf("Milestone layers: %d (Layer 0 = no dependencies)", maxLayer+1)
+		layerText := fmt.Sprintf("Milestone layers: %d (L0 = no dependencies)", maxLayer+1)
+		if hasDAG {
+			layerText += " — DAG arrows show dependencies"
+		}
 		layerEl := tui.New(
 			tui.WithText(layerText),
 			tui.WithTextStyle(tui.NewStyle().Foreground(tui.ANSIColor(243))),
@@ -160,7 +164,7 @@ func (es *EpicScreen) Render(app *tui.App) *tui.Element {
 			if rowsRendered >= maxRows {
 				break
 			}
-			connectorText := fmt.Sprintf("  │  ── Layer %d ──", m.Layer)
+			connectorText := fmt.Sprintf("  │  ── %s ──", es.vm.DAGLayerLabel(m.Layer))
 			connectorEl := tui.New(
 				tui.WithText(connectorText),
 				tui.WithTextStyle(tui.NewStyle().Foreground(tui.ANSIColor(243))),
@@ -215,7 +219,7 @@ func (es *EpicScreen) buildHeaderRow(cols int) *tui.Element {
 	style := tui.NewStyle().Bold()
 
 	idEl := tui.New(tui.WithText("#"), tui.WithTextStyle(style), tui.WithWidth(4))
-	layerEl := tui.New(tui.WithText("L"), tui.WithTextStyle(style), tui.WithWidth(3))
+	layerEl := tui.New(tui.WithText("L"), tui.WithTextStyle(style), tui.WithWidth(4))
 	nameEl := tui.New(tui.WithText("Milestone"), tui.WithTextStyle(style), tui.WithFlexGrow(1))
 	statusEl := tui.New(tui.WithText("Status"), tui.WithTextStyle(style), tui.WithWidth(14))
 	regEl := tui.New(tui.WithText("Reg"), tui.WithTextStyle(style), tui.WithWidth(8))
@@ -263,11 +267,11 @@ func (es *EpicScreen) buildMilestoneRow(cols, num int, m views.MilestoneStatus, 
 	idEl := tui.New(tui.WithText(fmt.Sprintf("%s%d", dagPrefix, num)), tui.WithTextStyle(baseStyle), tui.WithWidth(6))
 
 	// Layer indicator with dependency arrow
-	layerSymbol := fmt.Sprintf("%d", m.Layer)
+	layerSymbol := es.vm.DAGLayerLabel(m.Layer)
 	if len(m.DependsOn) > 0 && m.Layer > 0 {
-		layerSymbol = fmt.Sprintf("%d↑", m.Layer) // Arrow indicates it depends on earlier layers
+		layerSymbol += "↑" // Arrow indicates it depends on earlier layers
 	}
-	layerEl := tui.New(tui.WithText(layerSymbol), tui.WithTextStyle(baseStyle), tui.WithWidth(3))
+	layerEl := tui.New(tui.WithText(layerSymbol), tui.WithTextStyle(baseStyle), tui.WithWidth(4))
 
 	nameText := m.Name
 	if es.vm.IsBlocked(m) {
