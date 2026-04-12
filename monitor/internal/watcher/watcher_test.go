@@ -33,7 +33,7 @@ func TestWatcher_FileCreated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 
@@ -64,7 +64,7 @@ func TestWatcher_FileModified(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 
@@ -94,7 +94,7 @@ func TestWatcher_FileDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 

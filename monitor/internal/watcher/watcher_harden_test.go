@@ -86,7 +86,7 @@ func TestWatcher_RunCalledTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -123,7 +123,7 @@ func TestWatcher_WatchedDirDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -148,7 +148,7 @@ func TestWatcher_NewSubdirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 	time.Sleep(50 * time.Millisecond)
@@ -196,7 +196,7 @@ func TestWatcher_SymlinkDirectorySkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -239,7 +239,7 @@ func TestWatcher_EventIDsAreUnique(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 	time.Sleep(50 * time.Millisecond)
@@ -305,5 +305,5 @@ func TestWatcher_ChannelClosedAfterRun(t *testing.T) {
 		t.Fatal("events channel not closed after Run returned")
 	}
 
-	w.Close()
+	_ = w.Close()
 }

@@ -23,7 +23,7 @@ func sseHandler(events []string) http.HandlerFunc {
 			return
 		}
 		for _, ev := range events {
-			fmt.Fprint(w, ev)
+			_, _ = fmt.Fprint(w, ev)
 			flusher.Flush()
 		}
 		// Keep connection open until client disconnects.
@@ -149,12 +149,12 @@ func TestSSEClientReconnectsOnServerClose(t *testing.T) {
 		}
 		// First connection: send one event then close.
 		if count == 1 {
-			fmt.Fprint(w, "event: debate:started\nid: 1\ndata: {\"id\":1,\"type\":\"debate:started\"}\n\n")
+			_, _ = fmt.Fprint(w, "event: debate:started\nid: 1\ndata: {\"id\":1,\"type\":\"debate:started\"}\n\n")
 			flusher.Flush()
 			return // close connection
 		}
 		// Second connection: send another event then hold open.
-		fmt.Fprint(w, "event: debate:updated\nid: 2\ndata: {\"id\":2,\"type\":\"debate:updated\"}\n\n")
+		_, _ = fmt.Fprint(w, "event: debate:updated\nid: 2\ndata: {\"id\":2,\"type\":\"debate:updated\"}\n\n")
 		flusher.Flush()
 		<-r.Context().Done()
 	}))
@@ -211,12 +211,12 @@ func TestSSEClientSendsLastEventID(t *testing.T) {
 		}
 
 		if count == 1 {
-			fmt.Fprint(w, "event: debate:started\nid: 42\ndata: {\"id\":42,\"type\":\"debate:started\"}\n\n")
+			_, _ = fmt.Fprint(w, "event: debate:started\nid: 42\ndata: {\"id\":42,\"type\":\"debate:started\"}\n\n")
 			flusher.Flush()
 			return // close to trigger reconnect
 		}
 
-		fmt.Fprint(w, "event: debate:updated\nid: 43\ndata: {\"id\":43,\"type\":\"debate:updated\"}\n\n")
+		_, _ = fmt.Fprint(w, "event: debate:updated\nid: 43\ndata: {\"id\":43,\"type\":\"debate:updated\"}\n\n")
 		flusher.Flush()
 		<-r.Context().Done()
 	}))
@@ -375,10 +375,7 @@ func TestSSEClientExponentialBackoff(t *testing.T) {
 
 	// Wait for at least 4 connections.
 	deadline := time.After(8 * time.Second)
-	for {
-		if connectCount.Load() >= 4 {
-			break
-		}
+	for connectCount.Load() < 4 {
 		select {
 		case <-deadline:
 			t.Fatalf("only got %d connections, expected >= 4", connectCount.Load())
