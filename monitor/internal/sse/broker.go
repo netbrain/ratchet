@@ -26,6 +26,33 @@ func (s *Subscription) Unsubscribe() {
 	s.broker.unsubscribe(s)
 }
 
+const (
+	// DefaultBufferSize is the ring buffer capacity when none is specified.
+	DefaultBufferSize = 1024
+	// MinBufferSize is the smallest allowed ring buffer size.
+	MinBufferSize = 64
+	// MaxBufferSize is the largest allowed ring buffer size.
+	MaxBufferSize = 65536
+)
+
+// BrokerOption configures a Broker during construction.
+type BrokerOption func(*Broker)
+
+// WithBufferSize returns a BrokerOption that sets the ring buffer capacity.
+// Values outside [MinBufferSize, MaxBufferSize] are clamped to the nearest bound.
+func WithBufferSize(n int) BrokerOption {
+	return func(b *Broker) {
+		if n < MinBufferSize {
+			n = MinBufferSize
+		}
+		if n > MaxBufferSize {
+			n = MaxBufferSize
+		}
+		b.bufferSize = n
+		b.buffer = make([]events.Event, 0, n)
+	}
+}
+
 // Broker fans out published events to all active subscribers.
 type Broker struct {
 	mu          sync.RWMutex
@@ -36,10 +63,17 @@ type Broker struct {
 }
 
 // NewBroker creates a new Broker ready to accept subscriptions.
-func NewBroker() *Broker {
-	return &Broker{
+// Without options, the broker is created with DefaultBufferSize.
+func NewBroker(opts ...BrokerOption) *Broker {
+	b := &Broker{
 		subscribers: make(map[*Subscription]struct{}),
+		bufferSize:  DefaultBufferSize,
+		buffer:      make([]events.Event, 0, DefaultBufferSize),
 	}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
 }
 
 // Subscribe creates a new Subscription. The returned Subscription
@@ -81,6 +115,13 @@ func (b *Broker) SubscriberCount() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.subscribers)
+}
+
+// BufferSize returns the current ring buffer capacity.
+func (b *Broker) BufferSize() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.bufferSize
 }
 
 // Publish sends an event to all current subscribers.

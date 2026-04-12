@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -77,7 +78,20 @@ func main() {
 	}
 	defer w.Close()
 
-	broker := sse.NewBroker()
+	var brokerOpts []sse.BrokerOption
+	if v := os.Getenv("RATCHET_RING_BUFFER_SIZE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			log.Fatalf("invalid RATCHET_RING_BUFFER_SIZE %q: %v", v, err)
+		}
+		if n < sse.MinBufferSize || n > sse.MaxBufferSize {
+			log.Fatalf("RATCHET_RING_BUFFER_SIZE must be between %d and %d, got %d",
+				sse.MinBufferSize, sse.MaxBufferSize, n)
+		}
+		brokerOpts = append(brokerOpts, sse.WithBufferSize(n))
+	}
+
+	broker := sse.NewBroker(brokerOpts...)
 	defer broker.Close()
 
 	// Create the enrichment pipeline instead of a direct watcher->broker pipe.
@@ -138,7 +152,7 @@ func main() {
 	} else {
 		fmt.Fprintf(os.Stderr, "watching %s, serving on %s\n", dir, addr)
 	}
-	slog.Info("server starting", "dir", dir, "addr", addr, "workspace", workspace)
+	slog.Info("server starting", "dir", dir, "addr", addr, "workspace", workspace, "ring_buffer_size", broker.BufferSize())
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
