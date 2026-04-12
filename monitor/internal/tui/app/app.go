@@ -50,13 +50,18 @@ type App struct {
 	cancel    context.CancelFunc
 	once      sync.Once
 	onUpdate  func() // called after store data changes to trigger re-render
+
+	// workspaceTabs remembers the active tab per workspace name so that
+	// switching back to a workspace restores the previously selected tab.
+	workspaceTabs map[string]Tab
 }
 
 // New creates a new App connected to the given server URL.
 func New(serverURL string) *App {
 	a := &App{
-		Store:     state.NewStore(),
-		ActiveTab: TabPairs,
+		Store:         state.NewStore(),
+		ActiveTab:     TabPairs,
+		workspaceTabs: make(map[string]Tab),
 	}
 
 	a.Client = client.NewClient(serverURL,
@@ -281,13 +286,14 @@ func (a *App) StatusLine() string {
 }
 
 // CycleWorkspace switches to the next workspace (wraps around).
-// If no workspaces are configured, this is a no-op.
+// If no workspaces are configured or only one workspace exists, this is a no-op.
+// The current tab is saved for the outgoing workspace and restored for the incoming one.
 func (a *App) CycleWorkspace() {
 	if a.Store == nil {
 		return
 	}
 	workspaces := a.Store.Workspaces()
-	if len(workspaces) == 0 {
+	if len(workspaces) <= 1 {
 		return
 	}
 	current := a.Store.CurrentWorkspace()
@@ -298,8 +304,26 @@ func (a *App) CycleWorkspace() {
 			break
 		}
 	}
-	// Move to next (or first if current not found)
+
+	// Save current tab for the outgoing workspace.
+	if a.workspaceTabs == nil {
+		a.workspaceTabs = make(map[string]Tab)
+	}
+	if current != "" {
+		a.workspaceTabs[current] = a.ActiveTab
+	}
+
+	// Move to next (or first if current not found).
 	next := (idx + 1) % len(workspaces)
-	a.Store.SetCurrentWorkspace(workspaces[next])
+	nextWS := workspaces[next]
+	a.Store.SetCurrentWorkspace(nextWS)
+
+	// Restore tab for the incoming workspace (default to TabPairs).
+	if savedTab, ok := a.workspaceTabs[nextWS]; ok {
+		a.ActiveTab = savedTab
+	} else {
+		a.ActiveTab = TabPairs
+	}
+
 	a.notifyUpdate()
 }

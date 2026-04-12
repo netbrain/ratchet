@@ -252,3 +252,64 @@ func TestStoreLastEventID(t *testing.T) {
 		t.Errorf("expected LastEventID '42', got %q", s.LastEventID())
 	}
 }
+
+// ── Workspace state ──────────────────────────────────────────────────────
+
+func TestStoreWorkspaceSetAndGet(t *testing.T) {
+	s := NewStore()
+	if got := s.CurrentWorkspace(); got != "" {
+		t.Fatalf("expected empty initial workspace, got %q", got)
+	}
+
+	s.SetCurrentWorkspace("engine")
+	if got := s.CurrentWorkspace(); got != "engine" {
+		t.Fatalf("expected 'engine', got %q", got)
+	}
+}
+
+func TestStoreWorkspacesListSetAndGet(t *testing.T) {
+	s := NewStore()
+	s.SetWorkspaces([]string{"ws-a", "ws-b", "ws-c"})
+
+	got := s.Workspaces()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 workspaces, got %d", len(got))
+	}
+	if got[0] != "ws-a" || got[1] != "ws-b" || got[2] != "ws-c" {
+		t.Fatalf("unexpected workspace list: %v", got)
+	}
+}
+
+func TestStoreWorkspacesReturnsCopy(t *testing.T) {
+	s := NewStore()
+	s.SetWorkspaces([]string{"a", "b"})
+
+	got := s.Workspaces()
+	got[0] = "mutated"
+
+	if s.Workspaces()[0] == "mutated" {
+		t.Fatal("Workspaces() should return a copy, not the original slice")
+	}
+}
+
+func TestStoreWorkspacesConcurrentAccess(t *testing.T) {
+	s := NewStore()
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			s.SetWorkspaces([]string{"a", "b"})
+			s.SetCurrentWorkspace("a")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			_ = s.Workspaces()
+			_ = s.CurrentWorkspace()
+		}
+	}()
+	wg.Wait()
+}
