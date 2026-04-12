@@ -861,6 +861,55 @@ func TestRegressionWarningNilReceiver(t *testing.T) {
 	}
 }
 
+// ── Regression percentage boundary tests ─────────────────────────────────
+
+func TestRegressionWarningPercentageBoundaries(t *testing.T) {
+	store := state.NewStore()
+	vm := views.NewEpicViewModel(store)
+
+	tests := []struct {
+		name        string
+		regressions int
+		maxReg      int
+		want        string
+	}{
+		// Green: <50%
+		{"0/4=0%", 0, 4, "none"},
+		{"1/4=25%", 1, 4, "none"},
+		// Yellow: 50%-75% (inclusive lower, inclusive upper)
+		{"2/4=50%", 2, 4, "warn"},
+		{"3/4=75%", 3, 4, "warn"},
+		// Red: >75%
+		{"4/4=100%", 4, 4, "danger"},
+		{"5/4=125%", 5, 4, "danger"},
+		// Edge: exactly 50% with max=2
+		{"1/2=50%", 1, 2, "warn"},
+		// Edge: exactly 75% with larger max
+		{"3/4=75%", 3, 4, "warn"},
+		// Edge: just above 75%
+		{"4/5=80%", 4, 5, "danger"},
+		// Edge: just below 50%
+		{"2/5=40%", 2, 5, "none"},
+		// Zero regressions always green
+		{"0/2=0%", 0, 2, "none"},
+		{"0/10=0%", 0, 10, "none"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := views.MilestoneStatus{
+				Regressions:    tt.regressions,
+				MaxRegressions: tt.maxReg,
+			}
+			got := vm.RegressionWarningLevel(m)
+			if got != tt.want {
+				t.Errorf("RegressionWarningLevel(reg=%d, max=%d) = %q, want %q",
+					tt.regressions, tt.maxReg, got, tt.want)
+			}
+		})
+	}
+}
+
 // ── DAG connectors (Issue 32) ────────────────────────────────────────────
 
 func TestDAGConnectors(t *testing.T) {
