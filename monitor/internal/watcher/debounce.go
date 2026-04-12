@@ -52,7 +52,7 @@ func NewWithOptions(dir string, opts ...Option) (*Watcher, error) {
 		return nil
 	})
 	if err != nil {
-		fsw.Close()
+		_ = fsw.Close()
 		return nil, fmt.Errorf("walk directory %q: %w", dir, err)
 	}
 

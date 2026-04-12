@@ -54,7 +54,7 @@ func SSEHandler(broker *sse.Broker) http.Handler {
 		// Send an SSE comment to establish the stream. Without this,
 		// browsers keep EventSource in "connecting" state until the
 		// first real data arrives.
-		fmt.Fprint(w, ": ok\n\n")
+		_, _ = fmt.Fprint(w, ": ok\n\n")
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -73,9 +73,9 @@ func SSEHandler(broker *sse.Broker) http.Handler {
 					slog.Error("failed to marshal event", "error", err)
 					continue
 				}
-				fmt.Fprintf(w, "event: %s\n", ev.Type)
-				fmt.Fprintf(w, "id: %d\n", ev.ID)
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				_, _ = fmt.Fprintf(w, "event: %s\n", ev.Type)
+				_, _ = fmt.Fprintf(w, "id: %d\n", ev.ID)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 				if flusher != nil {
 					flusher.Flush()
 				}
