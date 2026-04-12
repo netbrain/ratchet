@@ -200,10 +200,10 @@ func (vm *PairsViewModel) applyFilter() {
 		if ws != "" && p.Workspace != ws {
 			continue
 		}
-		if q != "" && !(strings.Contains(strings.ToLower(p.Name), q) ||
-			strings.Contains(strings.ToLower(p.Component), q) ||
-			strings.Contains(strings.ToLower(p.Phase), q) ||
-			strings.Contains(strings.ToLower(p.Status), q)) {
+		if q != "" && !strings.Contains(strings.ToLower(p.Name), q) &&
+			!strings.Contains(strings.ToLower(p.Component), q) &&
+			!strings.Contains(strings.ToLower(p.Phase), q) &&
+			!strings.Contains(strings.ToLower(p.Status), q) {
 			continue
 		}
 		vm.filtered = append(vm.filtered, p)
