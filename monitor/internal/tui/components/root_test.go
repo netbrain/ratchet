@@ -1,10 +1,13 @@
 package components
 
 import (
+	"strings"
 	"testing"
 
 	tui "github.com/grindlemire/go-tui"
 	"github.com/netbrain/ratchet-monitor/internal/tui/app"
+	"github.com/netbrain/ratchet-monitor/internal/tui/client"
+	"github.com/netbrain/ratchet-monitor/internal/tui/state"
 )
 
 // TestRootImplementsComponent verifies Root satisfies tui.Component.
@@ -275,6 +278,43 @@ func TestRootRenderNilStore(t *testing.T) {
 	children := el.Children()
 	if len(children) < 4 {
 		t.Fatalf("expected at least 4 child zones with nil Store, got %d", len(children))
+	}
+}
+
+// TestRootWorkspaceKeyBinding verifies 'w' key handler exists and cycles workspaces.
+func TestRootWorkspaceKeyBinding(t *testing.T) {
+	store := state.NewStore()
+	store.SetWorkspaces([]string{"ws-a", "ws-b"})
+	store.SetCurrentWorkspace("ws-a")
+	a := &app.App{ActiveTab: app.TabPairs, Store: store}
+	root := NewRoot(a)
+
+	km := root.KeyMap()
+	handler := findRuneHandler(km, 'w')
+	if handler == nil {
+		t.Fatal("no handler found for 'w' key")
+	}
+
+	handler(tui.KeyEvent{Key: tui.KeyRune, Rune: 'w'})
+
+	if got := store.CurrentWorkspace(); got != "ws-b" {
+		t.Fatalf("expected workspace 'ws-b' after pressing 'w', got %q", got)
+	}
+}
+
+// TestRootRenderShowsWorkspaceInHeader verifies the header includes the workspace name.
+func TestRootRenderShowsWorkspaceInHeader(t *testing.T) {
+	store := state.NewStore()
+	store.SetWorkspaces([]string{"engine"})
+	store.SetCurrentWorkspace("engine")
+	store.SetConnectionState(client.Connected)
+	a := &app.App{ActiveTab: app.TabPairs, Store: store}
+	root := NewRoot(a)
+
+	el := root.Render(nil)
+	text := collectAllText(el)
+	if !strings.Contains(text, "[engine]") {
+		t.Fatalf("expected header to contain '[engine]', got: %q", text)
 	}
 }
 

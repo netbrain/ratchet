@@ -1,15 +1,22 @@
 package components
 
 import (
+	"fmt"
+
 	tui "github.com/grindlemire/go-tui"
 	"github.com/netbrain/ratchet-monitor/internal/tui/client"
 )
 
-// Header renders the top header bar showing the application name and
-// connection state indicator.
-func Header(connState client.ConnectionState) *tui.Element {
+// Header renders the top header bar showing the application name,
+// active workspace (if any), and connection state indicator.
+func Header(connState client.ConnectionState, workspace string) *tui.Element {
+	titleText := "ratchet-monitor"
+	if workspace != "" {
+		titleText = fmt.Sprintf("ratchet-monitor [%s]", workspace)
+	}
+
 	title := tui.New(
-		tui.WithText("ratchet-monitor"),
+		tui.WithText(titleText),
 		tui.WithTextStyle(tui.NewStyle().Bold().Foreground(tui.Cyan)),
 	)
 

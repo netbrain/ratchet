@@ -117,7 +117,7 @@ func TestTabStringUnknown(t *testing.T) {
 
 // TestCycleWorkspacePopulated verifies CycleWorkspace cycles through loaded workspaces.
 func TestCycleWorkspacePopulated(t *testing.T) {
-	a := &App{Store: state.NewStore()}
+	a := &App{Store: state.NewStore(), workspaceTabs: make(map[string]Tab)}
 	a.Store.SetWorkspaces([]string{"frontend", "backend", "infra"})
 	a.Store.SetCurrentWorkspace("frontend")
 
@@ -139,10 +139,76 @@ func TestCycleWorkspacePopulated(t *testing.T) {
 
 // TestCycleWorkspaceEmpty verifies CycleWorkspace is a no-op with no workspaces.
 func TestCycleWorkspaceEmpty(t *testing.T) {
-	a := &App{Store: state.NewStore()}
+	a := &App{Store: state.NewStore(), workspaceTabs: make(map[string]Tab)}
 	a.CycleWorkspace() // must not panic
 	if got := a.Store.CurrentWorkspace(); got != "" {
 		t.Fatalf("expected empty workspace, got %q", got)
+	}
+}
+
+// TestCycleWorkspaceSingleIsNoOp verifies CycleWorkspace is a no-op with only one workspace.
+func TestCycleWorkspaceSingleIsNoOp(t *testing.T) {
+	a := &App{Store: state.NewStore(), workspaceTabs: make(map[string]Tab)}
+	a.Store.SetWorkspaces([]string{"only-one"})
+	a.Store.SetCurrentWorkspace("only-one")
+	a.ActiveTab = TabDebates
+
+	a.CycleWorkspace()
+	if got := a.Store.CurrentWorkspace(); got != "only-one" {
+		t.Fatalf("expected workspace unchanged, got %q", got)
+	}
+	if a.ActiveTab != TabDebates {
+		t.Fatalf("expected tab unchanged, got %v", a.ActiveTab)
+	}
+}
+
+// TestCycleWorkspacePreservesTabPerWorkspace verifies that each workspace
+// remembers its own active tab across switches.
+func TestCycleWorkspacePreservesTabPerWorkspace(t *testing.T) {
+	a := &App{Store: state.NewStore(), ActiveTab: TabDebates, workspaceTabs: make(map[string]Tab)}
+	a.Store.SetWorkspaces([]string{"ws-a", "ws-b"})
+	a.Store.SetCurrentWorkspace("ws-a")
+
+	// ws-a has TabDebates active. Cycle to ws-b.
+	a.CycleWorkspace()
+	if a.Store.CurrentWorkspace() != "ws-b" {
+		t.Fatalf("expected ws-b, got %q", a.Store.CurrentWorkspace())
+	}
+	// ws-b should default to TabPairs (no saved tab).
+	if a.ActiveTab != TabPairs {
+		t.Fatalf("expected TabPairs for new workspace, got %v", a.ActiveTab)
+	}
+
+	// Switch ws-b to TabScores.
+	a.ActiveTab = TabScores
+
+	// Cycle back to ws-a.
+	a.CycleWorkspace()
+	if a.Store.CurrentWorkspace() != "ws-a" {
+		t.Fatalf("expected ws-a, got %q", a.Store.CurrentWorkspace())
+	}
+	// ws-a should remember TabDebates.
+	if a.ActiveTab != TabDebates {
+		t.Fatalf("expected TabDebates restored for ws-a, got %v", a.ActiveTab)
+	}
+
+	// Cycle back to ws-b.
+	a.CycleWorkspace()
+	// ws-b should remember TabScores.
+	if a.ActiveTab != TabScores {
+		t.Fatalf("expected TabScores restored for ws-b, got %v", a.ActiveTab)
+	}
+}
+
+// TestCycleWorkspaceNilMapSafe verifies CycleWorkspace initialises the map if nil.
+func TestCycleWorkspaceNilMapSafe(t *testing.T) {
+	a := &App{Store: state.NewStore()} // workspaceTabs not initialised
+	a.Store.SetWorkspaces([]string{"a", "b"})
+	a.Store.SetCurrentWorkspace("a")
+
+	a.CycleWorkspace() // must not panic
+	if got := a.Store.CurrentWorkspace(); got != "b" {
+		t.Fatalf("expected 'b', got %q", got)
 	}
 }
 

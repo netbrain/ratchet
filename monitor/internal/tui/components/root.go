@@ -31,12 +31,14 @@ func NewRoot(a *app.App) *Root {
 func (r *Root) Render(tuiApp *tui.App) *tui.Element {
 	var connState client.ConnectionState
 	var statusText string
+	var workspace string
 	if r.app.Store != nil {
 		connState = r.app.Store.ConnectionState()
 		statusText = r.app.StatusLine()
+		workspace = r.app.Store.CurrentWorkspace()
 	}
 
-	header := Header(connState)
+	header := Header(connState, workspace)
 
 	// Stale data banner when disconnected/reconnecting
 	var staleBanner *tui.Element
@@ -83,7 +85,7 @@ func (r *Root) Render(tuiApp *tui.App) *tui.Element {
 		content = Content(r.app.ActiveTab)
 	}
 
-	hints := fmt.Sprintf("1-%d:tab  Tab/S-Tab:cycle  j/k:nav  /:filter  ?:help  q:quit", len(app.AllTabs()))
+	hints := fmt.Sprintf("1-%d:tab  Tab/S-Tab:cycle  w:workspace  j/k:nav  /:filter  ?:help  q:quit", len(app.AllTabs()))
 	statusBar := StatusBar(statusText, hints)
 
 	root := tui.New(
