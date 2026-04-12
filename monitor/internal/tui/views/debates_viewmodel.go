@@ -10,14 +10,12 @@ import (
 
 // DebatesViewModel is the view model for the debate list screen.
 type DebatesViewModel struct {
-	store          *state.Store
-	debates        []client.DebateMeta
-	filtered       []client.DebateMeta
-	filter         string
-	statusFilter   string
-	selected       int
-	viewportHeight int
-	scrollOffset   int
+	ListViewModel
+	store        *state.Store
+	debates      []client.DebateMeta
+	filtered     []client.DebateMeta
+	filter       string
+	statusFilter string
 }
 
 // NewDebatesViewModel creates a DebatesViewModel backed by the given store.
@@ -120,7 +118,7 @@ func (vm *DebatesViewModel) SelectedIndex() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.selected
+	return vm.ListViewModel.Selected()
 }
 
 // SelectNext moves selection forward with wrap-around.
@@ -128,12 +126,7 @@ func (vm *DebatesViewModel) SelectNext() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected + 1) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectNext(len(vm.filtered))
 }
 
 // SelectPrev moves selection backward with wrap-around.
@@ -141,12 +134,7 @@ func (vm *DebatesViewModel) SelectPrev() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected - 1 + n) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectPrevious(len(vm.filtered))
 }
 
 // SelectFirst jumps to the first item.
@@ -154,8 +142,7 @@ func (vm *DebatesViewModel) SelectFirst() {
 	if vm == nil {
 		return
 	}
-	vm.selected = 0
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectFirst(len(vm.filtered))
 }
 
 // SelectLast jumps to the last item.
@@ -163,12 +150,7 @@ func (vm *DebatesViewModel) SelectLast() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = n - 1
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectLast(len(vm.filtered))
 }
 
 // SelectedDebate returns the currently selected debate, or nil if empty.
@@ -176,7 +158,7 @@ func (vm *DebatesViewModel) SelectedDebate() *client.DebateMeta {
 	if vm == nil || len(vm.filtered) == 0 {
 		return nil
 	}
-	d := vm.filtered[vm.selected]
+	d := vm.filtered[vm.ListViewModel.Selected()]
 	return &d
 }
 
@@ -241,8 +223,7 @@ func (vm *DebatesViewModel) SetViewportHeight(h int) {
 	if vm == nil {
 		return
 	}
-	vm.viewportHeight = h
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SetViewportHeight(h, len(vm.filtered))
 }
 
 // ScrollOffset returns the current scroll offset.
@@ -250,29 +231,9 @@ func (vm *DebatesViewModel) ScrollOffset() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.scrollOffset
+	return vm.ListViewModel.ScrollOffset()
 }
 
 func (vm *DebatesViewModel) clampSelection() {
-	n := len(vm.filtered)
-	if n == 0 {
-		vm.selected = 0
-	} else if vm.selected >= n {
-		vm.selected = n - 1
-	}
-	vm.adjustScrollOffset()
-}
-
-func (vm *DebatesViewModel) adjustScrollOffset() {
-	n := len(vm.filtered)
-	if vm.viewportHeight <= 0 || n <= vm.viewportHeight {
-		vm.scrollOffset = 0
-		return
-	}
-	if vm.selected < vm.scrollOffset {
-		vm.scrollOffset = vm.selected
-	}
-	if vm.selected >= vm.scrollOffset+vm.viewportHeight {
-		vm.scrollOffset = vm.selected - vm.viewportHeight + 1
-	}
+	vm.ListViewModel.ClampSelection(len(vm.filtered))
 }

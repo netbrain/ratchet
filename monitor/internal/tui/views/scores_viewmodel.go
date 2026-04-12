@@ -21,11 +21,9 @@ type PairScoreSummary struct {
 
 // ScoresViewModel is the view model for the scores tab.
 type ScoresViewModel struct {
-	store          *state.Store
-	summaries      []PairScoreSummary
-	selected       int
-	viewportHeight int
-	scrollOffset   int
+	ListViewModel
+	store     *state.Store
+	summaries []PairScoreSummary
 }
 
 // NewScoresViewModel creates a ScoresViewModel backed by the given store.
@@ -48,7 +46,7 @@ func (vm *ScoresViewModel) SelectedIndex() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.selected
+	return vm.ListViewModel.Selected()
 }
 
 // SelectNext moves selection forward with wrap-around.
@@ -56,12 +54,7 @@ func (vm *ScoresViewModel) SelectNext() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.summaries)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected + 1) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectNext(len(vm.summaries))
 }
 
 // SelectPrev moves selection backward with wrap-around.
@@ -69,12 +62,7 @@ func (vm *ScoresViewModel) SelectPrev() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.summaries)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected - 1 + n) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectPrevious(len(vm.summaries))
 }
 
 // SelectFirst jumps to the first item.
@@ -82,8 +70,7 @@ func (vm *ScoresViewModel) SelectFirst() {
 	if vm == nil {
 		return
 	}
-	vm.selected = 0
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectFirst(len(vm.summaries))
 }
 
 // SelectLast jumps to the last item.
@@ -91,12 +78,7 @@ func (vm *ScoresViewModel) SelectLast() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.summaries)
-	if n == 0 {
-		return
-	}
-	vm.selected = n - 1
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectLast(len(vm.summaries))
 }
 
 // SelectedSummary returns the currently selected summary, or nil if empty.
@@ -104,7 +86,7 @@ func (vm *ScoresViewModel) SelectedSummary() *PairScoreSummary {
 	if vm == nil || len(vm.summaries) == 0 {
 		return nil
 	}
-	s := vm.summaries[vm.selected]
+	s := vm.summaries[vm.ListViewModel.Selected()]
 	return &s
 }
 
@@ -113,8 +95,7 @@ func (vm *ScoresViewModel) SetViewportHeight(h int) {
 	if vm == nil {
 		return
 	}
-	vm.viewportHeight = h
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SetViewportHeight(h, len(vm.summaries))
 }
 
 // ScrollOffset returns the current scroll offset.
@@ -122,7 +103,7 @@ func (vm *ScoresViewModel) ScrollOffset() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.scrollOffset
+	return vm.ListViewModel.ScrollOffset()
 }
 
 // Refresh re-reads scores from the store.
@@ -131,31 +112,7 @@ func (vm *ScoresViewModel) Refresh() {
 		return
 	}
 	vm.loadSummaries()
-	vm.clampSelection()
-}
-
-func (vm *ScoresViewModel) clampSelection() {
-	n := len(vm.summaries)
-	if n == 0 {
-		vm.selected = 0
-	} else if vm.selected >= n {
-		vm.selected = n - 1
-	}
-	vm.adjustScrollOffset()
-}
-
-func (vm *ScoresViewModel) adjustScrollOffset() {
-	n := len(vm.summaries)
-	if vm.viewportHeight <= 0 || n <= vm.viewportHeight {
-		vm.scrollOffset = 0
-		return
-	}
-	if vm.selected < vm.scrollOffset {
-		vm.scrollOffset = vm.selected
-	}
-	if vm.selected >= vm.scrollOffset+vm.viewportHeight {
-		vm.scrollOffset = vm.selected - vm.viewportHeight + 1
-	}
+	vm.ListViewModel.ClampSelection(len(vm.summaries))
 }
 
 func (vm *ScoresViewModel) loadSummaries() {
