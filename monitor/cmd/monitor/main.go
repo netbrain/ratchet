@@ -75,7 +75,7 @@ func main() {
 		}
 		log.Fatalf("failed to create watcher for %q: %v", dir, err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	broker := sse.NewBroker()
 	defer broker.Close()
