@@ -12,13 +12,11 @@ import (
 // It holds a snapshot of pairs from the store and provides filtering,
 // selection, and grouping logic for the UI layer.
 type PairsViewModel struct {
-	store          *state.Store
-	pairs          []client.PairStatus
-	filtered       []client.PairStatus
-	filter         string
-	selected       int
-	viewportHeight int
-	scrollOffset   int
+	ListViewModel
+	store    *state.Store
+	pairs    []client.PairStatus
+	filtered []client.PairStatus
+	filter   string
 }
 
 // NewPairsViewModel creates a PairsViewModel backed by the given store.
@@ -84,7 +82,7 @@ func (vm *PairsViewModel) SelectedIndex() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.selected
+	return vm.ListViewModel.Selected()
 }
 
 // SelectNext moves the selection forward, wrapping to 0 at the end.
@@ -92,12 +90,7 @@ func (vm *PairsViewModel) SelectNext() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected + 1) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectNext(len(vm.filtered))
 }
 
 // SelectPrev moves the selection backward, wrapping to the last item at 0.
@@ -105,12 +98,7 @@ func (vm *PairsViewModel) SelectPrev() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected - 1 + n) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectPrevious(len(vm.filtered))
 }
 
 // SelectFirst moves the selection to the first item.
@@ -118,8 +106,7 @@ func (vm *PairsViewModel) SelectFirst() {
 	if vm == nil {
 		return
 	}
-	vm.selected = 0
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectFirst(len(vm.filtered))
 }
 
 // SelectLast moves the selection to the last item.
@@ -127,12 +114,7 @@ func (vm *PairsViewModel) SelectLast() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.filtered)
-	if n == 0 {
-		return
-	}
-	vm.selected = n - 1
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectLast(len(vm.filtered))
 }
 
 // SelectedPair returns the currently selected pair, or nil if the list is empty.
@@ -140,7 +122,7 @@ func (vm *PairsViewModel) SelectedPair() *client.PairStatus {
 	if vm == nil || len(vm.filtered) == 0 {
 		return nil
 	}
-	p := vm.filtered[vm.selected]
+	p := vm.filtered[vm.ListViewModel.Selected()]
 	return &p
 }
 
@@ -218,8 +200,7 @@ func (vm *PairsViewModel) SetViewportHeight(h int) {
 	if vm == nil {
 		return
 	}
-	vm.viewportHeight = h
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SetViewportHeight(h, len(vm.filtered))
 }
 
 // ScrollOffset returns the current scroll offset.
@@ -227,29 +208,9 @@ func (vm *PairsViewModel) ScrollOffset() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.scrollOffset
+	return vm.ListViewModel.ScrollOffset()
 }
 
 func (vm *PairsViewModel) clampSelection() {
-	n := len(vm.filtered)
-	if n == 0 {
-		vm.selected = 0
-	} else if vm.selected >= n {
-		vm.selected = n - 1
-	}
-	vm.adjustScrollOffset()
-}
-
-func (vm *PairsViewModel) adjustScrollOffset() {
-	n := len(vm.filtered)
-	if vm.viewportHeight <= 0 || n <= vm.viewportHeight {
-		vm.scrollOffset = 0
-		return
-	}
-	if vm.selected < vm.scrollOffset {
-		vm.scrollOffset = vm.selected
-	}
-	if vm.selected >= vm.scrollOffset+vm.viewportHeight {
-		vm.scrollOffset = vm.selected - vm.viewportHeight + 1
-	}
+	vm.ListViewModel.ClampSelection(len(vm.filtered))
 }

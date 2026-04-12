@@ -36,12 +36,10 @@ type MilestoneStatus struct {
 
 // EpicViewModel is the view model for the epic status tab.
 type EpicViewModel struct {
-	store          *state.Store
-	plan           client.Plan
-	milestones     []MilestoneStatus
-	selected       int
-	viewportHeight int
-	scrollOffset   int
+	ListViewModel
+	store      *state.Store
+	plan       client.Plan
+	milestones []MilestoneStatus
 }
 
 // NewEpicViewModel creates an EpicViewModel backed by the given store.
@@ -160,7 +158,7 @@ func (vm *EpicViewModel) SelectedIndex() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.selected
+	return vm.ListViewModel.Selected()
 }
 
 // SelectNext moves selection forward with wrap-around.
@@ -168,12 +166,7 @@ func (vm *EpicViewModel) SelectNext() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.milestones)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected + 1) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectNext(len(vm.milestones))
 }
 
 // SelectPrev moves selection backward with wrap-around.
@@ -181,12 +174,7 @@ func (vm *EpicViewModel) SelectPrev() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.milestones)
-	if n == 0 {
-		return
-	}
-	vm.selected = (vm.selected - 1 + n) % n
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectPrevious(len(vm.milestones))
 }
 
 // SelectFirst jumps to the first milestone.
@@ -194,8 +182,7 @@ func (vm *EpicViewModel) SelectFirst() {
 	if vm == nil {
 		return
 	}
-	vm.selected = 0
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectFirst(len(vm.milestones))
 }
 
 // SelectLast jumps to the last milestone.
@@ -203,12 +190,7 @@ func (vm *EpicViewModel) SelectLast() {
 	if vm == nil {
 		return
 	}
-	n := len(vm.milestones)
-	if n == 0 {
-		return
-	}
-	vm.selected = n - 1
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SelectLast(len(vm.milestones))
 }
 
 // SelectedMilestone returns the currently selected milestone, or nil if empty.
@@ -216,7 +198,7 @@ func (vm *EpicViewModel) SelectedMilestone() *MilestoneStatus {
 	if vm == nil || len(vm.milestones) == 0 {
 		return nil
 	}
-	ms := vm.milestones[vm.selected]
+	ms := vm.milestones[vm.ListViewModel.Selected()]
 	return &ms
 }
 
@@ -225,8 +207,7 @@ func (vm *EpicViewModel) SetViewportHeight(h int) {
 	if vm == nil {
 		return
 	}
-	vm.viewportHeight = h
-	vm.adjustScrollOffset()
+	vm.ListViewModel.SetViewportHeight(h, len(vm.milestones))
 }
 
 // ScrollOffset returns the current scroll offset.
@@ -234,7 +215,7 @@ func (vm *EpicViewModel) ScrollOffset() int {
 	if vm == nil {
 		return 0
 	}
-	return vm.scrollOffset
+	return vm.ListViewModel.ScrollOffset()
 }
 
 // Refresh re-reads the plan from the store.
@@ -243,8 +224,7 @@ func (vm *EpicViewModel) Refresh() {
 		return
 	}
 	vm.loadPlan()
-	vm.clampSelection()
-	vm.adjustScrollOffset()
+	vm.ListViewModel.ClampSelection(len(vm.milestones))
 }
 
 // MilestonesByLayer groups milestones by their DAG layer for rendering.
@@ -330,29 +310,6 @@ func (vm *EpicViewModel) IsBlocked(m MilestoneStatus) bool {
 		}
 	}
 	return false
-}
-
-func (vm *EpicViewModel) clampSelection() {
-	n := len(vm.milestones)
-	if n == 0 {
-		vm.selected = 0
-	} else if vm.selected >= n {
-		vm.selected = n - 1
-	}
-}
-
-func (vm *EpicViewModel) adjustScrollOffset() {
-	n := len(vm.milestones)
-	if vm.viewportHeight <= 0 || n <= vm.viewportHeight {
-		vm.scrollOffset = 0
-		return
-	}
-	if vm.selected < vm.scrollOffset {
-		vm.scrollOffset = vm.selected
-	}
-	if vm.selected >= vm.scrollOffset+vm.viewportHeight {
-		vm.scrollOffset = vm.selected - vm.viewportHeight + 1
-	}
 }
 
 func (vm *EpicViewModel) loadPlan() {
