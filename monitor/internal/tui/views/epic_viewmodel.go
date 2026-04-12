@@ -122,8 +122,12 @@ func (vm *EpicViewModel) RegressionBudgetText(m MilestoneStatus) string {
 	return fmt.Sprintf("%d/%d", m.Regressions, maxReg)
 }
 
-// RegressionWarningLevel returns the warning level for a milestone's regressions.
-// "none" = within budget, "warn" = at or near budget, "danger" = over budget.
+// RegressionWarningLevel returns the warning level for a milestone's regressions
+// based on percentage of budget used:
+//
+//	"none"   = <50% budget used (green)
+//	"warn"   = 50-75% budget used (yellow)
+//	"danger" = >75% budget used (red)
 func (vm *EpicViewModel) RegressionWarningLevel(m MilestoneStatus) string {
 	if vm == nil {
 		return "none"
@@ -132,10 +136,11 @@ func (vm *EpicViewModel) RegressionWarningLevel(m MilestoneStatus) string {
 	if maxReg <= 0 {
 		maxReg = 2 // default budget
 	}
-	if m.Regressions >= maxReg {
+	pct := float64(m.Regressions) / float64(maxReg)
+	if pct > 0.75 {
 		return "danger"
 	}
-	if m.Regressions > 0 && m.Regressions >= maxReg-1 {
+	if pct >= 0.50 {
 		return "warn"
 	}
 	return "none"
