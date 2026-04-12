@@ -40,7 +40,9 @@ pairs:
     enabled: true
 guards: []
 `
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// plan.yaml
 	plan := `epic:
@@ -70,11 +72,15 @@ guards: []
     phase: build
     started: "2026-03-14"
 `
-	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// debates directory with meta.json files
 	debate1Dir := filepath.Join(dir, "debates", "api-design-1")
-	os.MkdirAll(debate1Dir, 0o755)
+	if err := os.MkdirAll(debate1Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	started := time.Date(2026, 3, 13, 16, 45, 0, 0, time.UTC)
 	meta1 := map[string]any{
@@ -91,10 +97,14 @@ guards: []
 		"verdict":     "ACCEPT",
 	}
 	data1, _ := json.Marshal(meta1)
-	os.WriteFile(filepath.Join(debate1Dir, "meta.json"), data1, 0o644)
+	if err := os.WriteFile(filepath.Join(debate1Dir, "meta.json"), data1, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	debate2Dir := filepath.Join(dir, "debates", "sse-test-1")
-	os.MkdirAll(filepath.Join(debate2Dir, "rounds"), 0o755)
+	if err := os.MkdirAll(filepath.Join(debate2Dir, "rounds"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	meta2 := map[string]any{
 		"id":          "sse-test-1",
@@ -108,12 +118,20 @@ guards: []
 		"started":     started.Add(2 * time.Hour).Format(time.RFC3339),
 	}
 	data2, _ := json.Marshal(meta2)
-	os.WriteFile(filepath.Join(debate2Dir, "meta.json"), data2, 0o644)
+	if err := os.WriteFile(filepath.Join(debate2Dir, "meta.json"), data2, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Round files.
-	os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-1-generative.md"), []byte("# Round 1 generative\nContent here."), 0o644)
-	os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-1-adversarial.md"), []byte("# Round 1 adversarial\nReview here."), 0o644)
-	os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-2-generative.md"), []byte("# Round 2 generative\nMore content."), 0o644)
+	if err := os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-1-generative.md"), []byte("# Round 1 generative\nContent here."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-1-adversarial.md"), []byte("# Round 1 adversarial\nReview here."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(debate2Dir, "rounds", "round-2-generative.md"), []byte("# Round 2 generative\nMore content."), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	return dir
 }
@@ -293,13 +311,17 @@ func TestFileDataSource_Scores(t *testing.T) {
 
 	// Create scores directory and file.
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	lines := `{"timestamp":"2026-03-14T10:00:00Z","debate_id":"d1","pair":"api-design","milestone":1,"rounds_to_consensus":2,"escalated":false,"issues_found":3,"issues_resolved":3}
 {"timestamp":"2026-03-15T12:00:00Z","debate_id":"d2","pair":"sse-correctness","milestone":2,"rounds_to_consensus":1,"escalated":false,"issues_found":1,"issues_resolved":1}
 {"timestamp":"2026-03-14T14:00:00Z","debate_id":"d3","pair":"api-design","milestone":2,"rounds_to_consensus":3,"escalated":true,"issues_found":5,"issues_resolved":2}
 `
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644)
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// All scores, sorted by timestamp descending.
 	result, err := ds.Scores("")
@@ -327,12 +349,16 @@ func TestFileDataSource_Scores_FilterByPair(t *testing.T) {
 	ds := NewFileDataSource(dir)
 
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	lines := `{"timestamp":"2026-03-14T10:00:00Z","debate_id":"d1","pair":"api-design","milestone":1,"rounds_to_consensus":2,"escalated":false,"issues_found":3,"issues_resolved":3}
 {"timestamp":"2026-03-15T12:00:00Z","debate_id":"d2","pair":"sse-correctness","milestone":2,"rounds_to_consensus":1,"escalated":false,"issues_found":1,"issues_resolved":1}
 `
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644)
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := ds.Scores("api-design")
 	if err != nil {
@@ -370,8 +396,12 @@ func TestFileDataSource_Scores_NoFile(t *testing.T) {
 func TestFileDataSource_Scores_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(""), 0o644)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Scores("")
@@ -390,7 +420,9 @@ func TestFileDataSource_Scores_EmptyFile(t *testing.T) {
 func TestFileDataSource_Scores_FileTooLarge(t *testing.T) {
 	dir := t.TempDir()
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a file that exceeds maxScoresFileSize (10 MiB).
 	f, err := os.Create(filepath.Join(scoresDir, "scores.jsonl"))
@@ -400,10 +432,12 @@ func TestFileDataSource_Scores_FileTooLarge(t *testing.T) {
 	// Write just over the limit. We don't need valid JSONL — the size check
 	// happens before parsing.
 	if err := f.Truncate(maxScoresFileSize + 1); err != nil {
-		f.Close()
+		_ = f.Close()
 		t.Fatalf("truncate: %v", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	_, err = ds.Scores("")
@@ -418,7 +452,9 @@ func TestFileDataSource_Scores_FileTooLarge(t *testing.T) {
 func TestFileDataSource_Scores_SkipsMalformedLines(t *testing.T) {
 	dir := t.TempDir()
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Mix of valid and malformed lines.
 	lines := `{"timestamp":"2026-03-14T10:00:00Z","debate_id":"d1","pair":"api-design","milestone":1,"rounds_to_consensus":2,"escalated":false,"issues_found":3,"issues_resolved":3}
@@ -426,7 +462,9 @@ func TestFileDataSource_Scores_SkipsMalformedLines(t *testing.T) {
 {"timestamp":"2026-03-15T12:00:00Z","debate_id":"d2","pair":"sse-correctness","milestone":2,"rounds_to_consensus":1,"escalated":false,"issues_found":1,"issues_resolved":1}
 also not json
 `
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644)
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Scores("")
@@ -445,13 +483,17 @@ also not json
 func TestFileDataSource_Scores_FilterByPairWithMalformedLines(t *testing.T) {
 	dir := t.TempDir()
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	lines := `{"timestamp":"2026-03-14T10:00:00Z","debate_id":"d1","pair":"api-design","milestone":1,"rounds_to_consensus":2,"escalated":false,"issues_found":3,"issues_resolved":3}
 {malformed}
 {"timestamp":"2026-03-15T12:00:00Z","debate_id":"d2","pair":"sse-correctness","milestone":2,"rounds_to_consensus":1,"escalated":false,"issues_found":1,"issues_resolved":1}
 `
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644)
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Scores("api-design")
@@ -470,11 +512,15 @@ func TestFileDataSource_Scores_FilterByPairWithMalformedLines(t *testing.T) {
 func TestFileDataSource_Scores_NonexistentPairReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	scoresDir := filepath.Join(dir, "scores")
-	os.MkdirAll(scoresDir, 0o755)
+	if err := os.MkdirAll(scoresDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	lines := `{"timestamp":"2026-03-14T10:00:00Z","debate_id":"d1","pair":"api-design","milestone":1,"rounds_to_consensus":2,"escalated":false,"issues_found":3,"issues_resolved":3}
 `
-	os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644)
+	if err := os.WriteFile(filepath.Join(scoresDir, "scores.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Scores("nonexistent-pair")
@@ -515,7 +561,9 @@ func TestFileDataSource_Pairs_MissingWorkflow(t *testing.T) {
 // empty slice (not an error) when workflow.yaml contains invalid YAML.
 func TestFileDataSource_Pairs_MalformedWorkflow(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Pairs("")
@@ -540,7 +588,9 @@ func TestFileDataSource_Pairs_PermissionDenied(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
-	os.WriteFile(path, []byte("version: 2\n"), 0o000)
+	if err := os.WriteFile(path, []byte("version: 2\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Pairs("")
@@ -611,7 +661,9 @@ workspaces:
     path: /home/dev/backend
 pairs: []
 `
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Workspaces()
@@ -667,7 +719,9 @@ progress:
   adapter: none
 pairs: []
 `
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Workspaces()
@@ -686,7 +740,9 @@ pairs: []
 // TestFileDataSource_Workspaces_MalformedWorkflow verifies graceful degradation.
 func TestFileDataSource_Workspaces_MalformedWorkflow(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Workspaces()
@@ -709,7 +765,9 @@ func TestFileDataSource_Workspaces_PermissionDenied(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
-	os.WriteFile(path, []byte("version: 2\n"), 0o000)
+	if err := os.WriteFile(path, []byte("version: 2\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Workspaces()
@@ -733,7 +791,9 @@ func TestFileDataSource_Status_NilCurrentFocus(t *testing.T) {
       status: done
       done_when: "done"
 `
-	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Status()
@@ -754,8 +814,12 @@ func TestFileDataSource_Status_NilCurrentFocus(t *testing.T) {
 func TestFileDataSource_Debate_MalformedMeta(t *testing.T) {
 	dir := t.TempDir()
 	debateDir := filepath.Join(dir, "debates", "bad-debate")
-	os.MkdirAll(debateDir, 0o755)
-	os.WriteFile(filepath.Join(debateDir, "meta.json"), []byte("{not valid json"), 0o644)
+	if err := os.MkdirAll(debateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(debateDir, "meta.json"), []byte("{not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Debate("bad-debate")
@@ -772,12 +836,18 @@ func TestFileDataSource_Debates_SkipsMalformed(t *testing.T) {
 
 	// Create a malformed meta.json
 	debateDir := filepath.Join(dir, "debates", "bad-debate")
-	os.MkdirAll(debateDir, 0o755)
-	os.WriteFile(filepath.Join(debateDir, "meta.json"), []byte("{bad json"), 0o644)
+	if err := os.MkdirAll(debateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(debateDir, "meta.json"), []byte("{bad json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a valid meta.json
 	goodDir := filepath.Join(dir, "debates", "good-debate")
-	os.MkdirAll(goodDir, 0o755)
+	if err := os.MkdirAll(goodDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	meta := map[string]any{
 		"id":          "good-debate",
 		"pair":        "test",
@@ -790,7 +860,9 @@ func TestFileDataSource_Debates_SkipsMalformed(t *testing.T) {
 		"started":     time.Now().Format(time.RFC3339),
 	}
 	data, _ := json.Marshal(meta)
-	os.WriteFile(filepath.Join(goodDir, "meta.json"), data, 0o644)
+	if err := os.WriteFile(filepath.Join(goodDir, "meta.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Debates("")
@@ -874,7 +946,9 @@ func TestFileDataSource_Plan_V2WithIssues(t *testing.T) {
     phase: test
     started: "2026-03-16"
 `
-	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Plan()
@@ -941,7 +1015,9 @@ max_rounds: 3
 escalation: human
 max_regressions: 5
 `
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	plan := `epic:
   name: test-epic
@@ -951,7 +1027,9 @@ max_regressions: 5
       status: in_progress
       regressions: 3
 `
-	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(plan), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Plan()
@@ -1006,7 +1084,9 @@ func TestFileDataSource_Status_V2WithIssue(t *testing.T) {
     phase: test
     started: "2026-03-16"
 `
-	os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "plan.yaml"), []byte(planV2), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 	result, err := ds.Status()
@@ -1061,7 +1141,9 @@ pairs:
 // data when the workspace is listed in workflow.yaml.
 func TestFileDataSource_Pairs_KnownWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Pairs("frontend")
@@ -1081,7 +1163,9 @@ func TestFileDataSource_Pairs_KnownWorkspace(t *testing.T) {
 // returns data for the second listed workspace.
 func TestFileDataSource_Pairs_KnownWorkspace_Second(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	result, err := ds.Pairs("backend")
@@ -1101,7 +1185,9 @@ func TestFileDataSource_Pairs_KnownWorkspace_Second(t *testing.T) {
 // returns a NotFoundError with Resource="workspace".
 func TestFileDataSource_Pairs_UnknownWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Pairs("nonexistent")
@@ -1144,7 +1230,9 @@ func TestFileDataSource_Pairs_WorkspaceOnMissingFile(t *testing.T) {
 // an empty 200. The caller explicitly named a workspace; we cannot validate it.
 func TestFileDataSource_Pairs_MalformedWorkflow_WithWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("{{{{not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Pairs("frontend")
@@ -1169,7 +1257,9 @@ max_rounds: 3
 escalation: human
 pairs: []
 `
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Pairs("frontend")
@@ -1186,11 +1276,15 @@ pairs: []
 // the debate list when the workspace is valid.
 func TestFileDataSource_Debates_KnownWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create one debate.
 	debateDir := filepath.Join(dir, "debates", "test-debate-1")
-	os.MkdirAll(debateDir, 0o755)
+	if err := os.MkdirAll(debateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	meta := map[string]any{
 		"id":         "test-debate-1",
 		"pair":       "api-design",
@@ -1202,7 +1296,9 @@ func TestFileDataSource_Debates_KnownWorkspace(t *testing.T) {
 		"started":    time.Now().Format(time.RFC3339),
 	}
 	data, _ := json.Marshal(meta)
-	os.WriteFile(filepath.Join(debateDir, "meta.json"), data, 0o644)
+	if err := os.WriteFile(filepath.Join(debateDir, "meta.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ds := NewFileDataSource(dir)
 
@@ -1223,7 +1319,9 @@ func TestFileDataSource_Debates_KnownWorkspace(t *testing.T) {
 // returns a NotFoundError with Resource="workspace".
 func TestFileDataSource_Debates_UnknownWorkspace(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowWithWorkspaces()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ds := NewFileDataSource(dir)
 
 	_, err := ds.Debates("nonexistent")

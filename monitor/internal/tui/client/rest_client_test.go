@@ -17,7 +17,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /api/pairs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]PairStatus{
+		_ = json.NewEncoder(w).Encode([]PairStatus{
 			{Name: "lint-review", Component: "linter", Phase: "test", Scope: "module", Enabled: true, Active: true, Status: "debating"},
 			{Name: "sec-audit", Component: "security", Phase: "review", Scope: "repo", Enabled: true, Active: false, Status: "idle"},
 		})
@@ -26,7 +26,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /api/debates", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		started := time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC)
-		json.NewEncoder(w).Encode([]DebateMeta{
+		_ = json.NewEncoder(w).Encode([]DebateMeta{
 			{ID: "d-001", Pair: "lint-review", Phase: "test", Milestone: 6, Files: []string{"main.go"}, Status: "active", RoundCount: 2, MaxRounds: 5, Started: started},
 		})
 	})
@@ -35,12 +35,12 @@ func newTestServer(t *testing.T) *httptest.Server {
 		id := r.PathValue("id")
 		if id != "d-001" {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "debate not found"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "debate not found"})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		started := time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC)
-		json.NewEncoder(w).Encode(DebateWithRounds{
+		_ = json.NewEncoder(w).Encode(DebateWithRounds{
 			DebateMeta: DebateMeta{ID: "d-001", Pair: "lint-review", Phase: "test", Milestone: 6, Files: []string{"main.go"}, Status: "active", RoundCount: 2, MaxRounds: 5, Started: started},
 			Rounds: []Round{
 				{Number: 1, Role: "challenger", Content: "Found issue in error handling"},
@@ -51,7 +51,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /api/plan", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Plan{
+		_ = json.NewEncoder(w).Encode(Plan{
 			Epic: EpicConfig{
 				Name:        "ratchet-monitor",
 				Description: "Real-time dashboard",
@@ -65,20 +65,20 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(StatusInfo{MilestoneID: 6, MilestoneName: "TUI App Shell", Phase: "test"})
+		_ = json.NewEncoder(w).Encode(StatusInfo{MilestoneID: 6, MilestoneName: "TUI App Shell", Phase: "test"})
 	})
 
 	mux.HandleFunc("GET /api/scores", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		ts := time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC)
-		json.NewEncoder(w).Encode([]ScoreEntry{
+		_ = json.NewEncoder(w).Encode([]ScoreEntry{
 			{Timestamp: ts, DebateID: "d-001", Pair: "lint-review", Milestone: 6, RoundsToConsensus: 3, Escalated: false, IssuesFound: 2, IssuesResolved: 2},
 		})
 	})
 
 	mux.HandleFunc("GET /api/workspaces", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]Workspace{
+		_ = json.NewEncoder(w).Encode([]Workspace{
 			{Name: "frontend", Path: "/home/dev/frontend"},
 			{Name: "backend", Path: "/home/dev/backend"},
 		})
@@ -86,7 +86,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(HealthStatus{Status: "ok"})
+		_ = json.NewEncoder(w).Encode(HealthStatus{Status: "ok"})
 	})
 
 	return httptest.NewServer(mux)
@@ -230,7 +230,7 @@ func TestFetchScores(t *testing.T) {
 		receivedPair = r.URL.Query().Get("pair")
 		w.Header().Set("Content-Type", "application/json")
 		ts := time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC)
-		json.NewEncoder(w).Encode([]ScoreEntry{
+		_ = json.NewEncoder(w).Encode([]ScoreEntry{
 			{Timestamp: ts, DebateID: "d-001", Pair: "lint-review", Milestone: 6, RoundsToConsensus: 3, Escalated: false, IssuesFound: 2, IssuesResolved: 2},
 		})
 	}))
@@ -297,7 +297,7 @@ func TestContextCancellation(t *testing.T) {
 func TestServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
 	}))
 	defer srv.Close()
 
@@ -339,7 +339,7 @@ func TestFetchWorkspaces(t *testing.T) {
 func TestMalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{invalid json`))
+		_, _ = w.Write([]byte(`{invalid json`))
 	}))
 	defer srv.Close()
 
