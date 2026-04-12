@@ -22,7 +22,7 @@ func TestNewWithOptions_Debounce_RapidWritesSameFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 	time.Sleep(50 * time.Millisecond)
@@ -71,7 +71,7 @@ func TestNewWithOptions_Debounce_DifferentFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 	time.Sleep(50 * time.Millisecond)
@@ -117,7 +117,7 @@ func TestNewWithOptions_DebounceConfigurable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create watcher: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	go w.Run(t.Context())
 	time.Sleep(50 * time.Millisecond)
