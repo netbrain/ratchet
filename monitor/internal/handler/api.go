@@ -29,6 +29,12 @@ const maxPairParamLength = 128
 // maxWorkspaceParamLength caps the workspace query parameter to prevent abuse.
 const maxWorkspaceParamLength = 128
 
+// maxStatusParamLength caps the status query parameter to prevent abuse.
+const maxStatusParamLength = 64
+
+// maxPhaseParamLength caps the phase query parameter to prevent abuse.
+const maxPhaseParamLength = 64
+
 // isCleanParam rejects strings that contain path traversal sequences,
 // path separators, null bytes, or control characters.
 // This is the single validation gate for all user-supplied path segments;
@@ -64,6 +70,16 @@ func isValidPairParam(pair string) bool {
 // isValidWorkspaceParam validates the optional ?workspace= query parameter.
 func isValidWorkspaceParam(workspace string) bool {
 	return isCleanParam(workspace, maxWorkspaceParamLength)
+}
+
+// isValidStatusParam validates the optional ?status= query parameter.
+func isValidStatusParam(status string) bool {
+	return isCleanParam(status, maxStatusParamLength)
+}
+
+// isValidPhaseParam validates the optional ?phase= query parameter.
+func isValidPhaseParam(phase string) bool {
+	return isCleanParam(phase, maxPhaseParamLength)
 }
 
 // extractWorkspace reads and validates the ?workspace= query parameter.
@@ -151,7 +167,13 @@ func PairsHandler(ds DataSource) http.Handler {
 }
 
 // DebatesHandler returns a handler that serves GET /api/debates.
-// An optional ?workspace= query parameter filters results by workspace name.
+// Optional query parameters:
+//   - ?workspace= — filter by workspace name
+//   - ?status= — filter by debate status (exact match)
+//   - ?pair= — filter by pair name (exact match)
+//   - ?phase= — filter by phase (exact match)
+//
+// Multiple filters AND together. Empty/missing params return all debates.
 func DebatesHandler(ds DataSource) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -163,6 +185,24 @@ func DebatesHandler(ds DataSource) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid workspace parameter")
 			return
 		}
+
+		// Extract and validate optional filter params.
+		status := r.URL.Query().Get("status")
+		if status != "" && !isValidStatusParam(status) {
+			writeError(w, http.StatusBadRequest, "invalid status parameter")
+			return
+		}
+		pair := r.URL.Query().Get("pair")
+		if pair != "" && !isValidPairParam(pair) {
+			writeError(w, http.StatusBadRequest, "invalid pair parameter")
+			return
+		}
+		phase := r.URL.Query().Get("phase")
+		if phase != "" && !isValidPhaseParam(phase) {
+			writeError(w, http.StatusBadRequest, "invalid phase parameter")
+			return
+		}
+
 		data, err := ds.Debates(workspace)
 		if err != nil {
 			var nfe *NotFoundError
@@ -174,8 +214,56 @@ func DebatesHandler(ds DataSource) http.Handler {
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
+
+		// Apply filters if any are present.
+		if status != "" || pair != "" || phase != "" {
+			data = filterDebates(data, status, pair, phase)
+		}
+
 		writeJSON(w, http.StatusOK, data)
 	})
+}
+
+// filterDebates applies exact-match filters to a debate list.
+// The data parameter is expected to be a slice; each element is
+// re-encoded via JSON to extract filterable fields without coupling
+// the handler to the concrete debate type.
+func filterDebates(data any, status, pair, phase string) any {
+	// Marshal to JSON then unmarshal to a slice of maps.
+	raw, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("filterDebates: marshal failed", "error", err)
+		return data
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(raw, &items); err != nil {
+		slog.Error("filterDebates: unmarshal failed", "error", err)
+		return data
+	}
+
+	filtered := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if status != "" {
+			v, _ := item["status"].(string)
+			if v != status {
+				continue
+			}
+		}
+		if pair != "" {
+			v, _ := item["pair"].(string)
+			if v != pair {
+				continue
+			}
+		}
+		if phase != "" {
+			v, _ := item["phase"].(string)
+			if v != phase {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
 }
 
 // DebateDetailHandler returns a handler that serves GET /api/debates/{id}.

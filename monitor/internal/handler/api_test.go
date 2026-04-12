@@ -1252,3 +1252,279 @@ func TestDebatesHandler_NoWorkspaceParam_Returns200(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
 	}
 }
+
+// --- Debate query parameter filtering ---
+
+// newFilterableMockDS returns a mock datasource with debates that have
+// distinct status, pair, and phase values for filter testing.
+func newFilterableMockDS() *mockDataSource {
+	return &mockDataSource{
+		debates: []map[string]any{
+			{"id": "d1", "status": "consensus", "pair": "api-contracts", "phase": "review"},
+			{"id": "d2", "status": "escalated", "pair": "api-contracts", "phase": "test"},
+			{"id": "d3", "status": "consensus", "pair": "sse-correctness", "phase": "review"},
+			{"id": "d4", "status": "debating", "pair": "sse-correctness", "phase": "build"},
+		},
+	}
+}
+
+func TestDebatesHandler_FilterByStatus(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?status=consensus", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 2 {
+		t.Fatalf("expected 2 debates with status=consensus, got %d", len(body))
+	}
+	for _, d := range body {
+		if d["status"] != "consensus" {
+			t.Errorf("expected status=consensus, got %v", d["status"])
+		}
+	}
+}
+
+func TestDebatesHandler_FilterByPair(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?pair=api-contracts", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 2 {
+		t.Fatalf("expected 2 debates with pair=api-contracts, got %d", len(body))
+	}
+	for _, d := range body {
+		if d["pair"] != "api-contracts" {
+			t.Errorf("expected pair=api-contracts, got %v", d["pair"])
+		}
+	}
+}
+
+func TestDebatesHandler_FilterByPhase(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?phase=review", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 2 {
+		t.Fatalf("expected 2 debates with phase=review, got %d", len(body))
+	}
+	for _, d := range body {
+		if d["phase"] != "review" {
+			t.Errorf("expected phase=review, got %v", d["phase"])
+		}
+	}
+}
+
+func TestDebatesHandler_FilterMultipleParams(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?status=consensus&pair=api-contracts", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 1 {
+		t.Fatalf("expected 1 debate with status=consensus AND pair=api-contracts, got %d", len(body))
+	}
+	if body[0]["id"] != "d1" {
+		t.Errorf("expected debate d1, got %v", body[0]["id"])
+	}
+}
+
+func TestDebatesHandler_FilterAllThreeParams(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?status=consensus&pair=sse-correctness&phase=review", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 1 {
+		t.Fatalf("expected 1 debate matching all three filters, got %d", len(body))
+	}
+	if body[0]["id"] != "d3" {
+		t.Errorf("expected debate d3, got %v", body[0]["id"])
+	}
+}
+
+func TestDebatesHandler_FilterNoMatch(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates?status=nonexistent", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 0 {
+		t.Errorf("expected 0 debates for nonexistent status, got %d", len(body))
+	}
+}
+
+func TestDebatesHandler_NoFilters_ReturnsAll(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debates", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var body []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body) != 4 {
+		t.Errorf("expected all 4 debates when no filters, got %d", len(body))
+	}
+}
+
+func TestDebatesHandler_InvalidStatusParam(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	badValues := []string{
+		"../etc/passwd",
+		"status/traversal",
+		"status\\backslash",
+		strings.Repeat("x", maxStatusParamLength+1),
+	}
+
+	for _, val := range badValues {
+		t.Run(val, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/debates?status="+val, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status for param %q: got %d, want %d", val, rec.Code, http.StatusBadRequest)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if body["error"] != "invalid status parameter" {
+				t.Errorf("error: got %q, want %q", body["error"], "invalid status parameter")
+			}
+		})
+	}
+}
+
+func TestDebatesHandler_InvalidPairParam(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	badValues := []string{
+		"../etc/passwd",
+		"pair/traversal",
+		"pair\\backslash",
+		strings.Repeat("x", maxPairParamLength+1),
+	}
+
+	for _, val := range badValues {
+		t.Run(val, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/debates?pair="+val, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status for param %q: got %d, want %d", val, rec.Code, http.StatusBadRequest)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if body["error"] != "invalid pair parameter" {
+				t.Errorf("error: got %q, want %q", body["error"], "invalid pair parameter")
+			}
+		})
+	}
+}
+
+func TestDebatesHandler_InvalidPhaseParam(t *testing.T) {
+	ds := newFilterableMockDS()
+	h := DebatesHandler(ds)
+
+	badValues := []string{
+		"../etc/passwd",
+		"phase/traversal",
+		"phase\\backslash",
+		strings.Repeat("x", maxPhaseParamLength+1),
+	}
+
+	for _, val := range badValues {
+		t.Run(val, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/debates?phase="+val, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status for param %q: got %d, want %d", val, rec.Code, http.StatusBadRequest)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if body["error"] != "invalid phase parameter" {
+				t.Errorf("error: got %q, want %q", body["error"], "invalid phase parameter")
+			}
+		})
+	}
+}
