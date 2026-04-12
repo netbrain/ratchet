@@ -333,13 +333,19 @@ epic:
                      # ref: "discovery-<type>-<timestamp>"   unique ID
                      # title: "<short description>"
                      # description: "<full context and action needed>"
+                     # category: "bug|tech-debt|feature|security|performance|other"
+                     # severity: "critical|major|minor|info"
                      # source: "<origin identifier>"         e.g. "pr-conflict-20"
-                     # created_at: "<ISO timestamp>"
-                     # severity: "high|medium|low"
-                     # status: "pending|done"               set to done after /ratchet:run processes it
-                     # issue_ref: "<issue-ref>"             direct ref to affected issue
-                     # affected_scope: "<human description>"
-                     # retro_type: null|"ci-failure"|"skipped-finding"
+                     # status: "pending|done|promoted|dismissed"
+                     # issue_ref: "<issue-ref or null>"      direct ref to affected issue
+                     # context:
+                     #   milestone: <milestone-id or null>
+                     #   issue: "<issue-ref or null>"
+                     #   debate: "<debate-id or null>"
+                     # pairs: []                             pair names relevant to this discovery
+                     # affected_scope: "<file-glob or null>"
+                     # retro_type: null|"ci-failure"|"skipped-finding"|"review-feedback"
+                     # created_at: "<ISO 8601 timestamp>"
 ```
 
 **Every milestone must have at least one issue.** A simple milestone with a single coherent deliverable has one issue that IS the milestone. This unifies the execution model — there are no special cases. Phase tracking lives on issues, not milestones. Milestone status is derived: `pending` (no issues started), `in_progress` (any issue started), `done` (all issues done).

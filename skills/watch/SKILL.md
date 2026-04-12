@@ -85,9 +85,13 @@ ci_status=$(gh pr view "$pr_num" --json statusCheckRollup -q '.statusCheckRollup
     \"category\": \"bug\",
     \"severity\": \"critical\",
     \"source\": \"pr-conflict-$pr_num\",
-    \"created_at\": \"$(date -Iseconds)\",
     \"status\": \"pending\",
-    \"issue_ref\": \"$issue_ref\"
+    \"issue_ref\": \"$issue_ref\",
+    \"context\": {\"milestone\": $milestone_id, \"issue\": \"$issue_ref\", \"debate\": null},
+    \"pairs\": [],
+    \"affected_scope\": null,
+    \"retro_type\": null,
+    \"created_at\": \"$(date -Iseconds)\"
   }]" .ratchet/plan.yaml
   ```
 - Report: "Merge conflict detected: PR #[N] (issue [ref]) — discovery created"
@@ -96,6 +100,9 @@ ci_status=$(gh pr view "$pr_num" --json statusCheckRollup -q '.statusCheckRollup
 - Check if discovery already exists: `epic.discoveries[] | select(.source == "pr-ci-failure-<pr_num>")`
 - If not, create discovery:
   ```bash
+  issue_ref=$(yq eval ".epic.milestones[].issues[] | select(.pr == \"$pr_url\") | .ref" .ratchet/plan.yaml)
+  milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
+  milestone_id_value=$([ -n "$milestone_id" ] && echo "$milestone_id" || echo "null")
   yq eval -i ".epic.discoveries += [{
     \"ref\": \"discovery-ci-$(date +%s)\",
     \"title\": \"CI failure in PR #$pr_num\",
@@ -103,10 +110,13 @@ ci_status=$(gh pr view "$pr_num" --json statusCheckRollup -q '.statusCheckRollup
     \"category\": \"tech-debt\",
     \"severity\": \"major\",
     \"source\": \"pr-ci-failure-$pr_num\",
-    \"created_at\": \"$(date -Iseconds)\",
     \"status\": \"pending\",
     \"issue_ref\": \"$issue_ref\",
-    \"retro_type\": \"ci-failure\"
+    \"context\": {\"milestone\": $milestone_id_value, \"issue\": \"$issue_ref\", \"debate\": null},
+    \"pairs\": [],
+    \"affected_scope\": null,
+    \"retro_type\": \"ci-failure\",
+    \"created_at\": \"$(date -Iseconds)\"
   }]" .ratchet/plan.yaml
   ```
 - Report: "CI failure detected: PR #[N] ([failed checks]) — discovery created"
@@ -157,28 +167,35 @@ Warning: Could not determine authenticated GitHub user — bot comment filtering
 
 **For each actionable comment** (after bot filtering), create a structured feedback entry in plan.yaml:
 ```bash
+# Encode review metadata in description since the schema's additionalProperties: false
+# prohibits extra top-level fields. Use source field for deduplication.
+# Note: use null (no quotes) for empty affected_scope to produce YAML null, not string "null"
+affected_scope_value=$([ -n "$comment_path" ] && echo "\"$comment_path\"" || echo "null")
+milestone_id=$(yq eval ".epic.milestones[] | select(.issues[] | .pr == \"$pr_url\") | .id" .ratchet/plan.yaml | head -1)
+milestone_id_value=$([ -n "$milestone_id" ] && echo "$milestone_id" || echo "null")
+
 yq eval -i ".epic.discoveries += [{
   \"ref\": \"feedback-review-${pr_num}-$(date +%s)\",
   \"title\": \"Review feedback on PR #${pr_num}: $(echo "$comment_body" | head -c 60)\",
-  \"description\": \"$comment_body\",
-  \"source\": \"pr-review-${pr_num}\",
-  \"created_at\": \"$(date -Iseconds)\",
+  \"description\": \"Author: $comment_author | File: ${comment_path:-top-level} | Category: $category\n\n$comment_body\",
+  \"category\": \"tech-debt\",
   \"severity\": \"major\",
+  \"source\": \"pr-review-${pr_num}-${comment_id}\",
   \"status\": \"pending\",
   \"retro_type\": \"review-feedback\",
   \"issue_ref\": \"$issue_ref\",
-  \"review_comment_id\": $comment_id,
-  \"review_file_path\": \"$comment_path\",
-  \"review_author\": \"$comment_author\",
-  \"review_category\": \"$category\"
+  \"context\": {
+    \"milestone\": $milestone_id_value,
+    \"issue\": \"$issue_ref\",
+    \"debate\": null
+  },
+  \"pairs\": [],
+  \"affected_scope\": $affected_scope_value,
+  \"created_at\": \"$(date -Iseconds)\"
 }]" .ratchet/plan.yaml
 ```
 
-The feedback discovery uses flat top-level fields prefixed with `review_` to remain consistent with the existing discovery schema pattern (all flat key-value pairs, no nested objects). Fields:
-- `review_comment_id`: The GitHub comment ID for deduplication and linking
-- `review_file_path`: The file path the comment is attached to (null for top-level reviews)
-- `review_author`: The GitHub username who left the comment
-- `review_category`: One of `requested_change`, `question`, `code_suggestion`
+Review metadata fields (author, file path, comment category) are encoded in the `description` field and `source` field since the discovery schema (`additionalProperties: false`) prohibits extra top-level fields. Use `source: "pr-review-<pr_num>-<comment_id>"` for deduplication — the comment ID in the source uniquely identifies each feedback entry.
 
 - Report: "Review feedback detected: PR #[N] — [count] actionable comment(s) from [author(s)]"
 

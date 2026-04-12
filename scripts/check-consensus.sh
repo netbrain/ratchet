@@ -50,7 +50,7 @@ if [ ${#blocking_debates[@]} -gt 0 ]; then
     echo "║  Ratchet: Unresolved debates block this commit      ║"
     echo "╚══════════════════════════════════════════════════════╝"
     echo ""
-    for debate in "${blocking_debates[@]}"; do
+    for debate in "${blocking_debates[@]+"${blocking_debates[@]}"}"; do
         echo "  ✗ $debate"
     done
     echo ""

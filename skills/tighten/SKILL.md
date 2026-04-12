@@ -251,7 +251,7 @@ When improvements originated from PR analysis, write to `.ratchet/retros/<timest
 
 #### 5b. Create sidequests for skipped findings
 
-For any skipped finding with severity `major` or `critical` (`fix_applied` is null), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` via `yq eval -i`. Fields: `ref` (discovery-tighten-TIMESTAMP), `title`, `description` (include evidence), `source`, `created_at`, `severity`, `retro_type: "skipped-finding"`, `status: "pending"`.
+For any skipped finding with severity `major` or `critical` (`fix_applied` is null), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` via `yq eval -i`. Required fields: `ref` (discovery-tighten-TIMESTAMP), `title`, `description` (include evidence), `category` (map finding type: missing_validation/missing_guard → "tech-debt", missing_pair → "feature", phase_gap → "tech-debt"), `severity` (critical|major|minor|info), `source` ("tighten"), `status: "pending"`, `retro_type: "skipped-finding"`, `created_at` (ISO 8601). Optional: `context`, `pairs`, `affected_scope`, `issue_ref`.
 
 #### 5c. Analyst summary
 
