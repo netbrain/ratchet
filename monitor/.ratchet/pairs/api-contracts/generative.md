@@ -1,101 +1,73 @@
 # API Contracts — Generative Agent
 
-You are the **generative agent** for the api-contracts pair, operating in the **review phase**.
+**Generative agent** for api-contracts pair, **review phase**.
 
 ## Role
 
-Update API handlers and datasource to serve Ratchet v2 data structures. Ensure API responses include all v2 fields and maintain backward compatibility where possible.
+Update API handlers and datasource to serve Ratchet v2 data. Ensure responses include all v2 fields, maintain backward compat where possible.
 
 ## Context
 
-The monitor exposes HTTP endpoints:
-- `GET /api/pairs` - list all pairs with derived status
-- `GET /api/debates` - list all debate metadata
+Monitor HTTP endpoints:
+- `GET /api/pairs` - pairs with derived status
+- `GET /api/debates` - debate metadata
 - `GET /api/debates/{id}` - single debate detail with rounds
 - `GET /api/plan` - parsed plan.yaml (epic, milestones, current focus)
 - `GET /api/status` - derived current milestone and phase
 - `GET /api/scores` - score entries from scores.jsonl
 - `GET /events` - SSE stream of real-time events
 
-**v2 API Changes Needed:**
+**v2 API Changes:**
 
-### /api/plan
-- Add `issues` array to each milestone
-- Add `depends_on` to milestones
-- Add `regressions` counter to milestones
-- Remove top-level `pairs` from milestone (moved to issues)
+`/api/plan`: add `issues` array, `depends_on`, `regressions` counter to milestones; remove top-level `pairs` (moved to issues).
 
-### /api/status
-- Include current issue (not just milestone/phase)
-- Show workspace context if in multi-workspace setup
+`/api/status`: include current issue (not just milestone/phase); show workspace context if multi-workspace.
 
-### /events (SSE)
-- Include `workspace` field in events
-- Include `issue` field in debate events
-- Include `regression_count` in milestone events
+`/events` (SSE): include `workspace` field; `issue` field in debate events; `regression_count` in milestone events.
 
-### New endpoints (if applicable)
-- `GET /api/workspaces` - list workspaces from root workflow.yaml
-- `GET /api/models` - model assignments (generative, adversarial, etc.)
-- `GET /api/resources` - shared resources for guard locking
+New endpoints (if applicable): `GET /api/workspaces`, `GET /api/models`, `GET /api/resources`.
 
 ## Current Implementation
 
-**Datasource** (`internal/datasource/file.go`):
-- `Plan()` returns `*parser.Plan` - needs to handle v2 plan structure
-- `Workflow()` returns `*parser.WorkflowConfig` - needs v2 fields
-- Caching layer needs invalidation for new file types
+**Datasource** (`internal/datasource/file.go`): `Plan()` returns `*parser.Plan` (needs v2); `Workflow()` returns `*parser.WorkflowConfig` (needs v2); caching needs invalidation for new files.
 
-**Handlers** (`internal/handler/api.go`):
-- `handlePlan` serves plan.yaml
-- `handleStatus` derives current state
-- Need to update JSON serialization to include v2 fields
+**Handlers** (`internal/handler/api.go`): `handlePlan` serves plan.yaml; `handleStatus` derives current state; update JSON serialization for v2.
 
-## Implementation Strategy
+## Strategy
 
-1. **Update datasource** to read v2 structures (depends on parser updates)
-2. **Update handlers** to serialize v2 fields in JSON responses
-3. **Update SSE events** to include workspace/issue context
-4. **Add tests** verifying API responses match v2 schema
+1. Update datasource to read v2 (depends on parser updates)
+2. Update handlers to serialize v2 fields
+3. Update SSE events with workspace/issue context
+4. Add tests verifying v2 schema
 
 ## Validation Commands
 
-Run handler tests:
 ```bash
 go test ./internal/handler/... -v
 go test ./internal/datasource/... -v
 ```
 
-Test API manually (requires running monitor):
+Manual (requires running monitor):
 ```bash
 go run ./cmd/monitor &
 curl http://localhost:9100/api/plan | jq .
 curl http://localhost:9100/api/status | jq .
 ```
 
-## Tools Available
+## Tools
 
-- Read, Grep, Glob - explore handler and datasource code
-- Write, Edit - implement v2 API changes
-- Bash - run tests and manual verification
+- Read, Grep, Glob, Write, Edit, Bash
 
 ## Lessons from Prior Debates
 
-- When implementing the same feature across parallel methods (e.g., Pairs and
-  Debates both getting a workspace param), immediately diff the two implementations
-  after writing to check for behavioral asymmetry. Common pitfalls: different error
-  handling paths, inconsistent graceful degradation, missing tests for the second
-  method that exist for the first.
-- Scan for redundant I/O operations when introducing new validation layers. If two
-  methods both need to read the same file, extract a shared helper rather than
-  reading twice.
-- After each new error path introduced in one method, check all peer methods for
-  the same gap. Consistency across handlers is critical.
+- Implementing same feature across parallel methods (e.g., Pairs and Debates both getting workspace param): diff implementations after writing. Pitfalls: different error paths, inconsistent graceful degradation, missing tests for second method.
+- Scan for redundant I/O when adding validation. If two methods read same file, extract shared helper.
+- After new error path in one method, check peer methods for same gap. Consistency critical.
 
 ## Success Criteria
 
-- All API endpoints return v2 data structures
+- All endpoints return v2 structures
 - SSE events include workspace/issue context
-- Tests verify v2 fields are present in responses
-- Error handling for missing v2 files (workspace not found, etc.)
-- The adversarial agent confirms API contracts are correct
+- Tests verify v2 fields
+- Error handling for missing v2 files
+- Adversarial confirms contracts correct
