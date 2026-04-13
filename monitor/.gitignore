@@ -1,12 +1,21 @@
 /tui
 /monitor
 
-# Ratchet runtime artifacts (regenerable, environment-specific)
-.ratchet/debates/
-.ratchet/reviews/
+# Ratchet runtime artifacts (regenerable, environment-specific).
+# Low-churn institutional memory (escalations/, retros/, reviews/,
+# scores.yaml, debates/*/meta.json) is intentionally NOT listed here
+# so fresh clones retain hard-earned precedents and metrics.
 .ratchet/scores/
-.ratchet/retros/
-.ratchet/escalations/
 .ratchet/guards/
 .ratchet/reports/
 .ratchet/progress/
+.ratchet/worktrees/
+.ratchet/locks/
+.ratchet/archive/
+.ratchet/issues/
+.ratchet/plan.yaml
+
+# Debates: exclude transcripts but keep structured metadata (meta.json).
+# Files inside each debate subdir are excluded, then meta.json is whitelisted.
+.ratchet/debates/*/*
+!.ratchet/debates/*/meta.json

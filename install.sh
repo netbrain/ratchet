@@ -98,8 +98,16 @@ remove_git_hook() {
 }
 
 setup_gitignore() {
-    # Add .ratchet/ runtime-state entries to .gitignore, then safely untrack
-    # any files that are now ignored but were previously committed.
+    # Add Ratchet gitignore block (exclude runtime state, whitelist
+    # institutional memory), then safely untrack any files that are now
+    # ignored but were previously committed.
+    #
+    # Philosophy: low-churn, high-value artifacts that agents need on a
+    # fresh clone (escalations/, retros/, reviews/, scores.yaml, and
+    # debates/*/meta.json) are whitelisted. High-churn runtime state
+    # (worktrees/, locks/, archive/, guards/, reports/, progress/,
+    # issues/, plan.yaml, and debate transcripts) stays excluded.
+    #
     # CRITICAL ORDER: gitignore entry MUST be written before git rm --cached,
     # otherwise git rm --cached removes the file from tracking without a safety
     # net and a subsequent commit could re-add it.
@@ -110,60 +118,81 @@ setup_gitignore() {
 
     local gitignore="$project_dir/.gitignore"
 
-    # Entries to ensure are present
     local marker="# Ratchet runtime state (auto-added by install.sh)"
-    local entries=(
-        ".ratchet/plan.yaml"
-        ".ratchet/debates/"
-        ".ratchet/reviews/"
-        ".ratchet/scores/"
-        ".ratchet/retros/"
-        ".ratchet/escalations/"
-        ".ratchet/guards/"
-        ".ratchet/reports/"
-        ".ratchet/progress/"
-        ".ratchet/worktrees/"
-        ".ratchet/locks/"
-        ".ratchet/archive/"
-        ".ratchet/issues/"
-    )
 
     # Check if marker is already present (idempotent)
     if grep -qF "$marker" "$gitignore" 2>/dev/null; then
         return 0
     fi
 
-    # Step 1 — Write gitignore entries FIRST (safety net before any untracking)
+    # Step 1 — Write gitignore entries FIRST (safety net before any untracking).
+    # The block uses the "exclude all, then whitelist" pattern so low-churn
+    # institutional memory survives fresh clones while noisy runtime state
+    # is kept out of the repo.
     {
         echo ""
         echo "$marker"
-        for entry in "${entries[@]}"; do
-            echo "$entry"
-        done
+        echo "# Exclude all runtime state, then whitelist institutional memory."
+        echo ".ratchet/*"
+        echo "!.ratchet/workflow.yaml"
+        echo "!.ratchet/project.yaml"
+        echo "!.ratchet/pairs/"
+        echo "# Tiebreaker rulings — precedents scanned by skills/run/SKILL.md Step 5d"
+        echo "!.ratchet/escalations/"
+        echo "# EMA quality metrics — needed for /ratchet:score trends"
+        echo "!.ratchet/scores.yaml"
+        echo "# Retrospective findings and agent performance reviews (Tighten reads these)"
+        echo "!.ratchet/retros/"
+        echo "!.ratchet/reviews/"
+        echo "# plan.yaml is runtime state when progress.adapter=github-issues (default)."
+        echo "# Uncomment below if you use progress.adapter=markdown or none:"
+        echo "# !.ratchet/plan.yaml"
+        echo ""
+        echo "# Debates: exclude transcripts (round-*.md) but keep structured metadata."
+        echo "# The debates/ dir and its subdirs must stay visible so meta.json can"
+        echo "# be whitelisted (git cannot re-include a file whose parent is excluded)."
+        echo "!.ratchet/debates/"
+        echo "!.ratchet/debates/*/"
+        echo ".ratchet/debates/*/*"
+        echo "!.ratchet/debates/*/meta.json"
+        echo ""
+        echo "# Runtime state that stays fully excluded"
+        echo ".ratchet/worktrees/"
+        echo ".ratchet/locks/"
+        echo ".ratchet/archive/"
+        echo ".ratchet/guards/"
+        echo ".ratchet/reports/"
+        echo ".ratchet/progress/"
+        echo ".ratchet/issues/"
     } >> "$gitignore" || { echo "Error: Failed to write to $gitignore" >&2; return 1; }
 
     echo "  Updated .gitignore with Ratchet runtime state entries"
 
     # Step 2 — Untrack any files that are now ignored but were previously committed.
-    # Run AFTER the gitignore is updated so the patterns are active.
+    # Run AFTER the gitignore is updated so the patterns are active. Only untrack
+    # entries that remain excluded; do NOT touch whitelisted institutional memory.
     local tracked_runtime=()
     while IFS= read -r tracked_file; do
         [ -n "$tracked_file" ] && tracked_runtime+=("$tracked_file")
     done < <(git -C "$project_dir" ls-files -- \
         ".ratchet/plan.yaml" \
-        ".ratchet/debates/" \
-        ".ratchet/reviews/" \
-        ".ratchet/scores/" \
-        ".ratchet/retros/" \
-        ".ratchet/escalations/" \
-        ".ratchet/guards/" \
-        ".ratchet/reports/" \
-        ".ratchet/progress/" \
         ".ratchet/worktrees/" \
         ".ratchet/locks/" \
         ".ratchet/archive/" \
+        ".ratchet/guards/" \
+        ".ratchet/reports/" \
+        ".ratchet/progress/" \
         ".ratchet/issues/" \
         2>/dev/null)
+
+    # Also untrack debate transcripts (everything under debates/*/ except meta.json)
+    while IFS= read -r tracked_file; do
+        [ -n "$tracked_file" ] || continue
+        case "$tracked_file" in
+            *"/meta.json") ;;  # keep metadata
+            *) tracked_runtime+=("$tracked_file") ;;
+        esac
+    done < <(git -C "$project_dir" ls-files -- ".ratchet/debates/" 2>/dev/null)
 
     if [ "${#tracked_runtime[@]}" -gt 0 ]; then
         git -C "$project_dir" rm --cached -- "${tracked_runtime[@]}" 2>/dev/null || \
