@@ -1,10 +1,10 @@
 # Step 5-dry: Dry-Run Preview
 
-If `--dry-run` is specified, produce a formatted preview and stop. No agents are spawned, no debates created, no files modified.
+If `--dry-run` is specified, produce a formatted preview and stop. No agents spawned, no debates created, no files modified.
 
 ## Token Cost Estimation
 
-After building the dependency graph (Step 3), compute estimated tokens per issue using these formulas:
+After building dependency graph (Step 3), compute estimated tokens per issue:
 
 **Base tokens by pipeline mode:**
 | Pipeline mode | Base tokens | Phases | Rationale |
@@ -16,10 +16,7 @@ After building the dependency graph (Step 3), compute estimated tokens per issue
 | `standard` | 80k | plan, build, review, harden | Standard pipeline (4 phases) |
 | `full` | 160k | plan, test, build, review, harden | Full pipeline (5 phases) |
 
-**Scaling factors:**
-- **Pairs**: Multiply base by the number of pairs assigned to the issue. Each pair runs its own debate/execution.
-- **Guards**: Add 2k per guard (both pre-execution and post-execution) assigned to the issue's phases. Guards invoke external commands and produce output that consumes context.
-- **Max rounds** (debate mode only): The base already accounts for typical round counts. For `max_rounds > 3`, scale the debate portion by `max_rounds / 3`.
+**Scaling factors:** **Pairs** — multiply base by number of pairs assigned (each runs its own debate/execution). **Guards** — add 2k per guard (pre + post-execution) assigned to issue's phases (external commands consume context). **Max rounds** (debate mode only) — base accounts for typical counts; for `max_rounds > 3`, scale debate portion by `max_rounds / 3`.
 
 **Formula:**
 ```
@@ -32,10 +29,10 @@ where:
   guard_count  = number of guards matching the issue's component and phases
 ```
 
-**Cost estimation** uses current API rates (update these when rates change):
-- Opus input: $15 / 1M tokens, output: $75 / 1M tokens (assume 30% input, 70% output)
-- Sonnet input: $3 / 1M tokens, output: $15 / 1M tokens (assume 30% input, 70% output)
-- Debate mode uses both opus (generative) and sonnet (adversarial) — estimate 60% opus, 40% sonnet by token volume
+**Cost estimation** uses current API rates (update when rates change):
+- Opus: input $15/1M, output $75/1M (assume 30/70 input/output)
+- Sonnet: input $3/1M, output $15/1M (assume 30/70 input/output)
+- Debate mode uses opus (generative) + sonnet (adversarial) — estimate 60% opus, 40% sonnet by token volume
 - Solo mode uses opus only
 
 ```
@@ -89,9 +86,9 @@ Token & Cost Estimates
   Total                                 ~232k         ~$9.44
 ```
 
-**In `--unsupervised` mode**: Log the token and cost estimates to stdout but do not block execution. The estimates are informational — they help operators audit spend after the fact. Do not present the `AskUserQuestion` confirmation (unsupervised auto-selects "Run for real").
+**In `--unsupervised` mode**: Log token and cost estimates to stdout but do not block execution. Estimates are informational — help operators audit spend after the fact. Do not present `AskUserQuestion` confirmation (unsupervised auto-selects "Run for real").
 
-**In supervised mode**: Include the cost table in the `AskUserQuestion` confirmation:
+**In supervised mode**: Include cost table in `AskUserQuestion` confirmation:
 
 Question text:
 ```
