@@ -2,9 +2,7 @@
 
 ## Epic Complete Flow
 
-**If ALL milestones are done** (every milestone has `status: done`):
-
-The epic is complete. Present completion summary and next steps:
+**If ALL milestones are done** (every milestone has `status: done`), epic is complete. Present completion summary and next steps:
 
 Question text:
 ```
@@ -14,13 +12,13 @@ What would you like to do next?
 ```
 
 Options:
-- "Create a new epic" — gather details via AskUserQuestion (freeform: "What's the next body of work?"), then create the new epic structure in plan.yaml. For complex scoping, spawn the analyst agent to help break it into milestones. For straightforward requests, create directly from the user's description.
-- "Add a milestone to the current epic" — gather milestone details via AskUserQuestion, append to plan.yaml
+- "Create a new epic" — gather details via AskUserQuestion (freeform: "What's the next body of work?"), then create new epic structure in plan.yaml. For complex scoping, spawn analyst agent to break into milestones; for straightforward requests, create directly from user's description.
+- "Add a milestone to the current epic" — gather details via AskUserQuestion, append to plan.yaml
 - "Tighten agents from debate lessons (/ratchet:tighten)"
 - "View quality metrics (/ratchet:score)"
 - "Done for now"
 
-When creating a new epic: replace the existing `epic` block in plan.yaml (archive the old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). **Archive debates**: move all debate artifacts from the completed epic into the archive alongside the plan:
+When creating a new epic: replace existing `epic` block in plan.yaml (archive old one to `.ratchet/archive/epic-<name>-<timestamp>.yaml` first if it has content). **Archive debates**: move all debate artifacts from completed epic into archive alongside the plan:
 ```bash
 EPIC_SLUG=$(echo "$EPIC_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
 ARCHIVE_DIR=".ratchet/archive/epic-${EPIC_SLUG}-$(date +%Y%m%dT%H%M%SZ)"
@@ -30,9 +28,9 @@ if [ -d .ratchet/debates ] && [ "$(ls -A .ratchet/debates 2>/dev/null)" ]; then
   mv .ratchet/debates/* "$ARCHIVE_DIR/debates/" 2>/dev/null || true
 fi
 ```
-This is safe because `/ratchet:score` persists metrics as a moving average in `.ratchet/scores.yaml` (Step 2b of the score skill) — archiving debates does not lose score history.
+Safe because `/ratchet:score` persists metrics as moving average in `.ratchet/scores.yaml` (Step 2b of score skill) — archiving debates does not lose score history.
 
-Set `current_focus: null` and `discoveries: []` (or carry over pending discoveries). After writing the new epic to plan.yaml, sync the tracking issue:
+Set `current_focus: null` and `discoveries: []` (or carry over pending). After writing the new epic to plan.yaml, sync tracking issue:
 ```bash
 if [ -f .claude/ratchet-scripts/progress/github-issues/sync-plan.sh ]; then
   bash .claude/ratchet-scripts/progress/github-issues/sync-plan.sh \
@@ -42,7 +40,7 @@ fi
 
 ## Focus Selection (milestones remain)
 
-Use `AskUserQuestion` to let the user pick the focus. Include epic status with per-issue progress:
+Use `AskUserQuestion` to let user pick focus. Include epic status with per-issue progress:
 
 Question text (build from plan.yaml):
 ```
@@ -75,26 +73,21 @@ Options:
 - "Add a new milestone" — gather details via AskUserQuestion, append to plan.yaml, then offer to run it
 - "[Next milestone name]" — skip ahead
 - "Review all existing code"
-- (Include an "Other" option so the user can type a custom focus)
+- (Include "Other" option so user can type a custom focus)
 
 ## Sidequest Processing
 
-When "Process sidequests" is selected, iterate over `epic.discoveries` with `status == "pending"`. For each discovery, use `AskUserQuestion`:
+When "Process sidequests" selected, iterate over `epic.discoveries` with `status == "pending"`. For each, use `AskUserQuestion`:
 
 - Question: "Discovery: [title] ([category], [severity])\n[description]"
-- Options:
-  - `"Process now"` — handle via existing pipeline (tighten, re-launch, etc.)
-  - `"Promote to issue"` — convert this discovery into a full plan.yaml issue
-  - `"Dismiss"` — mark as non-actionable
-  - `"Skip for now"` — leave as pending, move to next discovery
+- Options: `"Process now"` (handle via existing pipeline — tighten, re-launch, etc.), `"Promote to issue"` (convert to full plan.yaml issue), `"Dismiss"` (mark non-actionable), `"Skip for now"` (leave pending, move to next)
 
 ### Action: Process now
 
-Existing behavior:
-- `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:tighten pr <N>` for the affected issue
-- `retro_type: "skipped-finding"` → present to user for decision (apply now or defer)
-- No `retro_type` with `issue_ref` set (merge conflict) → use `issue_ref` field directly to re-launch the issue pipeline in its current phase
-- No `retro_type` with `issue_ref: null` (manual discovery with no issue context) → cannot process directly, inform user: "This discovery has no linked issue. Promote it to an issue first, or dismiss it." Then re-present the action selector without the "Process now" option.
+- `retro_type: "ci-failure"` → extract PR number from `source` field (format: `pr-ci-failure-<N>`) and launch `/ratchet:tighten pr <N>`
+- `retro_type: "skipped-finding"` → present to user (apply now or defer)
+- No `retro_type` with `issue_ref` set (merge conflict) → use `issue_ref` to re-launch issue pipeline in current phase
+- No `retro_type` with `issue_ref: null` (manual discovery) → cannot process directly. Inform user: "This discovery has no linked issue. Promote it to an issue first, or dismiss it." Then re-present action selector without "Process now" option.
 - Mark each processed discovery `status: "done"` in `plan.yaml`:
   ```bash
   yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"done\"" .ratchet/plan.yaml
@@ -109,14 +102,10 @@ Existing behavior:
 
 ### Action: Promote to issue
 
-Converts a discovery into a full plan.yaml issue:
-1. Determine target milestone:
-   - If `context.milestone` is set, use that milestone
-   - Otherwise, use `AskUserQuestion` to select from active milestones
-2. Generate issue ref: read existing issues in the target milestone, find the highest issue number, increment by 1. Format: `issue-<milestone-number>-<next-issue-number>`
-3. Determine pairs:
-   - If discovery `pairs` array is non-empty, use those
-   - Otherwise, use `AskUserQuestion` to select from available pairs in workflow.yaml
+Converts discovery into a full plan.yaml issue:
+1. Target milestone: if `context.milestone` set, use it; else `AskUserQuestion` to select from active milestones
+2. Generate issue ref: find highest issue number in target milestone, increment by 1. Format: `issue-<milestone-number>-<next-issue-number>`
+3. Pairs: if discovery `pairs` array non-empty, use those; else `AskUserQuestion` to select from available pairs in workflow.yaml
 4. Create the issue entry in plan.yaml:
    ```bash
    new_ref="issue-<M>-<N>"
@@ -134,7 +123,7 @@ Converts a discovery into a full plan.yaml issue:
      \"status\": \"pending\"
    }])" .ratchet/plan.yaml
    ```
-5. Update the discovery status and link:
+5. Update discovery status and link:
    ```bash
    yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"promoted\"" .ratchet/plan.yaml
    yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).issue_ref = \"$new_ref\"" .ratchet/plan.yaml
@@ -150,8 +139,8 @@ Converts a discovery into a full plan.yaml issue:
 
 ### Action: Dismiss
 
-Marks a discovery as non-actionable:
-1. Use `AskUserQuestion` (freeform): "Reason for dismissal (optional)"
+Marks discovery as non-actionable:
+1. `AskUserQuestion` (freeform): "Reason for dismissal (optional)"
 2. Update plan.yaml:
    ```bash
    yq eval -i "(.epic.discoveries[] | select(.ref == \"$discovery_ref\")).status = \"dismissed\"" .ratchet/plan.yaml

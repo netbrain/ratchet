@@ -1,29 +1,23 @@
 # Issue Pipeline Specification
 
-> This file is the extracted Step 5 from `skills/run/SKILL.md`.
-> It is loaded on demand when the orchestrator executes an issue pipeline.
-> For the orchestrator flow (Steps 1-4, 6-10), see `skills/run/SKILL.md`.
+> Extracted Step 5 from `skills/run/SKILL.md`. Loaded on demand when orchestrator executes an issue pipeline. For orchestrator flow (Steps 1-4, 6-10), see `skills/run/SKILL.md`.
 
 ---
 
 ### Step 5: Issue Pipeline (executed per-issue in isolated worktrees)
 
-Phase-gated loop for a single issue, spawned by Step 4b as a parallel Agent invocation with its own git worktree.
+Phase-gated loop for a single issue, spawned by Step 4b as parallel Agent invocation with own git worktree.
 
 **Execution context:**
-- **Worktree mode** depends on the issue's dependency layer:
-  - **`isolation: worktree`** (Layer 0) — fresh worktree branching from `origin/main`
-  - **Pre-created worktree** (Layer 1+) — orchestrator creates the worktree from the dependency's `branch` field in plan.yaml (see Step 4b "Branch base resolution"). Inherits the dependency's committed changes.
-- **Strategy** depends on the component's `strategy` field:
-  - `debate` (default): spawns debate-runner agents at Step 5e
-  - `solo`: spawns generative agent directly at Step 5e-solo, skipping the debate-runner
-- Returns a structured completion summary (Step 5h) — does NOT write plan.yaml (parent orchestrator handles that in Step 4c)
+- **Worktree mode** by dependency layer: **`isolation: worktree`** (Layer 0) — fresh worktree from `origin/main`; **Pre-created worktree** (Layer 1+) — orchestrator creates from dependency's `branch` field in plan.yaml (Step 4b "Branch base resolution"), inheriting committed changes.
+- **Strategy** from component's `strategy` field: `debate` (default) spawns debate-runner agents at Step 5e; `solo` spawns generative agent directly at Step 5e-solo.
+- Returns structured completion summary (Step 5h) — does NOT write plan.yaml (parent orchestrator handles in Step 4c).
 
-Phases progress sequentially (plan → test → build → review → harden, depending on pipeline preset), then control returns to Step 4c.
+Phases progress sequentially (plan → test → build → review → harden, per pipeline preset), then control returns to Step 4c.
 
 #### Guard Execution Pattern
 
-All guard invocations (Steps 5c, 5e-solo, 5f) use this pattern:
+All guard invocations (Steps 5c, 5e-solo, 5f):
 
 ```bash
 test -f .claude/ratchet-scripts/run-guards.sh \
@@ -99,7 +93,7 @@ Context:
 
 #### Guilt Verification Pattern
 
-When a blocking guard fails, the failure is **guilty until proven innocent** — caused by the current issue's changes unless proven otherwise. Verify on clean base before dismissing:
+When blocking guard fails, failure is **guilty until proven innocent** — caused by current issue's changes unless proven otherwise. Verify on clean base before dismissing:
 
 ```bash
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -114,40 +108,28 @@ git stash pop 2>/dev/null
 
 #### 5-pre. Worktree Mode Detection and Dependency Validation
 
-**1. Detect worktree mode** from prompt context fields set by Step 4b:
-- `Worktree mode: isolation` (or absent) → **isolation mode** (Layer 0)
-- `Worktree mode: pre-created` with `Dependency branch` and `Dependency files` → **pre-created mode** (Layer 1+)
+**1. Detect worktree mode** from prompt context fields set by Step 4b: `Worktree mode: isolation` (or absent) → **isolation mode** (Layer 0); `Worktree mode: pre-created` with `Dependency branch`/`Dependency files` → **pre-created mode** (Layer 1+). Log: `Worktree mode: [isolation|pre-created]` (if pre-created, include base branch and dep refs).
 
-Log: `Worktree mode: [isolation|pre-created]` (if pre-created, include base branch and dep refs).
-
-**2. Validate dependency changes (pre-created mode only):**
-
-For each file in the `dependency_files` array, verify it exists and is modified relative to `origin/main`. Validation outcomes:
+**2. Validate dependency changes (pre-created mode only):** For each file in `dependency_files` array, verify it exists and is modified relative to `origin/main`. Outcomes:
 - **All files present and modified** → proceed. Log: `"Dependency validation passed: [N] files verified"`
-- **Files missing or unmodified** → critical error:
-  - **Supervised**: `AskUserQuestion` with options: `"Re-create worktree"`, `"Override and proceed"`, `"Cancel this issue"`
-  - **Unsupervised**: halt with status `blocked`
+- **Files missing or unmodified** → critical error. **Supervised**: `AskUserQuestion` with options: `"Re-create worktree"`, `"Override and proceed"`, `"Cancel this issue"`. **Unsupervised**: halt with status `blocked`.
 
-**3. Set git baseline for guilt checks:**
-- **Isolation mode**: `GUILT_BASE_REF="origin/main"`
-- **Pre-created mode**: `GUILT_BASE_REF=$(git rev-parse HEAD)` (captured before any issue work)
-
-This replaces the implicit `origin/main` assumption in guard failure verification throughout the pipeline.
+**3. Set git baseline for guilt checks:** **Isolation mode**: `GUILT_BASE_REF="origin/main"`. **Pre-created mode**: `GUILT_BASE_REF=$(git rev-parse HEAD)` (captured before any issue work). Replaces the implicit `origin/main` assumption in guard failure verification throughout the pipeline.
 
 #### 5a. Determine Current Phase and Match Pairs
 
 **[TodoWrite — Phase Starts]**: Set this phase item to `"in_progress"` with pair names.
 
-1. Read the issue's `phase_status` — find the first `pending` or `in_progress` phase
-2. Determine applicable phases from the component's `pipeline` preset:
+1. Read issue's `phase_status` — find first `pending` or `in_progress` phase
+2. Determine applicable phases from component's `pipeline` preset:
    - `full`: plan → test → build → review → harden
    - `standard`: plan → build → review → harden
    - `review`: review only
    - `hotfix`: build → review
    - `secure`: review → harden
-3. Resolve the component's `strategy` field (`debate` or `solo`, default: `debate`)
-4. Match pairs from the issue's `pairs` list for the current phase; skip disabled pairs
-5. If a pair has `scope: "auto"`, resolve to the parent component's scope glob
+3. Resolve component's `strategy` field (`debate` or `solo`, default: `debate`)
+4. Match pairs from issue's `pairs` list for current phase; skip disabled pairs
+5. If pair has `scope: "auto"`, resolve to parent component's scope glob
 
 #### 5b. File-Hash Cache Check
 
@@ -155,27 +137,20 @@ This replaces the implicit `origin/main` assumption in guard failure verificatio
 bash .claude/ratchet-scripts/cache-check.sh <pair-name> "<scope-glob>"
 ```
 
-- Exit 0 → skip pair (no changes since last consensus)
-- Exit 1 → proceed to execution
-
-Use `--no-cache` to force re-execution.
+Exit 0 → skip pair (no changes since last consensus). Exit 1 → proceed to execution. `--no-cache` forces re-execution.
 
 #### Shared Resources
 
 Guards can declare `requires: [resource-name]` referencing shared resources in workflow.yaml — infrastructure dependencies needing provisioning and optionally singleton access.
 
 **Lifecycle:**
-1. **Provision** — run the resource's `start` command (must be idempotent). Track in `.ratchet/locks/resources.json`.
-2. **Lock + Run** — if `singleton: true`, wrap the guard command with `flock` (kernel-level file locking in `.ratchet/locks/`). Lock auto-releases on exit — no stale locks, no cleanup.
+1. **Provision** — run resource's `start` command (idempotent). Track in `.ratchet/locks/resources.json`.
+2. **Lock + Run** — if `singleton: true`, wrap guard command with `flock` (kernel file locking in `.ratchet/locks/`). Auto-releases on exit — no stale locks.
 3. **Teardown** (Step 9) — run `stop` commands, remove `.ratchet/locks/`.
 
 #### 5c. Pre-Execution Guards
 
-Run guards where `timing: "pre-execution"` (or deprecated `"pre-debate"`) for the current phase. Guards without `timing` default to `post-execution`.
-
-If guard has `requires`: provision resources. For singleton resources, wrap with `flock`.
-
-Invoke using the **Guard Execution Pattern** above.
+Run guards where `timing: "pre-execution"` (or deprecated `"pre-debate"`) for current phase. Guards without `timing` default to `post-execution`. If guard has `requires`: provision resources; for singleton, wrap with `flock`. Invoke using **Guard Execution Pattern** above.
 
 - **Blocking guard fails** → verify using **Guilt Verification Pattern**. Then `AskUserQuestion`: `"Fix and re-run"`, `"Override and proceed"`, `"Cancel — skip this phase"`. If fix or cancel: skip execution entirely.
 - **Advisory guard fails** → log and pass output as context to execution (guilty until proven innocent). Continue.
@@ -188,17 +163,11 @@ For each matched pair:
 3. **Gather phase context**: plan output (if phase > plan), test locations (if phase > test), unresolved CONDITIONAL_ACCEPT conditions
 4. **Resolve models**: pair-level overrides over global. Debate needs `generative`, `adversarial`, `tiebreaker`. Solo needs only `generative`.
 5. **Resolve `progress_ref`** (debate only): use `ref` if numeric, else `null`. Pass to debate-runner for `meta.json` at creation (before round files trigger publish hook).
-6. **Resolve caveman config**: Read from the values already computed in Step 1b:
-   - If `caveman_enabled` is `true`, pass the per-role intensities (`caveman_generative`, `caveman_adversarial`, `caveman_tiebreaker`, `caveman_debate_runner`)
-   - If `caveman_enabled` is `false` (or absent), pass all roles as `off`
-   - The `orchestrator` intensity is NOT passed to the debate-runner — it governs the run skill's own behavior
+6. **Resolve caveman config** from values computed in Step 1b: if `caveman_enabled` is `true`, pass per-role intensities (`caveman_generative`, `caveman_adversarial`, `caveman_tiebreaker`, `caveman_debate_runner`); if `false` or absent, pass all roles as `off`. The `orchestrator` intensity is NOT passed to debate-runner — governs the run skill's own behavior.
 
 #### 5e. Execute Phase (Strategy Branch)
 
-- **`strategy: "debate"`** → Step 5e-debate
-- **`strategy: "solo"`** → Step 5e-solo
-
-Both paths converge at Step 5f.
+**`strategy: "debate"`** → Step 5e-debate. **`strategy: "solo"`** → Step 5e-solo. Both paths converge at Step 5f.
 
 ---
 
@@ -208,11 +177,11 @@ Single generative agent executes the phase; post-execution guards serve as quali
 
 **1. Create execution log** in `.ratchet/executions/<pair-name>-<timestamp>.yaml` with fields: `id`, `mode: solo`, `component`, `issue`, `started`, `resolved: null`, `guard_results: []`, `promoted: false`, `debate_id: null`, `files_modified: []`.
 
-**2. Spawn generative agent** with resolved `generative` model. Tools: Read, Grep, Glob, Bash, Write, Edit. Agent receives phase, pair definition, worktree path, milestone, issue, files in scope, and prior phase outputs.
+**2. Spawn generative agent** with resolved `generative` model. Tools: Read, Grep, Glob, Bash, Write, Edit. Receives phase, pair definition, worktree path, milestone, issue, files in scope, prior phase outputs.
 
-**3. Process result**: capture `files_modified` from worktree (`git diff --name-only` + staged + untracked). Update execution log with files and `resolved` timestamp.
+**3. Process result**: capture `files_modified` (`git diff --name-only` + staged + untracked). Update execution log with files and `resolved` timestamp.
 
-**4. Run post-execution guards** using the **Guard Execution Pattern**. Record each result in execution log.
+**4. Run post-execution guards** using **Guard Execution Pattern**. Record each result in log.
 
 **5. Handle guard results:**
 
@@ -237,68 +206,45 @@ Spawn a **debate-runner** agent per matched pair (parallel when multiple). Model
 - Adversarial agent: Read, Grep, Glob, Bash — no Write/Edit (read-only)
 - Tiebreaker agent: Read, Grep, Glob, Bash — no Write/Edit (read-only)
 
-Each debate-runner receives: pair definitions, worktree path, phase, milestone, issue ref, files in scope, max rounds, escalation policy/precedents, prior phase outputs, `progress_ref`, and resolved models (generative/adversarial/tiebreaker).
+Each debate-runner receives: pair definitions, worktree path, phase, milestone, issue ref, files in scope, max rounds, escalation policy/precedents, prior phase outputs, `progress_ref`, resolved models (generative/adversarial/tiebreaker). The `progress_ref` MUST be written into `meta.json` at debate creation before any round files trigger the publish hook.
 
-The `progress_ref` MUST be written into `meta.json` at debate creation before any round files trigger the publish hook.
-
-**If debate-runner cannot be spawned:**
-- **Supervised**: `AskUserQuestion` with options: `"Wait and retry"`, `"Skip this phase"`, `"Escalate for manual resolution"`
-- **Unsupervised**: halt with status `blocked` ("debate-runner unavailable — quality gate cannot be enforced")
-- Retry: up to 3 times with exponential backoff (5s, 10s, 20s)
+**If debate-runner cannot be spawned:** **Supervised** → `AskUserQuestion`: `"Wait and retry"`, `"Skip this phase"`, `"Escalate for manual resolution"`. **Unsupervised** → halt with status `blocked` ("debate-runner unavailable — quality gate cannot be enforced"). Retry up to 3 times with exponential backoff (5s, 10s, 20s).
 
 **No fallback validation** (debate mode): the debate-runner is the ONLY acceptable quality path. Guards alone are insufficient substitutes. For solo mode, guards ARE the quality gate by design.
 
 #### Handle Debate Results (strategy: "debate" or promoted from solo)
 
-- **ACCEPT / TRIVIAL_ACCEPT**: update file-hash cache (`cache-update.sh`), update issue's `files` and `debates`. Sync plan tracking issue. If TRIVIAL_ACCEPT: note `fast_path: true`.
-- **CONDITIONAL_ACCEPT**: conditions resolved internally by debate-runner. Treat as consensus — update cache, files, debates. Log conditions for traceability. Sync plan tracking issue.
+- **ACCEPT / TRIVIAL_ACCEPT**: update file-hash cache (`cache-update.sh`), update issue's `files` and `debates`. Sync plan tracking issue. TRIVIAL_ACCEPT: note `fast_path: true`.
+- **CONDITIONAL_ACCEPT**: conditions resolved internally by debate-runner. Treat as consensus — update cache, files, debates. Log conditions. Sync plan tracking issue.
 - **Escalated (conditions_unresolved)**: follow escalation flow below.
 - **Escalated** (human escalation): update issue status, output early-exit summary (Step 5h), return.
 - **REGRESS**: handle via Step 5g.
 
 **[TodoWrite — Debate Results]**: Update phase item with verdict (e.g., `"Build phase — ACCEPT R1"`). Do not change phase status yet.
 
-**IMPORTANT**: Do NOT run debates yourself. For debate strategy, the debate-runner is the only path. For solo, the generative agent is spawned directly. If the agent cannot be spawned, halt and escalate.
-
-**IMPORTANT**: After processing debate results, proceed through ALL of Step 5f. Do NOT skip to next phase without packaging.
+**IMPORTANT**: Do NOT run debates yourself. For debate strategy, debate-runner is the only path; for solo, generative agent is spawned directly. If agent cannot be spawned, halt and escalate. After processing debate results, proceed through ALL of Step 5f — do NOT skip to next phase without packaging.
 
 #### 5f. Phase Gate — Guards and Advance
 
-**Check results:**
-- **Debate mode**: all consensus → guards; any escalated → early exit (Step 5h); any regress → Step 5g
-- **Solo mode**: all guards passed (already ran in 5e-solo) → phase advance; promoted → process debate results; failed → early exit (Step 5h)
+**Check results:** **Debate mode**: all consensus → guards; any escalated → early exit (Step 5h); any regress → Step 5g. **Solo mode**: all guards passed (already ran in 5e-solo) → phase advance; promoted → process debate results; failed → early exit (Step 5h).
 
-**Run post-execution guards** (debate mode only — solo already ran them in 5e-solo):
+**Run post-execution guards** (debate mode only — solo already ran them in 5e-solo). Invoke using **Guard Execution Pattern**. Results stored in `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard-name>.json`. Blocking guard fails → `AskUserQuestion`: fix/override/view. Advisory guard fails → log and continue.
 
-Invoke using the **Guard Execution Pattern**. Guard results stored in `.ratchet/guards/<milestone-id>/<issue-ref>/<phase>/<guard-name>.json`.
-- Blocking guard fails → `AskUserQuestion`: fix/override/view
-- Advisory guard fails → log and continue
-
-**Advance phase:**
-- Mark current phase `done` in issue's `phase_status`
-- Auto-advance on fast-path (all TRIVIAL_ACCEPT) without confirmation
-- Next phase exists → set to `in_progress`, loop to Step 5a
-- All phases done → issue complete
-- Sync plan tracking issue after phase state change.
+**Advance phase:** Mark current phase `done` in issue's `phase_status`. Auto-advance on fast-path (all TRIVIAL_ACCEPT) without confirmation. Next phase exists → set to `in_progress`, loop to Step 5a. All phases done → issue complete. Sync plan tracking issue after phase state change.
 
 **[TodoWrite — Phase Complete]**: Set phase item to `"completed"` retaining verdict info.
 
-**Commit/PR is the orchestrator's responsibility, not the issue agent's.** The issue agent produces code in the worktree but does NOT commit, push, or create PRs. The worktree branch with uncommitted changes is the deliverable — the orchestrator handles packaging in Step 4c. This prevents depth-3+ agents from silently dropping the commit step.
+**Commit/PR is the orchestrator's responsibility, not the issue agent's.** The issue agent produces code in the worktree but does NOT commit, push, or create PRs. The worktree branch with uncommitted changes is the deliverable — orchestrator handles packaging in Step 4c. This prevents depth-3+ agents from silently dropping the commit step.
 
 #### 5g. Phase Regression
 
-> Solo mode: regression does not apply (no adversarial agent). If a promoted-to-debate issues REGRESS, handle normally below.
+> Solo mode: regression does not apply (no adversarial agent). If promoted-to-debate REGRESSes, handle normally below.
 
-When adversarial issues REGRESS targeting an earlier phase:
-1. Read `max_regressions` from config (default: 2), tracked per-milestone
-2. Budget exhausted → `AskUserQuestion`: allow/reject/escalate
-3. Within budget → increment counter, reset target phase and later to `pending`, set target to `in_progress`, preserve debate history, sync plan tracking issue, loop to Step 5a
+When adversarial issues REGRESS targeting an earlier phase: (1) read `max_regressions` from config (default: 2), tracked per-milestone; (2) budget exhausted → `AskUserQuestion`: allow/reject/escalate; (3) within budget → increment counter, reset target phase and later to `pending`, set target to `in_progress`, preserve debate history, sync plan tracking issue, loop to Step 5a.
 
 #### 5h. Issue Complete
 
-Set issue status to `done` in local plan.yaml (worktree copy — orchestrator writes authoritative update in Step 4c).
-
-**Output a structured completion summary as your final message.** The orchestrator parses this for Step 4c. The worktree is cleaned up after agent return, so this output is the only way results survive.
+Set issue status to `done` in local plan.yaml (worktree copy — orchestrator writes authoritative update in Step 4c). **Output structured completion summary as final message.** Orchestrator parses this for Step 4c. Worktree is cleaned up after agent return, so this output is the only way results survive.
 
 ```
 Issue [ref] [complete|blocked|escalated|failed]:
@@ -323,4 +269,4 @@ Field semantics:
 - `dependency_validation`: `passed` (pre-created, all files verified), `failed` (files missing/unmodified), `overridden` (failed but user overrode), `skipped` (isolation mode)
 - `executions`: execution log IDs from `.ratchet/executions/`. Empty for debate-only pipelines.
 
-This summary MUST be the last thing you output. The orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.
+Summary MUST be last output. Orchestrator reads plan.yaml for structured state, but this summary provides immediate human-readable feedback.

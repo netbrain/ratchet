@@ -1,20 +1,14 @@
 # GitHub Plan Tracking Issue Format
 
-> This file is the extracted plan tracking issue format spec from `skills/run/SKILL.md`.
-> It is loaded on demand when the orchestrator interacts with the GitHub plan tracking issue.
-> For the orchestrator flow, see `skills/run/SKILL.md`.
+> Extracted plan tracking issue format spec from `skills/run/SKILL.md`. Loaded on demand when orchestrator interacts with GitHub plan tracking issue. For orchestrator flow, see `skills/run/SKILL.md`.
 
 ---
 
 ## GitHub Plan Tracking Issue
 
-When the `github-issues` progress adapter is enabled, a single GitHub issue mirrors
-`plan.yaml` as a human-readable roadmap. This tracking issue serves as a backup for
-`plan.yaml` and enables deterministic recovery without LLM assistance.
+When `github-issues` progress adapter is enabled, a single GitHub issue mirrors `plan.yaml` as human-readable roadmap. Serves as backup for `plan.yaml` and enables deterministic recovery without LLM assistance.
 
-**Canonical body format:**
-
-The tracking issue body has two layers: human-readable markdown (visible on GitHub) and hidden HTML comment metadata (for machine parsing). All HTML comments MUST be single-line — multi-line comments render as visible text on GitHub.
+**Canonical body format:** Two layers — human-readable markdown (visible on GitHub) and hidden HTML comment metadata (for machine parsing). All HTML comments MUST be single-line — multi-line comments render as visible text on GitHub.
 
 ```markdown
 <!-- ratchet-plan-tracking -->
@@ -68,14 +62,14 @@ Feature complete and reviewed
 <!-- issue_pr: null -->
 ```
 
-**Critical rendering rule:** All JSON values inside HTML comments (`issue_pairs`, `issue_depends_on`, `issue_phase_status`, `milestone_depends_on`) MUST be compact single-line JSON. Multi-line JSON like `[\n  "foo"\n]` breaks GitHub's comment hiding and renders as visible text. The `sync-plan.sh` script uses `compact_json()` to enforce this.
+**Critical rendering rule:** All JSON values inside HTML comments (`issue_pairs`, `issue_depends_on`, `issue_phase_status`, `milestone_depends_on`) MUST be compact single-line JSON. Multi-line JSON like `[\n  "foo"\n]` breaks GitHub's comment hiding and renders as visible text. `sync-plan.sh` uses `compact_json()` to enforce this.
 
 **HTML comment metadata rules:**
 - Every milestone block MUST have `milestone_id`, `milestone_status`, `milestone_done_when`, `milestone_depends_on`
 - Every issue block MUST have `issue_ref`, `issue_status`, `issue_pairs`, `issue_depends_on`, `issue_phase_status`, `issue_branch`, `issue_pr`, `issue_progress_ref`
 - The `<!-- ratchet-plan-tracking -->` sentinel on line 1 identifies the issue for deterministic parsing
 - Checkbox state (`[x]` vs `[ ]`) reflects `issue_status == "done"` but is NOT the parse source — `issue_status` in the HTML comment is authoritative
-- Fields NOT stored (not recoverable from tracking issue): `files`, `debates` arrays — these are runtime artifacts
+- Fields NOT stored (not recoverable from tracking issue): `files`, `debates` arrays — runtime artifacts
 
 **Sync helper — existence-guarded call pattern:**
 ```bash

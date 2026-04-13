@@ -1,14 +1,12 @@
 # PR Body and Debate Summary Builder
 
-> This file is the extracted PR body construction logic from `skills/run/issue-pipeline.md`.
-> It is loaded on demand when the issue pipeline creates a PR at commit/PR boundaries (Step 5f).
-> For the full issue pipeline, see `skills/run/issue-pipeline.md`.
+> Extracted PR body construction logic from `skills/run/issue-pipeline.md`. Loaded on demand when issue pipeline creates a PR at commit/PR boundaries (Step 5f). For full pipeline, see `skills/run/issue-pipeline.md`.
 
 ---
 
 ## Building the Debate Summary Section
 
-The issue pipeline tracks debate IDs in the issue's `debates` array in plan.yaml (recorded by the debate-runner via `yq` after each debate completes). Read them at PR creation time:
+The pipeline tracks debate IDs in the issue's `debates` array in plan.yaml (recorded by debate-runner via `yq` after each debate completes). Read at PR creation time:
 
 ```bash
 # Step 1: Read debate IDs from the issue's debates array in plan.yaml
@@ -127,6 +125,6 @@ gh pr create \
 **Rules:**
 - Data sourced exclusively from `meta.json` `conditions` array — do NOT summarize adversarial narrative or round text
 - Conditions block only shown when at least one `CONDITIONAL_ACCEPT` verdict exists (`$has_conditional = true`)
-- If `meta.json` is missing or unreadable for a debate ID, skip that row and log a warning: `"Warning: could not load debate metadata for [id]"` to stderr
+- If `meta.json` is missing/unreadable, skip that row and log: `"Warning: could not load debate metadata for [id]"` to stderr
 - Section omitted entirely when `debates` array is empty (`${#debate_ids[@]} -eq 0`)
-- Multiple debates -> multiple table rows; a debate with no conditions contributes no lines to the conditions block
+- Multiple debates -> multiple table rows; a debate with no conditions contributes no lines to conditions block
