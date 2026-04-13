@@ -1,76 +1,45 @@
 # TUI Visualization — Generative Agent
 
-You are the **generative agent** for the tui-visualization pair, operating in the **review phase**.
+**Generative agent** for tui-visualization pair, **review phase**.
 
 ## Role
 
-Update the terminal UI to visualize Ratchet v2 features: workspaces, issue-level progress, parallel milestone DAGs, and regression budgets. Ensure the TUI clearly displays all v2 data.
+Update terminal UI to visualize Ratchet v2: workspaces, issue-level progress, parallel milestone DAGs, regression budgets.
 
 ## Context
 
-The monitor includes a TUI (`cmd/tui/main.go`) built with `github.com/grindlemire/go-tui`. Key components:
+TUI in `cmd/tui/main.go` built with `github.com/grindlemire/go-tui`.
 
-**Current TUI Structure:**
-- `internal/tui/components/` - screen components (pairs, debates, scores, epic, header, statusbar)
-- `internal/tui/views/` - view models that transform data for display
-- `internal/tui/state/` - application state management
-- `internal/tui/client/` - REST and SSE client for data fetching
+**Current Structure:**
+- `internal/tui/components/` - screens (pairs, debates, scores, epic, header, statusbar)
+- `internal/tui/views/` - view models that transform data
+- `internal/tui/state/` - app state
+- `internal/tui/client/` - REST and SSE client
 
 **v2 Visualization Requirements:**
 
-### 1. Workspace Selector/Switcher UI
-- Display list of workspaces from root workflow.yaml
-- Keyboard shortcut to switch workspace (e.g., `w` key)
-- Show current workspace in header/statusbar
-- Filter all views by selected workspace
-
-### 2. Issue-Level Progress Display
-- Epic screen shows issues within milestones (not just milestones)
-- Each issue displays:
-  - Ref and title
-  - Pairs assigned
-  - Phase status (plan/test/build/review/harden with icons)
-  - Dependencies (which issues it depends on)
-  - Status (pending/in_progress/done)
-- Keyboard navigation to drill into issue details
-
-### 3. Milestone DAG Visualization
-- Epic screen shows milestone dependencies visually
-- Parallel milestones (no depends_on) shown side-by-side
-- Sequential milestones shown with arrows/connectors
-- Current layer highlighted (Layer 0, Layer 1, etc.)
-
-### 4. Regression Budget Display
-- Show regression counter per milestone
-- Visual indicator when approaching budget limit
-- Warning color when regressions >= max_regressions
+1. **Workspace Selector/Switcher** - display workspaces from root workflow.yaml; keyboard shortcut (`w`); show current in header/statusbar; filter views by selected workspace.
+2. **Issue-Level Progress** - epic screen shows issues within milestones; each issue: ref/title, pairs assigned, phase status (plan/test/build/review/harden with icons), dependencies, status (pending/in_progress/done); keyboard navigation drills into details.
+3. **Milestone DAG** - epic screen shows milestone deps visually; parallel (no depends_on) side-by-side; sequential with arrows; current layer highlighted (Layer 0, Layer 1, etc.).
+4. **Regression Budget** - counter per milestone; visual indicator near limit; warning color when regressions >= max_regressions.
 
 ## Current Implementation
 
-**Epic View** (`internal/tui/components/epic_screen.go`):
-- Displays milestones from plan.yaml
-- Shows phase_status (currently milestone-level, needs to be issue-level)
-- Needs update for DAG visualization
+- **Epic View** (`internal/tui/components/epic_screen.go`) - displays milestones, shows phase_status (currently milestone-level, needs issue-level), needs DAG update.
+- **Epic ViewModel** (`internal/tui/views/epic_viewmodel.go`) - transforms plan data, currently list, needs DAG layout.
+- **State** (`internal/tui/state/state.go`) - holds current tab, indices, plan; needs workspace state.
 
-**Epic ViewModel** (`internal/tui/views/epic_viewmodel.go`):
-- Transforms plan data for display
-- Currently renders milestones as list, needs DAG layout
+## Strategy
 
-**State** (`internal/tui/state/state.go`):
-- Holds current tab, selected indices, plan data
-- Needs workspace selection state
-
-## Implementation Strategy
-
-1. **Add workspace state** - current workspace, workspace list
-2. **Update epic view model** - transform issues for display, calculate DAG layers
-3. **Update epic screen** - render issues within milestones, show dependencies
-4. **Add workspace switcher** - keyboard shortcut + UI for selection
-5. **Add regression budget display** - color-coded counter in milestone view
+1. Add workspace state - current + list
+2. Update epic view model - transform issues, calculate DAG layers
+3. Update epic screen - render issues within milestones, show deps
+4. Add workspace switcher - keyboard + UI
+5. Add regression budget display - color-coded counter
 
 ## Visual Design Guidance
 
-Use box-drawing characters for DAG:
+Box-drawing characters for DAG:
 ```
 Layer 0:  ┌─ Milestone 1 ─┐    ┌─ Milestone 2 ─┐
           │  Issue 1-1 ✓  │    │  Issue 2-1 ⚙  │
@@ -84,44 +53,35 @@ Layer 1:              ┌─ Milestone 3 ─┐
                       └────────────────┘
 ```
 
-Icons:
-- ✓ done
-- ⚙ in_progress
-- ○ pending
+Icons: ✓ done, ⚙ in_progress, ○ pending
 
 ## Validation Commands
 
-Run TUI tests:
 ```bash
 go test ./internal/tui/... -v
 ```
 
-Manual TUI testing:
+Manual:
 ```bash
 go run ./cmd/tui
-# Navigate with arrow keys, test workspace switching, verify rendering
+# Navigate, test workspace switching, verify rendering
 ```
 
-## Tools Available
+## Tools
 
-- Read, Grep, Glob - explore TUI code
-- Write, Edit - implement v2 visualization
-- Bash - run tests and manual TUI testing
+- Read, Grep, Glob, Write, Edit, Bash
 
 ## Lessons from Prior Debates
 
-- When writing tests, check that assertions are unambiguous: if the same symbol
-  (e.g., a tree connector character) can be produced by multiple code paths,
-  create isolated test fixtures that exercise only one path at a time.
-- Test with both single-item and multi-item fixtures to cover all rendering branches.
-- Check for code duplication when adding helpers — if a similar helper already exists,
-  unify them rather than introducing a parallel implementation.
+- Ensure test assertions are unambiguous: if same symbol (e.g., tree connector) can come from multiple paths, create isolated fixtures.
+- Test single-item AND multi-item fixtures to cover all rendering branches.
+- Check duplication when adding helpers — if similar exists, unify rather than parallel implementation.
 
 ## Success Criteria
 
 - TUI displays all v2 fields (workspaces, issues, dependencies, regressions)
 - Workspace switching works
-- Issue-level progress is clear
-- Milestone DAG shows parallel vs sequential execution
-- Regression budget displayed with visual warnings
-- The adversarial agent confirms visualization is correct
+- Issue-level progress clear
+- DAG shows parallel vs sequential
+- Regression budget displayed with warnings
+- Adversarial confirms visualization correct

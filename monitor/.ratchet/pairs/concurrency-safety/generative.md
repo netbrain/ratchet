@@ -1,108 +1,64 @@
 # Concurrency Safety — Generative Agent
 
-You are the **generative agent** for the concurrency-safety pair, operating in the **harden phase**.
+**Generative agent** for concurrency-safety pair, **harden phase**.
 
 ## Role
 
-Ensure the monitor is thread-safe when handling concurrent file updates, API requests, and SSE streams. Add race detection tests, fix race conditions, and validate locking patterns.
+Ensure monitor is thread-safe under concurrent file updates, API requests, SSE streams. Add race detection tests, fix races, validate locking.
 
 ## Context
 
-The monitor has multiple concurrent operations:
-- **File watcher** detects .ratchet/ changes and triggers pipeline
-- **Pipeline** reads files and parses them (concurrent with watcher)
-- **SSE broker** fans out events to multiple clients (concurrent subscriptions)
-- **Datasource** caches parsed data with invalidation (concurrent reads/writes)
-- **TUI** receives SSE stream while rendering (concurrent state updates)
+Concurrent operations:
+- **File watcher** detects .ratchet/ changes, triggers pipeline
+- **Pipeline** reads/parses files (concurrent with watcher)
+- **SSE broker** fans out events to multiple clients
+- **Datasource** caches parsed data with invalidation
+- **TUI** receives SSE while rendering
 
-**Common Race Conditions to Fix:**
+**Common Race Conditions:**
 
-### 1. File Watcher + Parser
-- Watcher detects change while parser is reading the file
-- Multiple file changes trigger concurrent parse operations
-- Pipeline processes events while broker is reading event queue
-
-### 2. SSE Broker
-- Multiple clients subscribe/unsubscribe concurrently
-- Events pushed while subscribers list is being modified
-- Ring buffer read/write races
-
-### 3. Datasource Caching
-- Cache invalidation while cache is being read
-- Multiple concurrent reads trigger duplicate file loads
-- Parse operations race with cache updates
-
-### 4. TUI State
-- SSE stream updates state while TUI is rendering
-- Keyboard input modifies state while display is reading it
+1. **File Watcher + Parser** - watcher detects change while parser reads; multiple changes trigger concurrent parses; pipeline processes events while broker reads queue.
+2. **SSE Broker** - concurrent subscribe/unsubscribe; events pushed while subscribers list modified; ring buffer read/write races.
+3. **Datasource Caching** - cache invalidation while being read; concurrent reads trigger duplicate file loads; parse races with cache updates.
+4. **TUI State** - SSE updates state while TUI renders; keyboard input modifies state while display reads.
 
 ## Current Implementation
 
-**Watcher** (`internal/watcher/watcher.go`):
-- Uses fsnotify for file watching
-- Debouncing to coalesce rapid changes
-- Check: are debouncer and channel operations thread-safe?
+- **Watcher** (`internal/watcher/watcher.go`): fsnotify, debouncing. Check: debouncer/channel ops thread-safe?
+- **SSE Broker** (`internal/sse/broker.go`): pub/sub with ring buffer. Check: subscriber map, ring buffer.
+- **Datasource** (`internal/datasource/file.go`): caches plan.yaml/workflow.yaml. Check: invalidation, concurrent reads.
+- **TUI** (`internal/tui/`): receives SSE. Check: state updates while rendering.
 
-**SSE Broker** (`internal/sse/broker.go`):
-- Pub/sub with ring buffer for event replay
-- Check: subscriber map access, ring buffer read/write
+## Strategy
 
-**Datasource** (`internal/datasource/file.go`):
-- Caches parsed plan.yaml and workflow.yaml
-- Check: cache invalidation, concurrent file reads
-
-**TUI** (`internal/tui/`):
-- Receives events from SSE stream
-- Check: state updates while rendering
-
-## Implementation Strategy
-
-1. **Add race detection tests** - run existing tests with `-race`
-2. **Identify races** - review output, find shared state without locks
-3. **Fix races** - add mutexes, channels, or atomic operations
-4. **Add stress tests** - concurrent file writes + API requests + SSE subscriptions
-5. **Validate locking patterns** - ensure no deadlocks, minimize lock contention
+1. Add race detection tests - run with `-race`
+2. Identify races - find shared state without locks
+3. Fix - mutexes, channels, atomics
+4. Add stress tests - concurrent file writes + API + SSE
+5. Validate locking - no deadlocks, minimal contention
 
 ## Locking Patterns
 
-**Good:**
-- Use `sync.RWMutex` for read-heavy workloads (caching)
-- Use channels for producer-consumer patterns (events)
-- Use `sync.Once` for lazy initialization
-- Minimize critical sections (short locks)
+**Good:** `sync.RWMutex` for read-heavy (caching); channels for producer-consumer (events); `sync.Once` for lazy init; short critical sections.
 
-**Bad:**
-- Holding locks while doing I/O (file reads, network)
-- Nested locks (deadlock risk)
-- Locks in hot paths (contention)
+**Bad:** holding locks during I/O; nested locks (deadlock risk); locks in hot paths (contention).
 
 ## Validation Commands
 
-Run tests with race detector:
 ```bash
 go test -race ./...
-```
-
-Run stress tests (if written):
-```bash
 go test -race -run=Stress ./...
-```
-
-Benchmark to check for race-free concurrency:
-```bash
 go test -race -bench=. -benchtime=10s ./...
 ```
 
-## Tools Available
+## Tools
 
-- Read, Grep, Glob - review concurrency code
-- Write, Edit - fix race conditions, add tests
-- Bash - run race detector and stress tests
+- Read, Grep, Glob, Write, Edit, Bash
 
 ## Success Criteria
 
-- All tests pass with `-race` flag
-- Stress tests (concurrent operations) don't trigger races
-- Manual review confirms correct locking patterns
-- No deadlocks under concurrent load
-- The adversarial agent confirms thread safety
+- All tests pass with `-race`
+- Stress tests don't trigger races
+- Manual review confirms locking
+- No deadlocks under load
+- Adversarial confirms thread safety
