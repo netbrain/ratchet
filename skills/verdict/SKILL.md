@@ -5,7 +5,7 @@ description: Human-in-the-loop — cast the deciding vote on an escalated debate
 
 # /ratchet:verdict — Human Decides
 
-Cast a human verdict on an escalated debate, overriding or confirming the tiebreaker's recommendation.
+Cast a human verdict on an escalated debate, overriding or confirming tiebreaker's recommendation.
 
 ## Usage
 ```
@@ -21,24 +21,19 @@ Read `.ratchet/debates/<id>/meta.json`. Verify status is `escalated` OR (verdict
 
 If no ID provided, scan all `.ratchet/debates/*/meta.json` for debates with status `escalated`.
 
-If no escalated debates exist, inform the user:
-> "No debates need a human verdict right now. All debates are either in progress or already resolved."
+If no escalated debates exist, inform user: "No debates need a human verdict right now. All debates are either in progress or already resolved." Then `AskUserQuestion` with options: `"View all debates (/ratchet:debate)"`, `"Run next debate (/ratchet:run)"`, `"Done for now"`.
 
-Then use `AskUserQuestion` with options: `"View all debates (/ratchet:debate)"`, `"Run next debate (/ratchet:run)"`, `"Done for now"`.
-
-If escalated debates exist, use `AskUserQuestion` to let the user pick:
+If escalated debates exist, `AskUserQuestion` to pick:
 - Question: "Which debate needs your verdict?"
-- Options: one per escalated debate, formatted as `"[debate-id] — [pair-name] ([N] rounds)"`
+- Options: one per escalated debate as `"[debate-id] — [pair-name] ([N] rounds)"`
 
 ### Step 2: Present Summary
 
-Show a concise summary of the debate (files, round count, key arguments, tiebreaker recommendation if any) in the question text, then use `AskUserQuestion`:
-
+Show concise summary (files, round count, key arguments, tiebreaker recommendation if any) in question text, then `AskUserQuestion`:
 - Question: "[summary text]. What's your verdict?"
 - Options: `"Accept"`, `"Reject"`, `"Modify"`
 
-If the user picks `Modify`, follow up with `AskUserQuestion` (freeform):
-- Question: "What specific changes are needed?"
+If user picks `Modify`, follow up `AskUserQuestion` (freeform): "What specific changes are needed?"
 
 ### Step 3: Record Verdict
 
@@ -53,23 +48,19 @@ Write or update `.ratchet/debates/<id>/verdict.json`:
 }
 ```
 
-Update `meta.json`:
-- Set `status` to `"resolved"` (terminal state — human has decided)
-- Set `resolved` timestamp
-- Set `verdict` object
+Update `meta.json`: set `status` to `"resolved"` (terminal — human decided), set `resolved` timestamp, set `verdict` object.
 
 ### Step 3.5: Update Plan State
 
-After recording the verdict, update `.ratchet/plan.yaml` to reflect the issue's status:
+After recording verdict, update `.ratchet/plan.yaml` to reflect issue's status:
 
-1. **Read plan.yaml** and locate the issue that contains this debate
-2. **Check if other debates for this issue are still pending**:
-   - Scan the issue's `phase_status` and `pairs` to see if this was the last debate
+1. **Read plan.yaml** and locate issue containing this debate
+2. **Check if other debates for this issue are still pending** — scan issue's `phase_status` and `pairs` to see if this was last debate
 3. **Update phase_status** based on verdict and debate count:
-   - If `decision: accept` AND this is the last debate → set current phase to `done`, advance to next phase
+   - If `decision: accept` AND last debate → set current phase to `done`, advance to next phase
    - If `decision: reject` → keep current phase as `in_progress` (generative needs to address issues)
    - If `decision: modify` → set status to `in_progress` with conditions logged
-4. **Handle partial completion**: If other debates for this issue are still running, do NOT advance the phase yet
+4. **Handle partial completion**: If other debates for this issue still running, do NOT advance phase yet
 
 Working commands:
 ```bash
@@ -152,14 +143,13 @@ fi
 
 ### Step 4: Update Scores
 
-Run the score update script:
+Run score update script:
 ```bash
 test -f .claude/ratchet-scripts/update-scores.sh \
   || { echo "Error: update-scores.sh not found. Scores not updated." >&2; exit 1; }
 bash .claude/ratchet-scripts/update-scores.sh <debate-id>
 ```
-
-This appends the final outcome to `.ratchet/scores/scores.jsonl`.
+Appends final outcome to `.ratchet/scores/scores.jsonl`.
 
 ### Step 5: Report
 ```
@@ -168,9 +158,9 @@ Verdict recorded for [id]: [decision] (human)
 [If accept: Pair consensus not needed — human override]
 ```
 
-After reporting, use `AskUserQuestion` to guide the user:
+After reporting, `AskUserQuestion` to guide user:
 - Options (adapt based on context):
-  - "Continue to next milestone (/ratchet:run) (Recommended)" — if the verdict resolved all debates for the current focus
+  - "Continue to next milestone (/ratchet:run) (Recommended)" — if verdict resolved all debates for current focus
   - "Verdict another debate" — if more escalated debates exist
   - "View quality metrics (/ratchet:score)"
   - "Done for now"

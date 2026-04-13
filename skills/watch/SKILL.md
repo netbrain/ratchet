@@ -5,11 +5,9 @@ description: Watch active PRs for merge conflicts, CI failures, and review comme
 
 # /ratchet:watch — PR Monitor
 
-Watch active Ratchet PRs for merge conflicts, CI failures, and review comments. When problems are detected, automatically creates discoveries in plan.yaml so they surface in `/ratchet:run` and `/ratchet:status`. When actionable review comments are detected, spawns response agents to address feedback directly on the PR branch.
+Watch active Ratchet PRs for merge conflicts, CI failures, and review comments. When problems detected, automatically creates discoveries in plan.yaml so they surface in `/ratchet:run` and `/ratchet:status`. When actionable review comments detected, spawns response agents to address feedback directly on the PR branch. Uses Claude Code's `/loop` feature to poll every 10 minutes.
 
-Uses Claude Code's `/loop` feature to poll every 10 minutes.
-
-**Auto-started by `/ratchet:run`** — the run orchestrator starts this loop when PRs exist and stops it on completion. Use `/ratchet:watch` manually only if you want monitoring outside of a run session.
+**Auto-started by `/ratchet:run`** — run orchestrator starts this loop when PRs exist and stops it on completion. Use `/ratchet:watch` manually only if you want monitoring outside of a run session.
 
 ## Usage
 ```
@@ -22,8 +20,7 @@ Uses Claude Code's `/loop` feature to poll every 10 minutes.
 - `.ratchet/plan.yaml` must exist with issues that have `pr` fields populated
 - `gh` CLI must be installed and authenticated
 
-If no PRs exist in plan.yaml, inform the user:
-> "No PRs found in plan.yaml. PRs are created by /ratchet:run when issues complete."
+If no PRs exist in plan.yaml, inform user: "No PRs found in plan.yaml. PRs are created by /ratchet:run when issues complete."
 
 ## Behavior
 
@@ -33,11 +30,10 @@ If no PRs exist in plan.yaml, inform the user:
    ```bash
    gh auth status >/dev/null 2>&1
    ```
-   If the check fails (`exit code != 0`), inform the user via `AskUserQuestion`:
-   - Question: "GitHub CLI is not authenticated. /ratchet:watch requires 'gh' to check PR status. Please run 'gh auth login' in your terminal first."
+   If check fails (`exit code != 0`), inform user via `AskUserQuestion`:
+   - Question: "GitHub CLI is not authenticated. /ratchet:watch requires 'gh' to check PR status. Run 'gh auth login' in your terminal first."
    - Options: `"I've authenticated — retry"`, `"Cancel"`
-   If "retry", re-run the `gh auth status` check. If "Cancel", exit the skill.
-
+   If "retry", re-run `gh auth status` check. If "Cancel", exit skill.
 2. **Resolve workspace** (same logic as `/ratchet:run` Step 1a)
 3. **Verify PRs exist** — scan plan.yaml for issues with non-null `pr` fields
 4. **Initialize watch state** — load or create `.ratchet/watch-state.json`:
@@ -46,12 +42,10 @@ If no PRs exist in plan.yaml, inform the user:
      echo '{"seen_comment_ids": [], "seen_review_ids": []}' > .ratchet/watch-state.json
    fi
    ```
-   The watch state file tracks which review comments and reviews have already been processed to avoid re-processing on subsequent poll cycles.
-
+   Watch state file tracks which review comments and reviews have been processed to avoid re-processing on subsequent poll cycles.
 5. **Parse flags**:
-   - `--no-respond`: Disable auto-spawning response agents for review comments. When set, actionable comments are logged as feedback entries but no agent is spawned. Default behavior (without this flag) is to auto-respond when the `github-issues` progress adapter is configured in `workflow.yaml`.
-   - `--stop`: Cancel the loop and exit.
-
+   - `--no-respond`: Disable auto-spawning response agents for review comments. When set, actionable comments are logged as feedback entries but no agent is spawned. Default behavior is to auto-respond when `github-issues` progress adapter is configured in `workflow.yaml`.
+   - `--stop`: Cancel loop and exit.
 6. **Start loop**:
    ```
    /loop 10m check Ratchet PRs for conflicts, CI failures, and review comments
@@ -142,9 +136,7 @@ seen_comment_ids=$(jq -r '.seen_comment_ids[]' .ratchet/watch-state.json 2>/dev/
 seen_review_ids=$(jq -r '.seen_review_ids[]' .ratchet/watch-state.json 2>/dev/null)
 ```
 
-Skip any comment or review whose ID appears in the seen lists. For each **new** comment or review:
-
-**Classify as actionable or informational:**
+Skip any comment or review whose ID appears in seen lists. For each **new** comment or review, classify as actionable or informational:
 
 | Category | Signal | Action |
 |---|---|---|
@@ -154,7 +146,7 @@ Skip any comment or review whose ID appears in the seen lists. For each **new** 
 | **Informational: Approval** | Review state `APPROVED` | Log only, no action |
 | **Informational: Acknowledgment** | Comment body matches LGTM, "looks good", "nice", thumbs up | Log only, no action |
 
-**Filter bot comments** — exclude comments from the authenticated `gh` user to avoid self-referential feedback loops:
+**Filter bot comments** — exclude comments from authenticated `gh` user to avoid self-referential feedback loops:
 ```bash
 bot_user=$(gh api user --jq .login 2>/dev/null) || bot_user=""
 # Skip any comment where .user == "$bot_user"
@@ -195,7 +187,7 @@ yq eval -i ".epic.discoveries += [{
 }]" .ratchet/plan.yaml
 ```
 
-Review metadata fields (author, file path, comment category) are encoded in the `description` field and `source` field since the discovery schema (`additionalProperties: false`) prohibits extra top-level fields. Use `source: "pr-review-<pr_num>-<comment_id>"` for deduplication — the comment ID in the source uniquely identifies each feedback entry.
+Review metadata (author, file path, comment category) encoded in `description` and `source` fields since discovery schema (`additionalProperties: false`) prohibits extra top-level fields. Use `source: "pr-review-<pr_num>-<comment_id>"` for deduplication — comment ID uniquely identifies each feedback entry.
 
 - Report: "Review feedback detected: PR #[N] — [count] actionable comment(s) from [author(s)]"
 
@@ -208,9 +200,7 @@ jq --argjson new_comments "$new_comment_ids_json" \
    && mv .ratchet/watch-state.json.tmp .ratchet/watch-state.json
 ```
 
-**Auto-respond behavior** (when `--no-respond` is NOT set and `github-issues` adapter is configured):
-- For each actionable feedback entry, the watcher notes the feedback for the response agent (see m4-response-agent). The response agent is a separate concern — this issue only detects and classifies review comments.
-- When `--no-respond` IS set: feedback entries are created in plan.yaml but no response agent is spawned. The feedback surfaces in `/ratchet:status` for manual handling.
+**Auto-respond behavior** (when `--no-respond` is NOT set and `github-issues` adapter is configured): for each actionable feedback entry, watcher notes the feedback for the response agent (see m4-response-agent). Response agent is a separate concern — this issue only detects and classifies review comments. When `--no-respond` IS set: feedback entries are created in plan.yaml but no response agent is spawned. Feedback surfaces in `/ratchet:status` for manual handling.
 
 **All clear**: No output (silent when nothing is wrong — no conflicts, no CI failures, no new review comments).
 
@@ -220,8 +210,7 @@ jq --argjson new_comments "$new_comment_ids_json" \
 
 ## Watch State File
 
-The watcher maintains `.ratchet/watch-state.json` to track which review comments and reviews have been processed. Structure:
-
+Watcher maintains `.ratchet/watch-state.json` to track which review comments and reviews have been processed. Structure:
 ```json
 {
   "seen_comment_ids": [12345, 12346],
@@ -229,21 +218,20 @@ The watcher maintains `.ratchet/watch-state.json` to track which review comments
 }
 ```
 
-This file is created automatically on first run if it does not exist. It persists across poll cycles within a session and across sessions (since it lives on disk). To force re-processing of all comments (e.g., after a reset), delete this file:
-
+File created automatically on first run if it does not exist. Persists across poll cycles within a session and across sessions (since it lives on disk). To force re-processing of all comments (e.g., after a reset), delete this file:
 ```bash
 rm .ratchet/watch-state.json
 ```
 
-**Error handling**: If `.ratchet/watch-state.json` exists but contains invalid JSON, the watcher recreates it with empty arrays and logs a warning:
+**Error handling**: If `.ratchet/watch-state.json` exists but contains invalid JSON, watcher recreates it with empty arrays and logs a warning:
 ```
 Warning: .ratchet/watch-state.json was malformed — reset to empty state
 ```
 
 ## Limitations
 
-- **Session-scoped**: the loop stops when you close Claude Code
+- **Session-scoped**: loop stops when you close Claude Code
 - **Requires `gh` auth**: uses GitHub CLI for PR status and review comment fetching
-- **Only watches PRs in plan.yaml**: PRs created outside Ratchet are not monitored
-- **Comment classification is heuristic**: the actionable vs informational classification uses pattern matching — edge cases may misclassify (e.g., a rhetorical question classified as actionable). When in doubt, comments are classified as actionable to avoid missing feedback.
-- **Bot comments are skipped**: comments from the authenticated `gh` user (typically the bot running Ratchet) are excluded from processing to avoid self-referential feedback loops
+- **Only watches PRs in plan.yaml**: PRs created outside Ratchet not monitored
+- **Comment classification is heuristic**: pattern matching may misclassify edge cases (e.g., rhetorical question as actionable). When in doubt, classified as actionable to avoid missing feedback.
+- **Bot comments skipped**: comments from authenticated `gh` user (typically Ratchet bot) excluded to avoid self-referential feedback loops

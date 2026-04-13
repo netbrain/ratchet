@@ -5,7 +5,7 @@ description: Show milestone and phase progress at a glance
 
 ## Boot Context (pre-loaded at skill invocation)
 
-The following state is injected at startup so the status skill renders immediately without requiring file reads at runtime. All blocks fail gracefully with explicit fallback messages.
+State injected at startup so status skill renders immediately without file reads at runtime. All blocks fail gracefully with explicit fallback messages.
 
 **Plan:**
 ```
@@ -39,7 +39,7 @@ fi)
 
 # /ratchet:status — Project Status
 
-Display a snapshot of the project's progress through the epic, milestones, and phases.
+Display snapshot of project progress through epic, milestones, and phases.
 
 ## Usage
 ```
@@ -52,20 +52,15 @@ Display a snapshot of the project's progress through the epic, milestones, and p
 - `.ratchet/` must exist
 - `.ratchet/plan.yaml` must exist (for workspace-level status)
 
-If `.ratchet/` or `plan.yaml` does not exist, inform the user:
-> "No epic found. Run /ratchet:init to set up a project, or /ratchet:run to start without an epic."
-
-Then use `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommended)"`, `"Done for now"`.
+If `.ratchet/` or `plan.yaml` does not exist, inform user: "No epic found. Run /ratchet:init to set up a project, or /ratchet:run to start without an epic." Then `AskUserQuestion` with options: `"Initialize (/ratchet:init) (Recommended)"`, `"Done for now"`.
 
 ## Execution Steps
 
 ### Step 1: Read State
 
-**Workspace resolution**: Same algorithm as `/ratchet:run` Step 1a. If at workspace root with no workspace specified, show the workspace overview (Step 2b). If a workspace is resolved, show workspace-level status.
+**Workspace resolution**: Same algorithm as `/ratchet:run` Step 1a. If at workspace root with no workspace specified, show workspace overview (Step 2b). If a workspace is resolved, show workspace-level status.
 
-Read `plan.yaml` and `workflow.yaml` from the resolved `.ratchet/` directory.
-
-Also scan `debates/*/meta.json` to count active/resolved debates per milestone.
+Read `plan.yaml` and `workflow.yaml` from resolved `.ratchet/` directory. Also scan `debates/*/meta.json` to count active/resolved debates per milestone.
 
 ### Step 2b: Workspace Overview (root only)
 
@@ -86,12 +81,12 @@ Shared policy: models=[generative:opus, adversarial:sonnet] escalation=[human]
 └───────────────────────────────────────────────────────────────┘
 ```
 
-Then use `AskUserQuestion`:
+Then `AskUserQuestion`:
 - Options: one option per workspace as `"View [name] status"`, plus `"Done for now"`
 
 ### Step 2: Display Overview
 
-Present a compact status view:
+Present compact status view:
 
 ```
 Epic: [project name] — [description]
@@ -128,16 +123,16 @@ Sidequests: [N] pending
 Run /ratchet:run to process sidequests.
 ```
 
-This filters out discoveries that have been `promoted` (converted to issues), `dismissed` (non-actionable), or marked `done` (processed). Only actionable pending discoveries are shown.
+Filters out discoveries that have been `promoted`, `dismissed`, or marked `done`. Only actionable pending discoveries shown.
 
-Adapt the phase display based on the component's workflow preset:
+Adapt phase display based on component's workflow preset:
 - `tdd`: show all 5 phases
 - `traditional`: show plan, build, review, harden (skip test)
 - `review-only`: show only review
 
 ### Step 3: Detailed Milestone View
 
-If a specific milestone was requested, show expanded detail:
+If specific milestone requested, show expanded detail:
 
 ```
 Milestone [id]: [name]
@@ -169,10 +164,10 @@ Unresolved Conditions:
 
 ### Step 4: Next Steps
 
-After displaying status, use `AskUserQuestion`:
+After displaying status, `AskUserQuestion`:
 - Options (adapt based on context):
-  - "Continue current phase (/ratchet:run) (Recommended)" — if there's an active milestone
-  - "View a specific milestone" — if overview was shown
+  - "Continue current phase (/ratchet:run) (Recommended)" — if active milestone exists
+  - "View specific milestone" — if overview was shown
   - "View debate transcript (/ratchet:debate)" — if debates exist
   - "View quality metrics (/ratchet:score)"
   - "Done for now"

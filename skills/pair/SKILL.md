@@ -12,27 +12,24 @@ Add a new generative-adversarial agent pair to an existing Ratchet configuration
 /ratchet:pair [name]
 ```
 
-If `[name]` is provided, use it as the pair name. Otherwise, the analyst will suggest a name based on the discussion.
+If `[name]` provided, use it as pair name. Otherwise, analyst suggests a name based on discussion.
 
 ## Prerequisites
 - `.ratchet/` must exist (run `/ratchet:init` first)
 - `.ratchet/project.yaml` must exist
 - `.ratchet/workflow.yaml` must exist
 
-If prerequisites are not met, inform the user and suggest `/ratchet:init`.
+If prerequisites not met, inform user and suggest `/ratchet:init`.
 
 ## Execution Steps
 
 ### Step 1: Load Project Context
 
-Read `.ratchet/project.yaml` and `.ratchet/workflow.yaml` to understand:
-- Current tech stack and architecture
-- Existing pairs (to avoid overlap)
-- Testing capabilities
+Read `.ratchet/project.yaml` and `.ratchet/workflow.yaml` for: tech stack, architecture, existing pairs (avoid overlap), testing capabilities.
 
 ### Step 2: Launch Analyst Agent
 
-Spawn the **analyst** agent using the generative model from `workflow.yaml` (`models.generative`, default `opus`). Agent configuration:
+Spawn **analyst** agent using generative model from `workflow.yaml` (`models.generative`, default `opus`). Config:
 - `subagent_type`: analyst
 - `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
 - `tools`: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
@@ -69,7 +66,7 @@ Follow the same agent generation conventions as init:
 
 ### Step 3: Verify & Report
 
-Verify the new pair was created and registered:
+Verify new pair was created and registered:
 ```bash
 # Verify agent files exist
 test -f .ratchet/pairs/<name>/generative.md || { echo "Error: generative.md not created for pair '<name>'" >&2; exit 1; }
@@ -80,10 +77,7 @@ yq eval '.pairs[] | select(.name == "<name>")' .ratchet/workflow.yaml | grep -q 
   || { echo "Error: pair '<name>' not registered in workflow.yaml" >&2; exit 1; }
 ```
 
-If the analyst agent fails (returns an error or produces empty output), inform the user:
-> "Pair generation failed. This may be due to insufficient project context or an invalid pair name."
-
-Then use `AskUserQuestion` with options: `"Try again"`, `"Try with a different name"`, `"Cancel"`.
+If analyst agent fails (returns error or empty output), inform user: "Pair generation failed. May be due to insufficient project context or invalid pair name." Then `AskUserQuestion` with options: `"Try again"`, `"Try with different name"`, `"Cancel"`.
 
 Report:
 ```
@@ -96,8 +90,8 @@ New pair added: [name]
 Run /ratchet:run [name] to test the new pair.
 ```
 
-After reporting, use `AskUserQuestion` to guide the user:
+After reporting, `AskUserQuestion` to guide user:
 - Options:
-  - "Run debate for [name] (/ratchet:run [name]) (Recommended)" — test the new pair immediately
+  - "Run debate for [name] (/ratchet:run [name]) (Recommended)" — test new pair immediately
   - "Add another pair (/ratchet:pair)"
   - "Done for now"

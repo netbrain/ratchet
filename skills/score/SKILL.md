@@ -17,11 +17,11 @@ View quality metrics and trends across all pairs or a specific pair.
 
 ### Step 1: Load Data
 
-Read debate artifacts directly from the source of truth — no derived score files needed.
+Read debate artifacts directly from source of truth — no derived score files needed.
 
-**Workspace scoping**: In a multi-workspace setup, `/ratchet:score` with no arguments shows scores for the current workspace. Use `/ratchet:score --all` to aggregate across all workspaces, or `/ratchet:score [workspace]` for a specific workspace.
+**Workspace scoping**: In multi-workspace setup, `/ratchet:score` with no arguments shows scores for current workspace. Use `/ratchet:score --all` to aggregate across all workspaces, or `/ratchet:score [workspace]` for specific workspace.
 
-**Error handling for debate metadata**: When reading meta.json files, skip any that are malformed:
+**Error handling for debate metadata**: When reading meta.json files, skip any malformed:
 ```bash
 for f in .ratchet/debates/*/meta.json; do
   jq empty "$f" 2>/dev/null || { echo "Warning: Skipping malformed $f" >&2; continue; }
@@ -50,10 +50,7 @@ done
 
 **Review data**: Read all `.ratchet/reviews/<pair-name>/review-*.json` files. Each contains effectiveness scores and missed issues from both agents.
 
-If no debate directories exist, inform the user:
-> "No debates found. Run /ratchet:run to start your first debate."
-
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
+If no debate directories exist, inform user: "No debates found. Run /ratchet:run to start your first debate." Then `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
 ### Step 2: Compute Metrics
 
@@ -63,16 +60,16 @@ Per pair, calculate from meta.json files:
 - **Avg rounds to consensus**: mean of `rounds` field (excluding escalated)
 - **Verdict breakdown**: count of ACCEPT, CONDITIONAL_ACCEPT, TRIVIAL_ACCEPT
 - **Fast-path rate**: % of debates with `fast_path: true` (TRIVIAL_ACCEPT)
-- **Trend**: compare last 5 debates to previous 5 by avg rounds — improving, stable, or degrading. If fewer than 10 total debates exist, show `Trend: — (insufficient data for last-5-vs-previous-5)` and instead describe the trajectory narratively.
+- **Trend**: compare last 5 debates to previous 5 by avg rounds — improving, stable, or degrading. If fewer than 10 total debates, show `Trend: — (insufficient data for last-5-vs-previous-5)` and describe trajectory narratively.
 
-From review files, calculate:
+From review files:
 - **Avg effectiveness**: mean of self_assessment.effectiveness and partner_assessment.effectiveness across all reviews
 - **Gen vs Adv split**: separate averages for generative and adversarial effectiveness
 - **Top missed issues**: most commonly flagged patterns from missed_issues arrays
 
 ### Step 2b: Persist Metrics as Moving Average
 
-After computing metrics from debate artifacts, update `.ratchet/scores.yaml` with an exponential moving average (EMA). This ensures pair metrics survive debate archival across epics.
+After computing metrics, update `.ratchet/scores.yaml` with exponential moving average (EMA). Ensures pair metrics survive debate archival across epics.
 
 **EMA formula**: `new_ema = α × current_value + (1 - α) × old_ema` where `α = 0.3` (recent debates weighted ~30%, history ~70%).
 
@@ -92,14 +89,10 @@ pairs:
 
 **Update logic**:
 1. Read `.ratchet/scores.yaml` (create if missing)
-2. For each pair with new debate data since `last_updated`:
-   - Compute current-epoch metrics from debate artifacts (Step 2)
-   - Apply EMA against stored values (use current values directly if no stored values exist — first epoch)
-   - Increment `total_debates` by the count of new debates
-   - Set `last_updated` to now, `last_epic` to current epic name
+2. For each pair with new debate data since `last_updated`: compute current-epoch metrics from debate artifacts (Step 2); apply EMA against stored values (use current values directly if no stored values exist — first epoch); increment `total_debates` by count of new debates; set `last_updated` to now, `last_epic` to current epic name
 3. Write back to `.ratchet/scores.yaml`
 
-**Fallback**: When no debate artifacts exist (archived), Step 2 metrics are unavailable. Use `.ratchet/scores.yaml` directly for display, noting `"(from historical average — debate artifacts archived)"` in the output.
+**Fallback**: When no debate artifacts exist (archived), Step 2 metrics unavailable. Use `.ratchet/scores.yaml` directly for display, noting `"(from historical average — debate artifacts archived)"` in output.
 
 ### Step 3: Present
 
@@ -121,16 +114,13 @@ Overall:
   Quality trajectory: [↑ improving | → stable | ↓ degrading]
 ```
 
-If a specific pair is requested, show more detail including:
-- Recent debate summaries (last 5)
-- Top missed issues from reviews
-- Suggestions from reviews
+If specific pair requested, show more detail: recent debate summaries (last 5), top missed issues from reviews, suggestions from reviews.
 
 ### Step 4: Next Steps
 
-After presenting metrics, use `AskUserQuestion` to guide the user:
+After presenting metrics, `AskUserQuestion` to guide user:
 - Options (adapt based on context):
   - "Run next debate (/ratchet:run)" — if milestones remain
   - "Tighten agents (/ratchet:tighten)" — if enough review data exists
-  - "View a specific debate" — for drill-down
+  - "View specific debate" — for drill-down
   - "Done for now"
