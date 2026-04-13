@@ -5,7 +5,7 @@ description: View or continue an ongoing debate
 
 # /ratchet:debate — View or Continue a Debate
 
-View the full transcript of a debate, or continue an unresolved one.
+View full transcript of a debate, or continue an unresolved one.
 
 ## Usage
 ```
@@ -18,20 +18,15 @@ View the full transcript of a debate, or continue an unresolved one.
 
 ### No Arguments — List Debates
 
-Read all `.ratchet/debates/*/meta.json` files. If no debates exist (directory is empty or no meta.json files found), inform the user:
-> "No debates found. Run /ratchet:run to start your first debate."
+Read all `.ratchet/debates/*/meta.json` files. If none exist, inform user: "No debates found. Run /ratchet:run to start your first debate." Then `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
-
-If debates exist, use `AskUserQuestion` to let the user pick a debate to view:
-
-- Question: "Which debate do you want to view?"
-- Options: one per debate, formatted as `"[debate-id] — [pair-name] | [status] | [N] rounds | [verdict or 'pending']"`
-- Include a `"Cancel"` option
+If debates exist, `AskUserQuestion` to pick one:
+- Question: "Which debate to view?"
+- Options: one per debate as `"[debate-id] — [pair-name] | [status] | [N] rounds | [verdict or 'pending']"`, plus `"Cancel"`
 
 ### With ID — View Transcript
 
-**Error handling**: If `meta.json` is missing or malformed:
+**Error handling**: If `meta.json` missing or malformed:
 ```bash
 if [ ! -f ".ratchet/debates/<id>/meta.json" ]; then
   echo "Error: Debate '<id>' not found — no meta.json in .ratchet/debates/<id>/" >&2
@@ -42,11 +37,9 @@ jq empty .ratchet/debates/<id>/meta.json 2>/dev/null \
   || { echo "Error: meta.json for debate '<id>' is malformed JSON. It may have been corrupted by an interrupted write." >&2; exit 1; }
 ```
 
-**Recovery procedure for corrupted meta.json**:
+**Recovery for corrupted meta.json**: attempt recovery before giving up.
 
-If `meta.json` fails JSON validation, attempt recovery before giving up:
-
-1. **Regenerate from round files** — reconstruct meta.json from the round files on disk:
+1. **Regenerate from round files** — reconstruct meta.json from disk:
    ```bash
    debate_dir=".ratchet/debates/<id>"
    pair_name=$(echo "<id>" | sed 's/-[0-9T]*$//')
@@ -80,7 +73,7 @@ If `meta.json` fails JSON validation, attempt recovery before giving up:
    echo "meta.json regenerated from $round_count round files. Review and correct any 'unknown' fields." >&2
    ```
 
-2. **If no round files exist** — the debate has no recoverable state:
+2. **If no round files exist** — no recoverable state:
    ```bash
    if [ "$round_count" -eq 0 ]; then
      echo "Error: No round files found for debate '<id>'. Cannot recover. Delete the debate directory and re-run." >&2
@@ -88,15 +81,15 @@ If `meta.json` fails JSON validation, attempt recovery before giving up:
    fi
    ```
 
-After recovery, inform the user via `AskUserQuestion`:
-- Question: "Debate '<id>' meta.json was corrupted and has been recovered from round files. Some fields may need manual correction. How would you like to proceed?"
+After recovery, inform user via `AskUserQuestion`:
+- Question: "Debate '<id>' meta.json was corrupted and recovered from round files. Some fields may need manual correction. How to proceed?"
 - Options: `"View recovered debate (Recommended)"`, `"Re-run debate from scratch"`, `"Delete and skip"`
 
-> **Verdict storage note**: Verdicts may exist in two locations depending on how the debate was resolved:
-> - `meta.json` → `verdict` field: populated by the debate-runner for consensus (ACCEPT, CONDITIONAL_ACCEPT) or tiebreaker verdicts. This is an embedded object.
-> - `verdict.json` (separate file in the debate directory): populated by `/ratchet:verdict` for human-cast verdicts. Read both; prefer `verdict.json` if it exists (human decision overrides).
+> **Verdict storage note**: Verdicts may exist in two locations:
+> - `meta.json` → `verdict` field: populated by debate-runner for consensus (ACCEPT, CONDITIONAL_ACCEPT) or tiebreaker verdicts. Embedded object.
+> - `verdict.json` (separate file): populated by `/ratchet:verdict` for human-cast verdicts. Read both; prefer `verdict.json` if exists (human decision overrides).
 
-Read the debate's `meta.json` and all round files. Present the full transcript:
+Read `meta.json` and all round files. Present full transcript:
 
 ```
 Debate: [id]
@@ -125,41 +118,36 @@ Reasoning: [...]
 
 ### With --continue
 
-Only valid for debates with status `escalated` or `initiated`.
-
-Resume the debate protocol from where it left off. Use `AskUserQuestion` to let the user decide:
+Only valid for debates with status `escalated` or `initiated`. Resume protocol from where it left off via `AskUserQuestion`:
 
 - If `escalated`:
-  - Question: "Debate [id] escalated after [N] rounds (max was [max_rounds]). How do you want to proceed?"
+  - Question: "Debate [id] escalated after [N] rounds (max was [max_rounds]). How to proceed?"
   - Options: `"Run another round (extend max by 1)"`, `"Proceed to verdict"`, `"View full transcript first"`
-  - If "Run another round": increment `max_rounds` by 1 in meta.json using jq:
+  - If "Run another round": increment `max_rounds` by 1 in meta.json:
     ```bash
     jq '.max_rounds += 1' .ratchet/debates/<id>/meta.json > /tmp/meta-tmp.json \
       && mv /tmp/meta-tmp.json .ratchet/debates/<id>/meta.json
     ```
     Then execute one debate round per `/ratchet:run` Step 5e protocol.
-
 - If `initiated`:
-  - Question: "Debate [id] was interrupted at round [N]. Resume from where it left off?"
+  - Question: "Debate [id] interrupted at round [N]. Resume from where it left off?"
   - Options: `"Resume debate (Recommended)"`, `"Restart debate"`, `"Abandon debate"`
-  - If "Restart debate": delete all files in the `rounds/` directory, reset `rounds` to 0 in meta.json, then start fresh from round 1 per `/ratchet:run` Step 5e protocol.
+  - If "Restart debate": delete all files in `rounds/`, reset `rounds` to 0 in meta.json, start fresh from round 1 per `/ratchet:run` Step 5e protocol.
 
-When resuming or running another round, execute the same debate protocol as `/ratchet:run` Step 5e (generative round, adversarial round, check verdict). Read the pair's agent definitions from `.ratchet/pairs/<pair-name>/` and the debate context from `meta.json` and existing round files. If `rounds/` is empty (no prior round files), start from round 1.
+When resuming or running another round, execute same debate protocol as `/ratchet:run` Step 5e (generative round, adversarial round, check verdict). Read pair's agent definitions from `.ratchet/pairs/<pair-name>/` and debate context from `meta.json` and existing round files. If `rounds/` empty, start from round 1.
 
-**Tool boundaries for resumed debates**: When spawning agents for resumed rounds, enforce the same role boundaries as `/ratchet:run` Step 5e:
+**Tool boundaries for resumed debates** — enforce same role boundaries as `/ratchet:run` Step 5e:
 - Generative agent: tools = Read, Grep, Glob, Bash, Write, Edit
 - Adversarial agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
 - Tiebreaker agent: tools = Read, Grep, Glob, Bash — disallowedTools = Write, Edit
 
-**Pass the guilty-until-proven-innocent principle** to resumed debate agents: new changes are GUILTY until proven innocent — test failures on a PR branch are caused by the PR unless definitively proven otherwise. The burden of proof is on demonstrating the failure exists on master.
+**Pass guilty-until-proven-innocent principle** to resumed debate agents: new changes are GUILTY until proven innocent — test failures on a PR branch are caused by the PR unless definitively proven otherwise. Burden of proof is on demonstrating failure exists on master.
 
-If the user picks "Abandon debate", set status to `"resolved"` with verdict `{"decision": "reject", "decided_by": "human", "reasoning": "Debate abandoned by user"}`.
-
-Update `meta.json` accordingly.
+If user picks "Abandon debate", set status to `"resolved"` with verdict `{"decision": "reject", "decided_by": "human", "reasoning": "Debate abandoned by user"}`. Update `meta.json` accordingly.
 
 ### After Viewing — Next Steps
 
-After showing a transcript (or completing a --continue action), use `AskUserQuestion` to guide the user:
+After showing transcript (or completing --continue action), `AskUserQuestion` to guide user:
 - Options (adapt based on debate status):
   - "Continue this debate" — only if status is `escalated` or `initiated`
   - "Render verdict (/ratchet:verdict)" — only if status is `escalated`

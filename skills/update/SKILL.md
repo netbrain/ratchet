@@ -5,7 +5,7 @@ description: Update Ratchet framework to the latest version
 
 # /ratchet:update — Framework Update
 
-Update the Ratchet framework installation to the latest version.
+Update Ratchet framework installation to latest version.
 
 ## Step 1: Detect Current Installation
 
@@ -13,28 +13,28 @@ Check which installation exists:
 - **Global**: `~/.claude/commands/ratchet/` exists
 - **Local**: `.claude/commands/ratchet/` exists
 
-If both exist, use `AskUserQuestion`:
-- Question: "Both global and local Ratchet installations detected. Which should I update?"
+If both exist, `AskUserQuestion`:
+- Question: "Both global and local Ratchet installations detected. Which to update?"
 - Options: `"Global (~/.claude/)"`, `"Local (.claude/)"`, `"Both"`
 
-If neither exists: "Ratchet is not installed. Run `/ratchet:init` or `bash install.sh` from the Ratchet repo."
+If neither exists: "Ratchet not installed. Run `/ratchet:init` or `bash install.sh` from Ratchet repo."
 
-Record the scope: `global`, `local`, or `both`.
+Record scope: `global`, `local`, or `both`.
 
 ## Step 2: Choose Update Method
 
-Use `AskUserQuestion`:
-- Question: "How should I fetch the latest Ratchet?"
+`AskUserQuestion`:
+- Question: "How to fetch latest Ratchet?"
 - Options:
   - `"Nix flake (Recommended)"` — uses `nix run github:netbrain/ratchet`
-  - `"Git clone + install.sh"` — clones repo to a temp directory
-  - `"Local source"` — use an existing checkout (auto-detected or user-provided path)
+  - `"Git clone + install.sh"` — clones repo to temp directory
+  - `"Local source"` — use existing checkout (auto-detected or user-provided path)
 
 ### Method detection hints (use to pre-select or reorder options):
 
-1. If `nix` is on PATH → recommend Nix flake (fastest, no clone needed)
+1. If `nix` on PATH → recommend Nix flake (fastest, no clone needed)
 2. If CWD contains `install.sh` and `skills/` → offer "Local source" first
-3. If `RATCHET_SOURCE` env var is set → offer "Local source" with that path
+3. If `RATCHET_SOURCE` env var set → offer "Local source" with that path
 
 ## Step 3: Run Update
 
@@ -52,7 +52,7 @@ nix run github:netbrain/ratchet --refresh -- --global --uninstall 2>&1
 nix run github:netbrain/ratchet --refresh -- --global 2>&1
 ```
 
-`--refresh` forces Nix to fetch the latest commit from GitHub (otherwise it uses the cached flake).
+`--refresh` forces Nix to fetch latest commit from GitHub (otherwise uses cached flake).
 
 ### Method B: Git clone + install.sh
 
@@ -73,10 +73,7 @@ rm -rf "$TMPDIR"
 
 ### Method C: Local source
 
-Locate install.sh:
-1. CWD contains `install.sh` + `skills/` → use CWD
-2. `RATCHET_SOURCE` env var → use that path
-3. Otherwise, use `AskUserQuestion` (freeform): "Path to Ratchet source directory?"
+Locate install.sh: CWD contains `install.sh` + `skills/` → use CWD; `RATCHET_SOURCE` env var → use that path; otherwise `AskUserQuestion` (freeform): "Path to Ratchet source directory?"
 
 ```bash
 cd /path/to/ratchet/source
@@ -92,12 +89,11 @@ bash install.sh --global 2>&1
 
 ### For scope "both"
 
-Run the appropriate method twice — once with `--global`, once with `--local`.
+Run appropriate method twice — once with `--global`, once with `--local`.
 
 ## Step 4: Verify and Report
 
-After install completes, verify the installation:
-
+After install completes, verify:
 ```bash
 # Count installed commands
 ls .claude/commands/ratchet/*.md 2>/dev/null | wc -l   # local
@@ -105,7 +101,6 @@ ls ~/.claude/commands/ratchet/*.md 2>/dev/null | wc -l  # global
 ```
 
 Present summary:
-
 ```
 Ratchet updated successfully!
 
@@ -120,10 +115,9 @@ Ratchet updated successfully!
   Type /exit or press Ctrl+C, then start a new session.
 ```
 
-After presenting the summary, always remind the user to restart. Slash commands and hooks are loaded at session start — the current session will continue using the old versions until restarted.
+Always remind user to restart. Slash commands and hooks load at session start — current session keeps using old versions until restarted.
 
 ## What Gets Updated
 
 **Updated:** Slash commands, runtime scripts, agent definitions, schemas, statusline, hooks config.
-
 **Preserved:** `.ratchet/` directory (workflow.yaml, project.yaml, plan.yaml, pairs, debates, scores, escalations).
