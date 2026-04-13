@@ -3,13 +3,11 @@ name: ratchet:tighten
 description: Tighten the ratchet — analyze all improvement signals and sharpen the system
 ---
 
-# /ratchet:tighten — Tighten the Ratchet
+# /ratchet:tighten — Tighten Ratchet
 
-Single entrypoint for improving the Ratchet system. Gathers all improvement signals — debate history, CI failures, PR feedback, discoveries, escalation rulings, retro findings — triages them by priority, and applies fixes: sharpened agent prompts, new guards, workflow config changes.
+Single entrypoint for improving Ratchet. Gathers signals (debate history, CI failures, PR feedback, discoveries, escalations, retros), triages by priority, applies fixes: sharpened prompts, new guards, workflow config. Replaces former advise/retro/tighten skills.
 
-This replaces three formerly separate skills (advise, retro, tighten) with one unified flow.
-
-**You have full read/write access.** This skill directly edits pair definition files (generative.md, adversarial.md), workflow.yaml, and writes analysis summaries. Do NOT defer edits to the user — apply changes yourself using the Edit tool. Always get human approval via AskUserQuestion before writing changes.
+**Full read/write.** Edits pair files (generative.md, adversarial.md), workflow.yaml, summaries. Use Edit tool directly — do NOT defer. Get human approval via AskUserQuestion before writing.
 
 ## Usage
 ```
@@ -19,22 +17,22 @@ This replaces three formerly separate skills (advise, retro, tighten) with one u
 ```
 
 ## Prerequisites
-- `.ratchet/` must exist with valid config
-- At least some signal data should exist (debates, reviews, retros, escalations, CI results, or discoveries)
+- `.ratchet/` exists with valid config
+- Some signal data exists (debates/reviews/retros/escalations/CI/discoveries)
 
-If `.ratchet/` does not exist, inform the user:
+If `.ratchet/` missing:
 > "Ratchet is not initialized for this project. Run /ratchet:init to set up."
 
-Then use `AskUserQuestion` with options: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
+`AskUserQuestion`: `"Initialize now (/ratchet:init) (Recommended)"`, `"Cancel"`.
 
 ## Foundational Principle — Guilty Until Proven Innocent
 
-**New changes are GUILTY until proven innocent.** When analyzing CI failures on a PR branch, the default assumption is that the PR caused the failure. The burden of proof is on demonstrating the failure exists on master — not on assuming it is unrelated or a "flake."
+**New changes are GUILTY until proven innocent.** On PR CI failures, default: PR caused it. Burden of proof: show failure exists on master. Never assume "unrelated" or "flake."
 
-When classifying findings:
-- **Do NOT classify a failure as `noise` (CI flake)** unless you have evidence it passed on re-run OR the same failure exists on master. "It looks like a flake" is not evidence.
-- **Do NOT skip a failure** because "it's probably unrelated." Prove it by checking master.
-- **Verification command**: Before downgrading any CI failure severity, run:
+Classifying findings:
+- **Never classify as `noise` (CI flake)** without evidence (passed on re-run OR same failure on master). "Looks like a flake" is not evidence.
+- **Never skip a failure** as "probably unrelated." Prove via master check.
+- **Verification command** before downgrading severity:
   ```bash
   # Check if the same test fails on master
   gh run list --branch main --workflow "<workflow>" --limit 3 --json conclusion -q '.[].conclusion'
@@ -47,47 +45,33 @@ When classifying findings:
 
 ### Step 1: Gather All Signals
 
-Read every available improvement signal from the project:
+Read all signals:
 
-**Debate artifacts:**
-- `.ratchet/debates/*/meta.json` — debate outcomes, fast-path flags, round counts
-- `.ratchet/reviews/<pair-name>/review-*.json` — post-debate performance reviews
+- **Debates:** `.ratchet/debates/*/meta.json` (outcomes, fast-path, rounds), `.ratchet/reviews/<pair-name>/review-*.json` (post-debate reviews)
+- **Retros:** `.ratchet/retros/*.json` (findings, severity, recurrence)
+- **Escalations:** `.ratchet/escalations/*.json` (tiebreaker rulings, disputes)
+- **Executions:** `.ratchet/executions/*.yaml` (solo/promoted: mode, guards, promotions, files, tokens)
+- **Discoveries:** `.ratchet/plan.yaml` → `epic.discoveries` (pending sidequests)
+- **Config:** `.ratchet/workflow.yaml` (pairs/guards/components), `.ratchet/project.yaml` (stack, validation cmds), `.ratchet/plan.yaml` (milestones, regressions)
 
-**External feedback:**
-- `.ratchet/retros/*.json` — retrospective findings with severity and recurrence
-
-**Escalation patterns:**
-- `.ratchet/escalations/*.json` — tiebreaker rulings and dispute patterns
-
-**Execution logs:**
-- `.ratchet/executions/*.yaml` — solo/promoted execution records: mode, guard results, promotion events, files modified, token estimates
-
-**Discoveries:**
-- `.ratchet/plan.yaml` → `epic.discoveries` — pending sidequests from watch, retro, or manual logging
-
-**Configuration:**
-- `.ratchet/workflow.yaml` — current pairs, guards, components
-- `.ratchet/project.yaml` — project stack, validation commands
-- `.ratchet/plan.yaml` — milestone progress, regression counts
-
-**PR-specific signals (when `pr [number]` mode):**
+**PR-specific (`pr [number]` mode):**
 ```bash
 gh pr view <number> --json state,reviews,comments,statusCheckRollup
 gh pr checks <number>
 ```
 
-If no signal data exists at all (no debates, no retros, no reviews, no escalations), inform the user:
+If no signals exist:
 > "Not enough data to tighten. Run a few milestones first, then come back."
 
-Then use `AskUserQuestion` with options: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
+`AskUserQuestion`: `"Start a debate (/ratchet:run) (Recommended)"`, `"Done for now"`.
 
-### Step 2: Mode-Specific Signal Gathering
+### Step 2: Mode-Specific Gathering
 
-#### Mode: Auto-triage (no arguments or `[pair-name]`)
+#### Auto-triage (no args or `[pair-name]`)
 
-All signals from Step 1 are already gathered. If `[pair-name]` is specified, filter to signals relevant to that pair only.
+Use Step 1 signals. If `[pair-name]` given, filter to that pair.
 
-#### Mode: PR Analysis (`tighten pr [number]`)
+#### PR Analysis (`tighten pr [number]`)
 
 1. **Gather PR signals:**
    ```bash
@@ -95,25 +79,21 @@ All signals from Step 1 are already gathered. If `[pair-name]` is specified, fil
    gh pr checks <number>
    ```
 
-2. **Identify failures and feedback:**
-   - CI check failures (lint, tests, security scans, build)
-   - Review comments from humans (requested changes, concerns raised)
-   - Merge conflicts or blocked status
+2. **Identify failures/feedback:** CI failures (lint/tests/security/build), human review comments, merge conflicts, blocked status.
 
-3. **Map failures to Ratchet gaps:**
-   For each failure or piece of feedback, determine:
-   - **Was this in scope of a debate pair?** Check file paths against pair scopes
-   - **Did the adversarial agent have the right validation commands?** Check if the failing CI command is in the adversarial's prompt
-   - **Is there a guard for this?** Check if a guard exists for this type of check
-   - **Was this a phase gap?** Should this have been caught in a specific phase?
+3. **Map failures to Ratchet gaps** — per item:
+   - **In scope of debate pair?** Match file paths to pair scopes
+   - **Adversarial has validation cmds?** Check failing CI cmd in adversarial prompt
+   - **Guard exists?** Check guards for this check type
+   - **Phase gap?** Should earlier phase have caught it?
 
 ### Step 3: Triage and Prioritize
 
-Spawn the **analyst** agent using the generative model from `workflow.yaml` (`models.generative`, default `opus`). Agent configuration:
-- `model`: value of `workflow.yaml` → `models.generative` (or `opus` if unset)
+Spawn **analyst** agent with generative model (`workflow.yaml` → `models.generative`, default `opus`):
+- `model`: `models.generative` (or `opus`)
 - `tools`: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 
-The analyst has Write/Edit access because it directly edits pair definition files, workflow.yaml, and writes summaries. It MUST use AskUserQuestion to get human approval before any file modification.
+Analyst edits pair files, workflow.yaml, summaries. MUST use AskUserQuestion before any file modification.
 
 Task prompt:
 
@@ -158,26 +138,26 @@ Output a PRIORITIZED list grouped by: A) Pair prompt changes, B) New/modified gu
 Per improvement: what to change (file + content), why (evidence), priority (critical/high/medium/low), type (prompt-tweak/structural/config-change).
 ```
 
-**Settled Law Injection**: When 3+ escalation rulings agree on a dispute type, edit `.ratchet/pairs/<pair-name>/adversarial.md`:
-- Find or create a `### Settled Law (Patterns from Prior Debates)` section (before the last `## ` heading)
+**Settled Law Injection**: 3+ escalation rulings agree on a dispute type → edit `.ratchet/pairs/<pair-name>/adversarial.md`:
+- Find/create `### Settled Law (Patterns from Prior Debates)` (before last `## ` heading)
 - Append: `- [ ] **<dispute type>**: <N> rulings found <direction>. Treat as settled — do not re-litigate. Source: escalations/<ids>.json`
 - Verify: `grep -c "Settled Law" .ratchet/pairs/<pair-name>/adversarial.md` returns 1
 
-**Error handling**: If the analyst agent fails or returns no recommendations:
+**Error handling**: If analyst fails or returns nothing:
 > "Analysis could not be completed. This may be due to insufficient data or an internal error."
 
-Then use `AskUserQuestion` with options: `"Try again"`, `"View raw data (/ratchet:score)"`, `"Done for now"`.
+`AskUserQuestion`: `"Try again"`, `"View raw data (/ratchet:score)"`, `"Done for now"`.
 
 ### Step 3b: Adversarial Verification
 
-The analyst's findings are **claims until verified**. Before presenting to the user, run each finding through adversarial fact-checking. This prevents false recommendations from wasting time or degrading the system.
+Findings are **claims until verified**. Run through adversarial fact-checking before user. Prevents false recommendations.
 
-Spawn a **verification agent** with the adversarial model (`models.adversarial`, default `sonnet`). Agent configuration:
-- `model`: value of `workflow.yaml` → `models.adversarial` (or `sonnet` if unset)
+Spawn **verification agent** with adversarial model (`models.adversarial`, default `sonnet`):
+- `model`: `models.adversarial` (or `sonnet`)
 - `tools`: Read, Grep, Glob, Bash
 - `disallowedTools`: Write, Edit
 
-The verification agent is **read-only** — it checks claims, it does not fix them.
+Read-only — checks, never fixes.
 
 Task prompt:
 
@@ -193,15 +173,15 @@ Pair definitions: [paths to .ratchet/pairs/*/generative.md and adversarial.md]
 Guards: [guards array from workflow.yaml]
 ```
 
-**Processing results:** CONFIRMED → keep. DOWNGRADED → adjust severity, append note. REJECTED → remove, log to `.ratchet/reports/verification-rejected.log` (`mkdir -p .ratchet/reports`). NEEDS_INFO → keep as unverified.
+**Processing:** CONFIRMED → keep. DOWNGRADED → adjust severity + note. REJECTED → drop, log to `.ratchet/reports/verification-rejected.log` (`mkdir -p .ratchet/reports`). NEEDS_INFO → keep as unverified.
 
-Present summary: `"Verification: [N] checked — [N] confirmed, [N] downgraded, [N] rejected, [N] unverified"`. Only confirmed/downgraded/unverified proceed to Step 4.
+Summary: `"Verification: [N] checked — [N] confirmed, [N] downgraded, [N] rejected, [N] unverified"`. Only confirmed/downgraded/unverified proceed.
 
-**Error handling**: If verifier fails, treat all as NEEDS_INFO and proceed with caveat. If ALL rejected, present options: `"Re-run analysis"`, `"View rejected findings"`, `"Done for now"`. Do NOT proceed to Step 4 with empty list.
+**Error handling**: Verifier fails → all NEEDS_INFO, proceed with caveat. ALL rejected → `"Re-run analysis"`, `"View rejected findings"`, `"Done for now"`. Never proceed with empty list.
 
-### Step 4: Present Assessment and Apply
+### Step 4: Present and Apply
 
-Present the verified findings via `AskUserQuestion`:
+`AskUserQuestion`:
 
 ```
 Tighten Assessment
@@ -216,14 +196,14 @@ Signal sources: [N] debates, [N] retros, [N] escalations, [N] discoveries
 ```
 
 Options:
-- `"Apply improvements (Recommended)"` — walk through each improvement interactively
-- `"Apply all automatically"` — apply all changes without individual confirmation
-- `"Export as report"` — save to `.ratchet/reports/tighten-<timestamp>.md` (creates `.ratchet/reports/` directory if it doesn't exist: `mkdir -p .ratchet/reports`)
+- `"Apply improvements (Recommended)"` — walk each interactively
+- `"Apply all automatically"` — no per-item confirmation
+- `"Export as report"` — save to `.ratchet/reports/tighten-<timestamp>.md` (`mkdir -p .ratchet/reports`)
 - `"Done for now"`
 
 #### Applying improvements
 
-For "Apply improvements" — walk through each by priority. Per improvement, `AskUserQuestion`: "[priority] [detail]. Apply?" → Options: `"Apply"`, `"Skip"`, `"Modify"`, `"Stop applying"`.
+Walk by priority. Per item, `AskUserQuestion`: "[priority] [detail]. Apply?" → `"Apply"`, `"Skip"`, `"Modify"`, `"Stop applying"`.
 
 | Change type | Action |
 |---|---|
@@ -239,28 +219,23 @@ For "Apply improvements" — walk through each by priority. Per improvement, `As
 | Adjust max_rounds | Increase (contentious) / decrease (fast-path) |
 | Sharpen prompts | Add missed-issue knowledge, remove false positives |
 
-For "Apply all automatically" — apply all without confirmation, then show summary.
+"Apply all automatically" — apply all, then summary.
 
 ### Step 5: Store Results
 
 #### 5a. Retro findings (PR/CI mode)
 
-When improvements originated from PR analysis, write to `.ratchet/retros/<timestamp>.json` with fields: `timestamp`, `source` ("pr"), `source_ref` (PR number), and `findings[]` — each finding has `type` (missing_validation|missing_guard|missing_pair|phase_gap), `description`, `evidence`, `fix_applied` (or null), `severity` (critical|major|minor|noise), `related_findings[]`.
+PR-sourced improvements → write `.ratchet/retros/<timestamp>.json` with: `timestamp`, `source` ("pr"), `source_ref` (PR number), `findings[]` — each: `type` (missing_validation|missing_guard|missing_pair|phase_gap), `description`, `evidence`, `fix_applied` (or null), `severity` (critical|major|minor|noise), `related_findings[]`.
 
-**Cross-retro recurrence**: Before storing, scan existing retros for same `type` + similar `description`. If 2+ prior matches: auto-escalate severity one level, populate `related_findings`, present "Nth occurrence — escalating from [old] to [new]."
+**Cross-retro recurrence**: Before storing, scan retros for same `type` + similar `description`. 2+ matches → auto-escalate severity one level, populate `related_findings`, present "Nth occurrence — escalating from [old] to [new]."
 
-#### 5b. Create sidequests for skipped findings
+#### 5b. Sidequests for skipped findings
 
-For any skipped finding with severity `major` or `critical` (`fix_applied` is null), add a discovery to `epic.discoveries` in `.ratchet/plan.yaml` via `yq eval -i`. Required fields: `ref` (discovery-tighten-TIMESTAMP), `title`, `description` (include evidence), `category` (map finding type: missing_validation/missing_guard → "tech-debt", missing_pair → "feature", phase_gap → "tech-debt"), `severity` (critical|major|minor|info), `source` ("tighten"), `status: "pending"`, `retro_type: "skipped-finding"`, `created_at` (ISO 8601). Optional: `context`, `pairs`, `affected_scope`, `issue_ref`.
+Skipped findings with severity `major`/`critical` (`fix_applied` null) → add discovery to `epic.discoveries` in `.ratchet/plan.yaml` via `yq eval -i`. Required: `ref` (discovery-tighten-TIMESTAMP), `title`, `description` (with evidence), `category` (missing_validation/missing_guard → "tech-debt", missing_pair → "feature", phase_gap → "tech-debt"), `severity` (critical|major|minor|info), `source` ("tighten"), `status: "pending"`, `retro_type: "skipped-finding"`, `created_at` (ISO 8601). Optional: `context`, `pairs`, `affected_scope`, `issue_ref`.
 
 #### 5c. Analyst summary
 
-Write an analyst summary to `.ratchet/reviews/<pair-name>/analyst-summary.md` (per pair that was tightened) or `.ratchet/reports/tighten-<timestamp>.md` (for full assessment):
-- Date of tightening
-- Signal sources analyzed
-- Changes made and rationale
-- Patterns identified
-- Recommendations for next tightening
+Write to `.ratchet/reviews/<pair-name>/analyst-summary.md` (per pair) or `.ratchet/reports/tighten-<timestamp>.md` (full): date, signal sources, changes + rationale, patterns, next-tightening recommendations.
 
 ### Step 6: Report
 
@@ -282,39 +257,36 @@ Tighten complete:
 
 ### Step 7: Persist Changes
 
-If any improvements were applied (changes to pair definitions, workflow.yaml, guards, etc.), ask how the user wants to persist them.
+If improvements applied (pair files, workflow.yaml, guards), ask how to persist.
 
-First, show what changed:
+Show diff:
 ```bash
 git diff --stat
 ```
 
-Check the progress adapter to determine the default:
+Check adapter for default:
 ```bash
 adapter=$(yq eval '.progress.adapter' .ratchet/workflow.yaml 2>/dev/null)
 ```
 
-Then use `AskUserQuestion`:
-- Question: "How would you like to persist these tighten changes?"
-- Options (default depends on adapter):
-  - `"Commit and create PR (Recommended)"` — **recommended when `adapter == "github-issues"`**. Commit on a new branch `ratchet/tighten-<timestamp>`, push, and open a PR
-  - `"Commit (Recommended)"` — **recommended when no github adapter**. Stage and commit all tighten changes with message `"Tighten: [brief summary of changes]"`
-  - `"Commit and push"` — commit, then push to the current branch
-  - `"Don't persist yet"` — leave changes unstaged for manual review
+`AskUserQuestion` — "How to persist these tighten changes?":
+- `"Commit and create PR (Recommended)"` — **default when `adapter == "github-issues"`**. Branch `ratchet/tighten-<timestamp>`, commit, push, open PR
+- `"Commit (Recommended)"` — **default with no github adapter**. Stage + commit `"Tighten: [brief summary]"`
+- `"Commit and push"` — commit + push current branch
+- `"Don't persist yet"` — leave unstaged
 
-Stage only `.ratchet/` files (pairs, workflow.yaml, reports, retros, scores.yaml, plan.yaml). Do NOT stage source code.
+Stage only `.ratchet/` files (pairs, workflow.yaml, reports, retros, scores.yaml, plan.yaml). NEVER stage source code.
 
 - **Commit**: `git add .ratchet/... && git commit -m "Tighten: [summary]"`
 - **Commit and push**: same + `git push`
-- **Commit and create PR**: branch `ratchet/tighten-<timestamp>`, commit, push, `gh pr create`
+- **Commit and PR**: branch `ratchet/tighten-<timestamp>`, commit, push, `gh pr create`
 
-If no files changed (all skipped), skip this step.
+Nothing changed → skip.
 
 ### Step 8: Next Steps
 
-Then use `AskUserQuestion`:
-- Options:
-  - `"Run next debate (/ratchet:run) (Recommended)"`
-  - `"View quality metrics (/ratchet:score)"`
-  - `"Tighten another pair"` — if other pairs exist
-  - `"Done for now"`
+`AskUserQuestion`:
+- `"Run next debate (/ratchet:run) (Recommended)"`
+- `"View quality metrics (/ratchet:score)"`
+- `"Tighten another pair"` — if other pairs exist
+- `"Done for now"`
