@@ -2,33 +2,53 @@ result
 result-*
 .claude/ratchet-scripts/
 
-# Ratchet: Exclude all runtime state, then include config
+# Ratchet: Exclude all runtime state, then whitelist institutional memory.
+#
+# Philosophy: low-churn, high-value artifacts that agents need on a fresh
+# clone get tracked. High-churn or noisy runtime state stays excluded.
 .ratchet/*
 !.ratchet/workflow.yaml
 !.ratchet/project.yaml
-# plan.yaml is runtime state — GitHub issues are the durable source of truth
 !.ratchet/pairs/
+# Tiebreaker rulings — precedents for future arbitration
+# (skills/run/SKILL.md Step 5d scans this on every run)
+!.ratchet/scores.yaml
+!.ratchet/escalations/
+!.ratchet/retros/
+!.ratchet/reviews/
+# plan.yaml is runtime state when using progress.adapter=github-issues (default).
+# Uncomment below if you use progress.adapter=markdown or none:
+# !.ratchet/plan.yaml
 
-# Ratchet workspaces: Exclude runtime state in all workspace subdirs
-*/.ratchet/worktrees/
-*/.ratchet/debates/
-*/.ratchet/reviews/
-*/.ratchet/scores/
-*/.ratchet/retros/
-*/.ratchet/escalations/
-*/.ratchet/guards/
-*/.ratchet/reports/
-*/.ratchet/progress/
-*/.ratchet/plan.yaml
-*/.ratchet/issues/
+# Debates: exclude transcripts (round-*.md, etc) but keep structured metadata.
+# Trick: we re-include the `debates/` dir AND `debates/*/` subdirs so git can
+# descend into them, then exclude the files within them, then whitelist meta.json.
+# (Git cannot re-include a file whose parent directory is excluded, so the
+# subdir must stay visible.)
+!.ratchet/debates/
+!.ratchet/debates/*/
+.ratchet/debates/*/*
+!.ratchet/debates/*/meta.json
+
+# Ratchet workspaces: symmetric rules for multi-workspace setups
+# (e.g., monitor/.ratchet/, worker/.ratchet/). Applies when a workspace
+# does not have its own .gitignore overriding these rules.
+*/.ratchet/*
+!*/.ratchet/workflow.yaml
+!*/.ratchet/project.yaml
+!*/.ratchet/pairs/
+!*/.ratchet/scores.yaml
+!*/.ratchet/escalations/
+!*/.ratchet/retros/
+!*/.ratchet/reviews/
+# !*/.ratchet/plan.yaml  # Uncomment if progress.adapter=markdown or none
+# Workspace debates: same transcript-excluded / meta-tracked pattern
+!*/.ratchet/debates/
+!*/.ratchet/debates/*/
+*/.ratchet/debates/*/*
+!*/.ratchet/debates/*/meta.json
 
 # Ratchet runtime state (auto-added by install.sh)
-.ratchet/plan.yaml
-.ratchet/debates/
-.ratchet/reviews/
-.ratchet/scores/
-.ratchet/retros/
-.ratchet/escalations/
 .ratchet/guards/
 .ratchet/reports/
 .ratchet/progress/
